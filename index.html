@@ -1,0 +1,2282 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title># ESPOYR Multijoueur V3 - Comptabilité complète</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --green: #10b981; --green-dark: #059669;
+            --orange: #f59e0b; --red: #ef4444;
+            --blue: #3b82f6; --purple: #8b5cf6; --gray: #6b7280;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+            min-height: 100vh; padding: 10px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .card {
+            background: white; border-radius: 16px;
+            padding: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            margin-bottom: 15px;
+        }
+        h1 { color: var(--green); text-align: center; margin-bottom: 8px; font-size: 1.8rem; }
+        h2 { color: var(--green-dark); margin-bottom: 12px; font-size: 1.2rem; }
+        .subtitle { text-align: center; color: var(--gray); margin-bottom: 20px; font-size: 0.9rem; }
+        .btn {
+            padding: 10px 20px; border: none; border-radius: 10px;
+            font-size: 0.95rem; font-weight: 600; cursor: pointer;
+            transition: all 0.2s; display: inline-flex; align-items: center; gap: 8px;
+        }
+        .btn:hover { transform: translateY(-2px); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .btn-primary { background: linear-gradient(135deg, var(--green), var(--green-dark)); color: white; }
+        .btn-secondary { background: linear-gradient(135deg, var(--blue), #2563eb); color: white; }
+        .btn-orange { background: linear-gradient(135deg, var(--orange), #d97706); color: white; }
+        .btn-full { width: 100%; justify-content: center; }
+        input, select {
+            width: 100%; padding: 10px 12px; border: 2px solid #e5e7eb;
+            border-radius: 10px; font-size: 1rem; margin-bottom: 12px;
+        }
+        input:focus, select:focus { outline: none; border-color: var(--green); }
+        .code-display {
+            background: linear-gradient(135deg, #fef3c7, #fde68a);
+            border: 3px solid var(--orange); border-radius: 12px;
+            padding: 15px; text-align: center; margin: 15px 0;
+        }
+        .code-display .code {
+            font-size: 2rem; font-weight: bold; color: #92400e;
+            letter-spacing: 6px; font-family: monospace;
+        }
+        .players-list { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+        .player-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 12px; background: #f3f4f6;
+            border-radius: 10px; font-size: 0.9rem;
+        }
+        .player-item.me { background: #dcfce7; border: 2px solid var(--green); }
+        .player-item.current-turn {
+            background: #fef3c7; border: 2px solid var(--orange);
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+            50% { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); }
+        }
+        .player-avatar { font-size: 1.5rem; }
+        .player-info { flex: 1; }
+        .player-name { font-weight: 600; color: #1f2937; }
+        .player-stats { font-size: 0.8rem; color: var(--gray); }
+        .player-badge { padding: 3px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 600; }
+        .badge-host { background: var(--purple); color: white; }
+        .badge-ready { background: var(--green); color: white; }
+        
+        /* PLATEAU */
+        .board-container {
+            display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
+            padding: 10px; background: #f9fafb; border-radius: 12px; margin: 10px 0;
+        }
+        .case {
+            width: calc(14.28% - 6px); min-width: 70px; max-width: 90px;
+            aspect-ratio: 1; background: white; border: 2px solid #e5e7eb;
+            border-radius: 8px; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; font-size: 0.65rem;
+            position: relative; cursor: pointer; transition: all 0.2s;
+        }
+        .case:hover { transform: scale(1.08); box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 10; }
+        .case.start { background: linear-gradient(135deg, #dcfce7, #bbf7d0); border-color: var(--green); }
+        .case.activite { background: linear-gradient(135deg, #fef3c7, #fde68a); }
+        .case.activite.owned { border-width: 3px; }
+        .case.chance { background: linear-gradient(135deg, #dbeafe, #bfdbfe); border-color: var(--blue); }
+        .case.frais { background: linear-gradient(135deg, #fee2e2, #fecaca); border-color: var(--red); }
+        .case.taxe { background: linear-gradient(135deg, #f3e8ff, #e9d5ff); border-color: var(--purple); }
+        .case.malchance { background: linear-gradient(135deg, #fef3c7, #fde68a); border-color: var(--orange); }
+        .case.ligne2 { background: linear-gradient(135deg, #fce7f3, #fbcfe8); border-color: #ec4899; }
+        .case-number { position: absolute; top: 2px; left: 4px; font-size: 0.55rem; color: #9ca3af; font-weight: bold; }
+        .case-icon { font-size: 1.3rem; }
+        .case-name { font-size: 0.55rem; text-align: center; color: #4b5563; line-height: 1.1; margin-top: 2px; }
+        .case-price { font-size: 0.5rem; color: var(--green-dark); font-weight: bold; }
+        .case-hash {
+            position: absolute; top: 2px; right: 3px; background: var(--green);
+            color: white; font-size: 0.5rem; padding: 1px 3px; border-radius: 3px; font-weight: bold;
+        }
+        .players-on-case {
+            position: absolute; bottom: 1px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 2px;
+        }
+        .player-marker {
+            width: 10px; height: 10px; border-radius: 50%;
+            border: 1px solid white; box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+        }
+        .owner-indicator { position: absolute; bottom: 2px; right: 2px; font-size: 0.6rem; }
+        
+        /* LAYOUT JEU */
+        .game-layout { display: grid; grid-template-columns: 1fr 300px; gap: 15px; }
+        @media (max-width: 900px) {
+            .game-layout { grid-template-columns: 1fr; }
+            .case { width: calc(16.66% - 6px); min-width: 55px; }
+        }
+        
+        .dice-area { text-align: center; padding: 15px; background: #f9fafb; border-radius: 12px; margin: 10px 0; }
+        .dice { font-size: 3.5rem; margin: 8px 0; display: inline-block; }
+        .dice.rolling { animation: roll 0.1s infinite; }
+        @keyframes roll {
+            0% { transform: rotate(0deg); } 25% { transform: rotate(10deg); }
+            75% { transform: rotate(-10deg); } 100% { transform: rotate(0deg); }
+        }
+        
+        .status-bar {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 8px 12px; background: #f3f4f6; border-radius: 10px;
+            margin-bottom: 10px; font-size: 0.85rem;
+        }
+        .turn-indicator { font-weight: 600; color: var(--green-dark); }
+        
+        /* JOURNAL COMPTABLE */
+        .journal-box {
+            height: 200px; overflow-y: auto; border: 2px solid #e5e7eb;
+            border-radius: 10px; padding: 8px; background: #fafafa;
+            font-size: 0.75rem; font-family: monospace;
+        }
+        .journal-entry {
+            padding: 4px 6px; margin-bottom: 4px; background: white;
+            border-radius: 4px; border-left: 3px solid var(--green);
+        }
+        .journal-entry.debit { border-left-color: var(--red); }
+        .journal-entry.credit { border-left-color: var(--green); }
+        
+        /* CHAT */
+        .chat-box {
+            height: 120px; overflow-y: auto; border: 2px solid #e5e7eb;
+            border-radius: 10px; padding: 8px; margin-bottom: 8px;
+            background: #fafafa; font-size: 0.85rem;
+        }
+        .chat-message { margin-bottom: 6px; padding: 6px 10px; background: white; border-radius: 8px; }
+        .chat-message .sender { font-weight: 600; color: var(--green-dark); }
+        .chat-message.system { background: #fef3c7; font-style: italic; color: #92400e; }
+        .chat-input { display: flex; gap: 8px; }
+        .chat-input input { flex: 1; margin-bottom: 0; font-size: 0.85rem; padding: 8px 10px; }
+        
+        .hidden { display: none !important; }
+        .connection-status {
+            position: fixed; top: 8px; right: 8px; padding: 6px 12px;
+            border-radius: 20px; font-size: 0.75rem; font-weight: 600; z-index: 100;
+        }
+        .connection-status.connected { background: #dcfce7; color: var(--green-dark); }
+        .connection-status.disconnected { background: #fee2e2; color: var(--red); }
+        
+        .divider { display: flex; align-items: center; margin: 20px 0; color: var(--gray); }
+        .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: #e5e7eb; }
+        .divider span { padding: 0 12px; font-size: 0.85rem; }
+        
+        .error-message {
+            background: #fee2e2; color: #dc2626; padding: 10px 12px;
+            border-radius: 10px; margin-bottom: 12px; display: none; font-size: 0.9rem;
+        }
+        .loading {
+            display: inline-block; width: 18px; height: 18px;
+            border: 3px solid #f3f3f3; border-top: 3px solid var(--green);
+            border-radius: 50%; animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* MODAL */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5); display: flex;
+            align-items: center; justify-content: center; z-index: 1000;
+        }
+        .modal {
+            background: white; border-radius: 16px; padding: 20px;
+            max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto;
+        }
+        .modal h3 { color: var(--green-dark); margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
+        .modal-buttons { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
+        .modal-buttons .btn { flex: 1; min-width: 100px; }
+        
+        /* TABS */
+        .tabs { display: flex; gap: 5px; margin-bottom: 10px; }
+        .tab {
+            padding: 8px 15px; background: #f3f4f6; border: none;
+            border-radius: 8px 8px 0 0; cursor: pointer; font-size: 0.85rem;
+        }
+        .tab.active { background: var(--green); color: white; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        .avatar-btn {
+            width: 45px; height: 45px; font-size: 1.6rem;
+            border: 3px solid #e5e7eb; border-radius: 10px;
+            background: white; cursor: pointer; transition: all 0.2s;
+        }
+        .avatar-btn:hover { transform: scale(1.1); }
+        .avatar-btn.selected { border-color: var(--green); background: #dcfce7; }
+        
+        /* BILAN */
+        .bilan-table { width: 100%; font-size: 0.8rem; border-collapse: collapse; }
+        .bilan-table th, .bilan-table td { padding: 5px 8px; border: 1px solid #e5e7eb; }
+        .bilan-table th { background: #f3f4f6; text-align: left; }
+        .bilan-table .actif { background: #dcfce7; }
+        .bilan-table .passif { background: #fee2e2; }
+        .bilan-table .total { font-weight: bold; background: #fef3c7; }
+    </style>
+</head>
+<body>
+    <div class="connection-status disconnected" id="connectionStatus">⚪ Déconnecté</div>
+    
+    <div class="container">
+        <!-- ÉCRAN ACCUEIL -->
+        <div id="homeScreen" class="card">
+            <h1><img src="logo__g1_jaune_rond.png" alt="Logo ESPOYR" style="height: 1.5em; vertical-align: middle; margin-right: 8px;">ESPOYR</h1>
+            <p class="subtitle">Jeu collaboratif d'économie - V3 Comptabilité complète</p>
+            <div class="error-message" id="errorMessage"></div>
+            
+            <div style="margin-bottom: 15px;">
+                <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 6px; font-size: 0.9rem;">Ton nom :</label>
+                <input type="text" id="playerName" placeholder="Entre ton prénom..." maxlength="15">
+            </div>
+            
+            <div style="margin-bottom: 15px;">
+                <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 6px; font-size: 0.9rem;">Ton avatar :</label>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button class="avatar-btn selected" data-avatar="👨">👨</button>
+                    <button class="avatar-btn" data-avatar="👩">👩</button>
+                    <button class="avatar-btn" data-avatar="👦">👦</button>
+                    <button class="avatar-btn" data-avatar="👧">👧</button>
+                    <button class="avatar-btn" data-avatar="🧑">🧑</button>
+                    <button class="avatar-btn" data-avatar="👴">👴</button>
+                    <button class="avatar-btn" data-avatar="👵">👵</button>
+                    <button class="avatar-btn" data-avatar="🦊">🦊</button>
+                </div>
+            </div>
+            
+            <button class="btn btn-primary btn-full" onclick="createGame()" style="margin-bottom: 12px;">
+                ➕ Créer une nouvelle partie
+            </button>
+            
+            <div class="divider"><span>ou rejoindre</span></div>
+            
+            <div style="margin-top: 12px;">
+                <input type="text" id="gameCode" placeholder="Code (ex: ABC123)" maxlength="6" 
+                       style="text-transform: uppercase; text-align: center; font-size: 1.2rem; letter-spacing: 3px;">
+                <button class="btn btn-secondary btn-full" onclick="joinGame()">🚪 Rejoindre une partie</button>
+            </div>
+        </div>
+        
+        <!-- ÉCRAN LOBBY -->
+        <div id="lobbyScreen" class="card hidden">
+            <h2>🎮 Salle d'attente</h2>
+            <div class="code-display">
+                <div style="font-size: 0.85rem; color: #92400e; margin-bottom: 4px;">Code de la partie :</div>
+                <div class="code" id="lobbyCode">------</div>
+            </div>
+            <h3 style="color: var(--gray); margin-bottom: 8px; font-size: 0.95rem;">Joueurs (<span id="playerCount">0</span>/4)</h3>
+            <div class="players-list" id="lobbyPlayers"></div>
+            <div id="hostControls" class="hidden" style="margin-top: 15px;">
+                <button class="btn btn-primary btn-full" onclick="startGame()" id="startGameBtn" disabled>🚀 Lancer</button>
+                <button class="btn btn-full" style="background: #dbeafe; color: #2563eb; margin-top: 8px;" onclick="showAddBotModal()">🤖 Robot</button>
+            </div>
+            <div id="waitingMessage" style="text-align: center; margin-top: 15px; color: var(--gray);">
+                <div class="loading"></div>
+                <p style="margin-top: 8px; font-size: 0.9rem;">En attente du lancement...</p>
+            </div>
+            <button class="btn" onclick="leaveGame()" style="margin-top: 15px; background: #f3f4f6; color: var(--gray); font-size: 0.85rem;">← Quitter</button>
+        </div>
+        
+        <!-- ÉCRAN JEU -->
+        <div id="gameScreen" class="card hidden">
+            <div class="status-bar">
+                <div>🔄 Tour <strong id="turnNumber">1</strong></div>
+                <div class="turn-indicator" id="turnIndicator">🎯 ...</div>
+                <div>📊 Phase <strong id="phaseNumber">1</strong></div>
+                <button class="btn" style="padding: 4px 8px; font-size: 0.7rem; background: #f3f4f6;" onclick="saveGame()">💾</button>
+            </div>
+            
+            <div class="game-layout">
+                <div class="main-area">
+                    <div class="board-container" id="gameBoard"></div>
+                    <div class="dice-area" id="diceArea">
+                        <div id="diceMessage" style="font-size: 0.9rem;">Lance le dé !</div>
+                        <div class="dice" id="dice">🎲</div>
+                        <button class="btn btn-orange" id="rollDiceBtn" onclick="rollDice()">🎲 Lancer</button>
+                    </div>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0;">
+                        <button class="btn" style="background: #dcfce7; color: #059669; flex: 1;" onclick="showAAAModal()">💚 Pot AAA</button>
+                        <button class="btn" style="background: #fee2e2; color: #dc2626; flex: 1;" onclick="showBankModal()">🏦 Banque</button>
+                    </div>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button class="btn" style="background: #dbeafe; color: #2563eb; flex: 1;" onclick="showComptaModal()">📒 Comptabilité</button>
+                        <button class="btn" style="background: #fef3c7; color: #92400e; flex: 1;" onclick="showBilanModal()">📊 Bilan</button>
+                    </div>
+                </div>
+                
+                <div class="side-panel">
+                    <h3 style="color: var(--gray); margin-bottom: 8px; font-size: 0.9rem;">👥 Joueurs</h3>
+                    <div class="players-list" id="gamePlayers"></div>
+                    <h3 style="color: var(--gray); margin: 12px 0 6px; font-size: 0.9rem;">💬 Chat</h3>
+                    <div class="chat-box" id="chatBox"></div>
+                    <div class="chat-input">
+                        <input type="text" id="chatInput" placeholder="Message..." onkeypress="if(event.key==='Enter')sendChat()">
+                        <button class="btn btn-primary" onclick="sendChat()" style="padding: 8px 12px; font-size: 0.8rem;">→</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="modalContainer"></div>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    
+    <script>
+        // ========== FIREBASE CONFIG ==========
+        const firebaseConfig = {
+            apiKey: "AIzaSyC5hPhmhgQNY1qrFQ63XOIFNXhdy5EsDMM",
+            authDomain: "espoyr--game.firebaseapp.com",
+            databaseURL: "https://espoyr--game-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "espoyr--game",
+            storageBucket: "espoyr--game.firebasestorage.app",
+            messagingSenderId: "689112154741",
+            appId: "1:689112154741:web:a471dadae9becbaf3ca3eb"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        
+        // ========== PLAN COMPTABLE ==========
+        const PLAN_COMPTABLE = {
+            // Classe 1 - Capitaux
+            101: { nom: 'Capital joueur', classe: 1, type: 'passif' },
+            109: { nom: 'Résultat exercice', classe: 1, type: 'passif' },
+            135: { nom: 'Fonds Pot AAA', classe: 1, type: 'passif' },
+            164: { nom: 'Emprunt bancaire', classe: 1, type: 'passif' },
+            // Classe 2 - Immobilisations
+            211: { nom: 'Activités', classe: 2, type: 'actif' },
+            218: { nom: 'Équipements', classe: 2, type: 'actif' },
+            // Classe 4 - Tiers
+            401: { nom: 'Fournisseurs', classe: 4, type: 'passif' },
+            411: { nom: 'Clients', classe: 4, type: 'actif' },
+            421: { nom: 'Personnel', classe: 4, type: 'passif' },
+            431: { nom: 'État - Taxes', classe: 4, type: 'passif' },
+            48: { nom: 'Créances Pot AAA', classe: 4, type: 'actif' },
+            // Classe 5 - Financiers
+            500: { nom: 'Caisse €', classe: 5, type: 'actif' },
+            501: { nom: 'Caisse #', classe: 5, type: 'actif' },
+            512: { nom: 'Banque', classe: 5, type: 'actif' },
+            580: { nom: 'Caisse Pot AAA', classe: 5, type: 'actif' },
+            // Classe 6 - Charges
+            601: { nom: 'Achats activités', classe: 6, type: 'charge' },
+            602: { nom: 'Achats équipements', classe: 6, type: 'charge' },
+            613: { nom: 'Frais divers', classe: 6, type: 'charge' },
+            635: { nom: 'Taxes et impôts', classe: 6, type: 'charge' },
+            661: { nom: 'Intérêts bancaires', classe: 6, type: 'charge' },
+            671: { nom: 'Charges exceptionnelles', classe: 6, type: 'charge' },
+            // Classe 7 - Produits
+            700: { nom: 'Ventes / Factures', classe: 7, type: 'produit' },
+            701: { nom: 'Salaires reçus', classe: 7, type: 'produit' },
+            706: { nom: 'Travail coopératif', classe: 7, type: 'produit' },
+            758: { nom: 'Produits divers', classe: 7, type: 'produit' },
+            771: { nom: 'Produits exceptionnels', classe: 7, type: 'produit' }
+        };
+        
+        // ========== PLATEAU ESPOYR (23 cases) ==========
+        const CASES = [
+            { id: 0, type: 'start', name: 'Départ', icon: '🏁' },
+            { id: 1, type: 'activite', name: 'Vêtements', icon: '👔', prix: 200, facture: 40, hash: true, prixEquip: 100 },
+            { id: 2, type: 'ligne2', name: 'Ligne 2', icon: '🚌', cout: 50 },
+            { id: 3, type: 'activite', name: 'Pharmacie', icon: '💊', prix: 220, facture: 45, hash: true, prixEquip: 110 },
+            { id: 4, type: 'chance', name: 'Chance', icon: '🍀' },
+            { id: 5, type: 'activite', name: 'Jardin', icon: '🌻', prix: 240, facture: 50, hash: true, prixEquip: 120 },
+            { id: 6, type: 'activite', name: 'Librairie', icon: '📚', prix: 180, facture: 35, hash: true, prixEquip: 90 },
+            { id: 7, type: 'activite', name: 'Boulangerie', icon: '🥖', prix: 200, facture: 45, hash: true, prixEquip: 100 },
+            { id: 8, type: 'activite', name: 'Coiffeur', icon: '✂️', prix: 160, facture: 30, hash: true, prixEquip: 80 },
+            { id: 9, type: 'frais', name: 'Alimentaire', icon: '🛒', cout: 50 },
+            { id: 10, type: 'activite', name: 'Fleuriste', icon: '🌸', prix: 150, facture: 28, hash: true, prixEquip: 75 },
+            { id: 11, type: 'activite', name: 'Café', icon: '☕', prix: 200, facture: 40, hash: true, prixEquip: 100 },
+            { id: 12, type: 'activite', name: 'Restaurant', icon: '🍽️', prix: 280, facture: 55, hash: true, prixEquip: 140 },
+            { id: 13, type: 'taxe', name: 'Taxe', icon: '🏛️' },
+            { id: 14, type: 'activite', name: 'Garage', icon: '🔧', prix: 300, facture: 60, hash: true, prixEquip: 150 },
+            { id: 15, type: 'activite', name: 'Cordonnier', icon: '👟', prix: 320, facture: 60, hash: true, prixEquip: 160 },
+            { id: 16, type: 'activite', name: 'Bijouterie', icon: '💎', prix: 260, facture: 52, hash: true, prixEquip: 130 },
+            { id: 17, type: 'activite', name: 'Électricien', icon: '⚡', prix: 220, facture: 44, hash: true, prixEquip: 110 },
+            { id: 18, type: 'malchance', name: 'Merci', icon: '👨‍👩‍👧‍👦' },
+            { id: 19, type: 'activite', name: 'Plombier', icon: '🔩', prix: 240, facture: 48, hash: true, prixEquip: 120 },
+            { id: 20, type: 'frais', name: 'Médical', icon: '🏥', cout: 75 },
+            { id: 21, type: 'activite', name: 'Entrepreneur', icon: '🛠️', prix: 320, facture: 65, hash: true, prixEquip: 160 },
+            { id: 22, type: 'activite', name: 'Ferme', icon: '🐄', prix: 350, facture: 70, hash: true, prixEquip: 175 }
+        ];
+        
+        const CHANCE_CARDS = [
+            { text: "🎉 Fête du village ! Tous reçoivent 60€", amount: 60, all: true },
+            { text: "🌱 Bonus écologique collectif +45€", amount: 45, all: true },
+            { text: "📦 Bonne récolte ! Tous +75€", amount: 75, all: true },
+            { text: "🎁 Don anonyme +150€", amount: 150, all: false },
+            { text: "📰 Bonne nouvelle +105€", amount: 105, all: false },
+            { text: "🍀 Coup de chance +150€", amount: 150, all: false }
+        ];
+        
+        const MALCHANCE_CARDS = [
+            { text: "💸 Intérêts imprévus -50€", amount: 50 },
+            { text: "🏦 Frais bancaires -120€", amount: 120 },
+            { text: "⏰ Pénalités retard -150€", amount: 150 },
+            { text: "📋 Amendes -100€", amount: 100 },
+            { text: "📉 Découvert -50€", amount: 50 },
+            { text: "💱 Frais change -75€", amount: 75 }
+        ];
+        
+        const PROFILS_IA = {
+            PREDATEUR: { id: 'PREDATEUR', nom: '🦈 Prédateur', acheteToujours: true },
+            PRUDENT: { id: 'PRUDENT', nom: '🐢 Prudent', acheteToujours: false },
+            COOPERATIF: { id: 'COOPERATIF', nom: '🤝 Coopératif', membreAAA: true },
+            EQUILIBRE: { id: 'EQUILIBRE', nom: '⚖️ Équilibré' },
+            INVESTISSEUR: { id: 'INVESTISSEUR', nom: '📈 Investisseur' },
+            SOLIDAIRE: { id: 'SOLIDAIRE', nom: '💚 Solidaire', membreAAA: true }
+        };
+        
+        const PLAYER_COLORS = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b'];
+        const SALARY_PERCENT = { 1: 0.50, 2: 0.75, 3: 1.00, 4: 1.00, 5: 1.25, 6: 1.50 };
+        const CONFIG = {
+            salaireBase: 450,
+            capitalInitial: 450,
+            potAAAInitial: 1000,
+            tauxInteret: 0.10, // 10% par tour
+            limiteEmpruntMin: 750
+        };
+        
+        // ========== ÉTAT LOCAL ==========
+        let myPlayerId = null;
+        let myName = '';
+        let myAvatar = '👨';
+        let currentGameCode = null;
+        let isHost = false;
+        let gameRef = null;
+        let gameState = null;
+        let playersData = {};
+        
+        // ========== COMPTABILITÉ LOCALE (synchronisée Firebase) ==========
+        let COMPTABILITE = {
+            journal: [],
+            numeroEcriture: 0,
+            grandLivre: {},
+            caisseJoueurs: {},
+            caisseActivites: {},
+            banque: {
+                creancesJoueurs: 0,
+                masseMonetaire: 0,
+                interetsRecus: 0,
+                capital: 0
+            },
+            potAAA: {
+                solde: CONFIG.potAAAInitial,
+                circulationHash: 0,
+                membres: [],
+                creances: {}
+            },
+            etat: {
+                tresor: 0,
+                taxesRecues: 0
+            }
+        };
+        
+        // S'assurer que tous les champs de COMPTABILITE existent
+        function normalizeComptabilite() {
+            if (!COMPTABILITE.journal) COMPTABILITE.journal = [];
+            if (!COMPTABILITE.grandLivre) COMPTABILITE.grandLivre = {};
+            if (!COMPTABILITE.caisseJoueurs) COMPTABILITE.caisseJoueurs = {};
+            if (!COMPTABILITE.caisseActivites) COMPTABILITE.caisseActivites = {};
+            if (!COMPTABILITE.banque) COMPTABILITE.banque = { creancesJoueurs: 0, masseMonetaire: 0, interetsRecus: 0, capital: 0 };
+            if (!COMPTABILITE.potAAA) COMPTABILITE.potAAA = { solde: CONFIG.potAAAInitial, circulationHash: 0, membres: [], creances: {} };
+            if (!COMPTABILITE.etat) COMPTABILITE.etat = { tresor: 0, taxesRecues: 0 };
+            if (!COMPTABILITE.potAAA.membres) COMPTABILITE.potAAA.membres = [];
+            if (!COMPTABILITE.potAAA.creances) COMPTABILITE.potAAA.creances = {};
+        }
+        
+        // ========== FONCTIONS COMPTABLES ==========
+        
+        // Initialiser caisse joueur
+        function initCaisseJoueur(joueurId) {
+            if (!COMPTABILITE.caisseJoueurs[joueurId]) {
+                COMPTABILITE.caisseJoueurs[joueurId] = {
+                    euro: 0, espoyr: 0, capital: 0,
+                    emprunt: 0, interetsDus: 0,
+                    apportsActivites: 0,
+                    journal: []
+                };
+            }
+        }
+        
+        // Initialiser caisse activité
+        function initCaisseActivite(actId) {
+            if (!COMPTABILITE.caisseActivites[actId]) {
+                const c = CASES[actId];
+                COMPTABILITE.caisseActivites[actId] = {
+                    euro: 0, espoyr: 0,
+                    proprietaireId: null,
+                    capital: c?.prix || 0,
+                    equipements: 0,
+                    recettes: 0, depenses: 0,
+                    journal: []
+                };
+            }
+        }
+        
+        // Enregistrer écriture comptable (CŒUR DU SYSTÈME)
+        function enregistrerEcriture(params) {
+            const {
+                joueurId, libelle, compteDebit, compteCredit,
+                montantEuro = 0, montantEspoyr = 0,
+                activiteId = null, details = {}
+            } = params;
+            
+            if (!PLAN_COMPTABLE[compteDebit] || !PLAN_COMPTABLE[compteCredit]) {
+                console.warn(`⚠️ Compte invalide: D${compteDebit} C${compteCredit}`);
+                return null;
+            }
+            
+            COMPTABILITE.numeroEcriture++;
+            const ecriture = {
+                id: COMPTABILITE.numeroEcriture,
+                timestamp: new Date().toISOString(),
+                tour: gameState?.turn || 1,
+                phase: gameState?.phase || 1,
+                joueurId, joueurNom: playersData[joueurId]?.name || joueurId,
+                libelle,
+                debit: { compte: compteDebit, nom: PLAN_COMPTABLE[compteDebit].nom, euro: montantEuro, espoyr: montantEspoyr },
+                credit: { compte: compteCredit, nom: PLAN_COMPTABLE[compteCredit].nom, euro: montantEuro, espoyr: montantEspoyr },
+                activiteId, details
+            };
+            
+            COMPTABILITE.journal.push(ecriture);
+            
+            // Grand livre
+            if (!COMPTABILITE.grandLivre[compteDebit]) COMPTABILITE.grandLivre[compteDebit] = [];
+            if (!COMPTABILITE.grandLivre[compteCredit]) COMPTABILITE.grandLivre[compteCredit] = [];
+            COMPTABILITE.grandLivre[compteDebit].push({ ...ecriture, sens: 'debit' });
+            COMPTABILITE.grandLivre[compteCredit].push({ ...ecriture, sens: 'credit' });
+            
+            // Journal joueur
+            if (joueurId) {
+                initCaisseJoueur(joueurId);
+                COMPTABILITE.caisseJoueurs[joueurId].journal.push(ecriture);
+            }
+            
+            // Journal activité
+            if (activiteId !== null) {
+                initCaisseActivite(activiteId);
+                COMPTABILITE.caisseActivites[activiteId].journal.push(ecriture);
+                
+                // Maj totaux analytiques
+                if (PLAN_COMPTABLE[compteCredit].classe === 7) {
+                    COMPTABILITE.caisseActivites[activiteId].recettes += montantEuro + montantEspoyr;
+                }
+                if (PLAN_COMPTABLE[compteDebit].classe === 6) {
+                    COMPTABILITE.caisseActivites[activiteId].depenses += montantEuro + montantEspoyr;
+                }
+            }
+            
+            console.log(`📒 #${ecriture.id}: ${libelle} | D:${compteDebit} C:${compteCredit} | ${montantEuro}€ ${montantEspoyr}#`);
+            return ecriture;
+        }
+        
+        // ========== ÉCRITURES SPÉCIFIQUES ==========
+        
+        // Capital initial joueur (D:500 C:101)
+        async function comptaCapitalInitial(joueurId, montant) {
+            initCaisseJoueur(joueurId);
+            COMPTABILITE.caisseJoueurs[joueurId].euro = montant;
+            COMPTABILITE.caisseJoueurs[joueurId].capital = montant;
+            
+            // Création monétaire par la banque
+            COMPTABILITE.banque.masseMonetaire += montant;
+            
+            return enregistrerEcriture({
+                joueurId, libelle: `Capital initial ${montant}€`,
+                compteDebit: 500, compteCredit: 101, montantEuro: montant
+            });
+        }
+        
+        // Salaire (D:500 C:701)
+        async function comptaSalaire(joueurId, montant, deSalaire = 0) {
+            initCaisseJoueur(joueurId);
+            COMPTABILITE.caisseJoueurs[joueurId].euro += montant;
+            
+            // Création monétaire
+            COMPTABILITE.banque.masseMonetaire += montant;
+            
+            return enregistrerEcriture({
+                joueurId, libelle: `Salaire ${montant}€ (dé:${deSalaire})`,
+                compteDebit: 500, compteCredit: 701, montantEuro: montant,
+                details: { deSalaire }
+            });
+        }
+        
+        // Achat activité (D:211 C:500)
+        async function comptaAchatActivite(joueurId, actId, prix) {
+            initCaisseJoueur(joueurId);
+            initCaisseActivite(actId);
+            
+            COMPTABILITE.caisseJoueurs[joueurId].euro -= prix;
+            COMPTABILITE.caisseJoueurs[joueurId].apportsActivites += prix;
+            COMPTABILITE.caisseActivites[actId].proprietaireId = joueurId;
+            COMPTABILITE.caisseActivites[actId].capital = prix;
+            
+            // Bonus # (10% du prix)
+            const bonusHash = Math.floor(prix * 0.1);
+            if (bonusHash > 0) {
+                COMPTABILITE.caisseJoueurs[joueurId].espoyr += bonusHash;
+                COMPTABILITE.potAAA.solde -= bonusHash;
+                COMPTABILITE.potAAA.circulationHash += bonusHash;
+                
+                enregistrerEcriture({
+                    joueurId, libelle: `Bonus # achat activité`,
+                    compteDebit: 501, compteCredit: 580, montantEspoyr: bonusHash, activiteId: actId
+                });
+            }
+            
+            return enregistrerEcriture({
+                joueurId, libelle: `Achat ${CASES[actId]?.name || actId}`,
+                compteDebit: 211, compteCredit: 500, montantEuro: prix, activiteId: actId
+            });
+        }
+        
+        // Achat équipement (D:218 C:500)
+        async function comptaAchatEquipement(joueurId, actId, prix) {
+            initCaisseJoueur(joueurId);
+            initCaisseActivite(actId);
+            
+            COMPTABILITE.caisseJoueurs[joueurId].euro -= prix;
+            COMPTABILITE.caisseActivites[actId].equipements++;
+            
+            // Bonus #
+            const bonusHash = Math.floor(prix * 0.1);
+            if (bonusHash > 0) {
+                COMPTABILITE.caisseJoueurs[joueurId].espoyr += bonusHash;
+                COMPTABILITE.potAAA.solde -= bonusHash;
+                COMPTABILITE.potAAA.circulationHash += bonusHash;
+            }
+            
+            return enregistrerEcriture({
+                joueurId, libelle: `Équipement ${CASES[actId]?.name || actId}`,
+                compteDebit: 218, compteCredit: 500, montantEuro: prix, activiteId: actId
+            });
+        }
+        
+        // Paiement facture (D:613 C:500 payeur + D:500 C:700 propriétaire)
+        async function comptaPaiementFacture(payeurId, proprietaireId, actId, montantEuro, montantEspoyr = 0) {
+            initCaisseJoueur(payeurId);
+            initCaisseJoueur(proprietaireId);
+            initCaisseActivite(actId);
+            
+            const total = montantEuro + montantEspoyr;
+            const c = CASES[actId];
+            
+            // Sortie payeur
+            COMPTABILITE.caisseJoueurs[payeurId].euro -= montantEuro;
+            COMPTABILITE.caisseJoueurs[payeurId].espoyr -= montantEspoyr;
+            
+            enregistrerEcriture({
+                joueurId: payeurId, libelle: `Paiement ${c?.name || actId}`,
+                compteDebit: 613, compteCredit: 500, montantEuro, montantEspoyr, activiteId: actId
+            });
+            
+            // Entrée propriétaire (dans caisse activité)
+            COMPTABILITE.caisseActivites[actId].euro += montantEuro;
+            COMPTABILITE.caisseActivites[actId].espoyr += montantEspoyr;
+            COMPTABILITE.caisseActivites[actId].recettes += total;
+            
+            return enregistrerEcriture({
+                joueurId: proprietaireId, libelle: `Recette ${c?.name || actId}`,
+                compteDebit: 500, compteCredit: 700, montantEuro, montantEspoyr, activiteId: actId
+            });
+        }
+        
+        // Travail coopératif (D:501 C:706 pour les deux)
+        async function comptaTravailCoop(travailleurId, proprietaireId, actId, gainHash) {
+            initCaisseJoueur(travailleurId);
+            initCaisseJoueur(proprietaireId);
+            
+            // Travailleur gagne #
+            COMPTABILITE.caisseJoueurs[travailleurId].espoyr += gainHash;
+            COMPTABILITE.potAAA.solde -= gainHash;
+            COMPTABILITE.potAAA.circulationHash += gainHash;
+            
+            enregistrerEcriture({
+                joueurId: travailleurId, libelle: `Travail coop (gain)`,
+                compteDebit: 501, compteCredit: 706, montantEspoyr: gainHash, activiteId: actId
+            });
+            
+            // Propriétaire gagne aussi #
+            COMPTABILITE.caisseJoueurs[proprietaireId].espoyr += gainHash;
+            COMPTABILITE.potAAA.solde -= gainHash;
+            COMPTABILITE.potAAA.circulationHash += gainHash;
+            
+            return enregistrerEcriture({
+                joueurId: proprietaireId, libelle: `Travail coop (bonus)`,
+                compteDebit: 501, compteCredit: 706, montantEspoyr: gainHash, activiteId: actId
+            });
+        }
+        
+        // Emprunt bancaire (D:512 C:164)
+        async function comptaEmprunt(joueurId, montant) {
+            initCaisseJoueur(joueurId);
+            
+            COMPTABILITE.caisseJoueurs[joueurId].euro += montant;
+            COMPTABILITE.caisseJoueurs[joueurId].emprunt += montant;
+            COMPTABILITE.banque.creancesJoueurs += montant;
+            COMPTABILITE.banque.masseMonetaire += montant; // Création monétaire
+            
+            return enregistrerEcriture({
+                joueurId, libelle: `Emprunt bancaire ${montant}€`,
+                compteDebit: 512, compteCredit: 164, montantEuro: montant
+            });
+        }
+        
+        // Intérêts (D:661 C:512)
+        async function comptaInterets(joueurId, montant) {
+            initCaisseJoueur(joueurId);
+            
+            COMPTABILITE.caisseJoueurs[joueurId].interetsDus += montant;
+            COMPTABILITE.banque.interetsRecus += montant;
+            
+            return enregistrerEcriture({
+                joueurId, libelle: `Intérêts bancaires ${montant}€`,
+                compteDebit: 661, compteCredit: 512, montantEuro: montant
+            });
+        }
+        
+        // Remboursement emprunt (D:164 C:500)
+        async function comptaRemboursement(joueurId, montant) {
+            initCaisseJoueur(joueurId);
+            
+            COMPTABILITE.caisseJoueurs[joueurId].euro -= montant;
+            COMPTABILITE.caisseJoueurs[joueurId].emprunt -= montant;
+            COMPTABILITE.banque.creancesJoueurs -= montant;
+            COMPTABILITE.banque.masseMonetaire -= montant; // Destruction monétaire
+            
+            return enregistrerEcriture({
+                joueurId, libelle: `Remboursement ${montant}€`,
+                compteDebit: 164, compteCredit: 500, montantEuro: montant
+            });
+        }
+        
+        // Taxe (D:635 C:500)
+        async function comptaTaxe(joueurId, montant) {
+            initCaisseJoueur(joueurId);
+            
+            COMPTABILITE.caisseJoueurs[joueurId].euro -= montant;
+            COMPTABILITE.etat.tresor += montant;
+            COMPTABILITE.etat.taxesRecues += montant;
+            
+            return enregistrerEcriture({
+                joueurId, libelle: `Taxe 10%`,
+                compteDebit: 635, compteCredit: 500, montantEuro: montant
+            });
+        }
+        
+        // Frais divers (D:613 C:500)
+        async function comptaFrais(joueurId, montant, libelle) {
+            initCaisseJoueur(joueurId);
+            
+            COMPTABILITE.caisseJoueurs[joueurId].euro -= montant;
+            
+            return enregistrerEcriture({
+                joueurId, libelle: libelle || `Frais ${montant}€`,
+                compteDebit: 613, compteCredit: 500, montantEuro: montant
+            });
+        }
+        
+        // Chance/Malchance (D:500 C:771 ou D:671 C:500)
+        async function comptaChance(joueurId, montant, isChance) {
+            initCaisseJoueur(joueurId);
+            
+            if (isChance) {
+                COMPTABILITE.caisseJoueurs[joueurId].euro += montant;
+                COMPTABILITE.banque.masseMonetaire += montant;
+                return enregistrerEcriture({
+                    joueurId, libelle: `Chance +${montant}€`,
+                    compteDebit: 500, compteCredit: 771, montantEuro: montant
+                });
+            } else {
+                COMPTABILITE.caisseJoueurs[joueurId].euro -= montant;
+                return enregistrerEcriture({
+                    joueurId, libelle: `Malchance -${montant}€`,
+                    compteDebit: 671, compteCredit: 500, montantEuro: montant
+                });
+            }
+        }
+        
+        // Cotisation AAA (D:580 C:501)
+        async function comptaCotisationAAA(joueurId, montant) {
+            initCaisseJoueur(joueurId);
+            
+            COMPTABILITE.caisseJoueurs[joueurId].espoyr -= montant;
+            COMPTABILITE.potAAA.solde += montant;
+            COMPTABILITE.potAAA.circulationHash -= montant;
+            
+            return enregistrerEcriture({
+                joueurId, libelle: `Cotisation AAA ${montant}#`,
+                compteDebit: 580, compteCredit: 501, montantEspoyr: montant
+            });
+        }
+        
+        // Crédit AAA (D:501 C:580 + créance)
+        async function comptaCreditAAA(joueurId, montant) {
+            initCaisseJoueur(joueurId);
+            
+            COMPTABILITE.caisseJoueurs[joueurId].espoyr += montant;
+            COMPTABILITE.potAAA.solde -= montant;
+            COMPTABILITE.potAAA.circulationHash += montant;
+            
+            // Créance
+            if (!COMPTABILITE.potAAA.creances[joueurId]) COMPTABILITE.potAAA.creances[joueurId] = 0;
+            COMPTABILITE.potAAA.creances[joueurId] += montant;
+            
+            return enregistrerEcriture({
+                joueurId, libelle: `Crédit AAA ${montant}#`,
+                compteDebit: 501, compteCredit: 580, montantEspoyr: montant
+            });
+        }
+        
+        // ========== SYNCHRONISATION FIREBASE ==========
+        
+        async function syncComptabiliteToFirebase() {
+            if (!gameRef) return;
+            await gameRef.child('comptabilite').set(COMPTABILITE);
+        }
+        
+        async function loadComptabiliteFromFirebase() {
+            if (!gameRef) return;
+            const snap = await gameRef.child('comptabilite').once('value');
+            if (snap.exists()) {
+                COMPTABILITE = snap.val();
+                normalizeComptabilite();
+            }
+        }
+        
+        // ========== UI HELPERS ==========
+        
+        function showScreen(screenId) {
+            document.querySelectorAll('.card').forEach(c => c.classList.add('hidden'));
+            document.getElementById(screenId).classList.remove('hidden');
+        }
+        
+        function showError(msg) {
+            const el = document.getElementById('errorMessage');
+            el.textContent = msg; el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 3000);
+        }
+        
+        function showModal(content, buttons = '') {
+            document.getElementById('modalContainer').innerHTML = `
+                <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+                    <div class="modal">
+                        ${content}
+                        ${buttons ? `<div class="modal-buttons">${buttons}</div>` : ''}
+                    </div>
+                </div>`;
+        }
+        
+        function closeModal() {
+            document.getElementById('modalContainer').innerHTML = '';
+        }
+        
+        function generateCode() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            return Array.from({length: 6}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+        }
+        
+        // Avatar selection
+        document.querySelectorAll('.avatar-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.avatar-btn').forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                myAvatar = btn.dataset.avatar;
+            });
+        });
+        
+        // ========== CRÉER PARTIE ==========
+        async function createGame() {
+            myName = document.getElementById('playerName').value.trim();
+            if (!myName) { showError('Entre ton nom !'); return; }
+            
+            const code = generateCode();
+            currentGameCode = code;
+            isHost = true;
+            myPlayerId = 'p_' + Date.now();
+            
+            // Initialiser comptabilité
+            COMPTABILITE = {
+                journal: [], numeroEcriture: 0, grandLivre: {},
+                caisseJoueurs: {}, caisseActivites: {},
+                banque: { creancesJoueurs: 0, masseMonetaire: 0, interetsRecus: 0, capital: 0 },
+                potAAA: { solde: CONFIG.potAAAInitial, circulationHash: 0, membres: [], creances: {} },
+                etat: { tresor: 0, taxesRecues: 0 }
+            };
+            
+            await db.ref(`parties/${code}`).set({
+                code, hostId: myPlayerId, status: 'waiting',
+                createdAt: firebase.database.ServerValue.TIMESTAMP,
+                config: CONFIG,
+                state: { turn: 1, phase: 1, currentPlayerIndex: 0, started: false, toursComplets: 0 },
+                activites: {}, equipements: {},
+                comptabilite: COMPTABILITE
+            });
+            
+            await db.ref(`parties/${code}/players/${myPlayerId}`).set({
+                id: myPlayerId, name: myName, avatar: myAvatar,
+                position: 0, euro: CONFIG.capitalInitial, espoyr: 0, emprunt: 0,
+                isHost: true, isBot: false, membreAAA: false,
+                passagesDepart: 0, passagesDepuisPhase2: 0,
+                joinedAt: firebase.database.ServerValue.TIMESTAMP
+            });
+            
+            // Écriture capital initial
+            await comptaCapitalInitial(myPlayerId, CONFIG.capitalInitial);
+            await syncComptabiliteToFirebase();
+            
+            subscribeToGame(code);
+            showScreen('lobbyScreen');
+            document.getElementById('lobbyCode').textContent = code;
+            document.getElementById('hostControls').classList.remove('hidden');
+            document.getElementById('waitingMessage').classList.add('hidden');
+            
+            sendSystemMessage(`${myName} a créé la partie !`);
+        }
+        
+        // ========== REJOINDRE PARTIE ==========
+        async function joinGame() {
+            myName = document.getElementById('playerName').value.trim();
+            if (!myName) { showError('Entre ton nom !'); return; }
+            
+            const code = document.getElementById('gameCode').value.trim().toUpperCase();
+            if (!code || code.length !== 6) { showError('Code invalide !'); return; }
+            
+            const gameSnap = await db.ref(`parties/${code}`).once('value');
+            if (!gameSnap.exists()) { showError('Partie introuvable !'); return; }
+            
+            const gameData = gameSnap.val();
+            const playersSnap = await db.ref(`parties/${code}/players`).once('value');
+            const existingPlayers = playersSnap.val() || {};
+            
+            // Reconnexion ?
+            const existingPlayer = Object.values(existingPlayers).find(p => p.name === myName);
+            if (existingPlayer) {
+                currentGameCode = code;
+                myPlayerId = existingPlayer.id;
+                myAvatar = existingPlayer.avatar;
+                isHost = existingPlayer.isHost;
+                
+                await loadComptabiliteFromFirebase();
+                subscribeToGame(code);
+                
+                if (gameData.status === 'playing') {
+                    showScreen('gameScreen');
+                    sendSystemMessage(`🔄 ${myName} reconnecté !`);
+                } else {
+                    showScreen('lobbyScreen');
+                    document.getElementById('lobbyCode').textContent = code;
+                    document.getElementById('hostControls').classList.toggle('hidden', !isHost);
+                    document.getElementById('waitingMessage').classList.toggle('hidden', isHost);
+                }
+                return;
+            }
+            
+            if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); return; }
+            if (playersSnap.numChildren() >= 4) { showError('Partie complète !'); return; }
+            
+            currentGameCode = code;
+            isHost = false;
+            myPlayerId = 'p_' + Date.now();
+            
+            await db.ref(`parties/${code}/players/${myPlayerId}`).set({
+                id: myPlayerId, name: myName, avatar: myAvatar,
+                position: 0, euro: CONFIG.capitalInitial, espoyr: 0, emprunt: 0,
+                isHost: false, isBot: false, membreAAA: false,
+                passagesDepart: 0, passagesDepuisPhase2: 0,
+                joinedAt: firebase.database.ServerValue.TIMESTAMP
+            });
+            
+            // Charger et mettre à jour comptabilité
+            await loadComptabiliteFromFirebase();
+            await comptaCapitalInitial(myPlayerId, CONFIG.capitalInitial);
+            await syncComptabiliteToFirebase();
+            
+            subscribeToGame(code);
+            showScreen('lobbyScreen');
+            document.getElementById('lobbyCode').textContent = code;
+            document.getElementById('hostControls').classList.add('hidden');
+            document.getElementById('waitingMessage').classList.remove('hidden');
+            
+            sendSystemMessage(`${myName} a rejoint !`);
+        }
+        
+        // ========== ABONNEMENT FIREBASE ==========
+        function subscribeToGame(code) {
+            gameRef = db.ref(`parties/${code}`);
+            
+            // État
+            gameRef.child('state').on('value', (snap) => {
+                gameState = snap.val();
+                if (gameState?.started && document.getElementById('gameScreen').classList.contains('hidden')) {
+                    loadComptabiliteFromFirebase();
+                    showScreen('gameScreen');
+                }
+                updateGameUI();
+            });
+            
+            // Joueurs
+            gameRef.child('players').on('value', (snap) => {
+                playersData = snap.val() || {};
+                updatePlayersUI();
+                
+                const count = Object.keys(playersData).length;
+                const countEl = document.getElementById('playerCount');
+                if (countEl) countEl.textContent = count;
+                
+                const startBtn = document.getElementById('startGameBtn');
+                if (startBtn) startBtn.disabled = count < 2;
+            });
+            
+            // Chat
+            gameRef.child('chat').orderByChild('timestamp').limitToLast(50).on('child_added', (snap) => {
+                const msg = snap.val();
+                addChatMessage(msg);
+            });
+            
+            // Comptabilité (sync)
+            gameRef.child('comptabilite').on('value', (snap) => {
+                if (snap.exists()) {
+                    COMPTABILITE = snap.val();
+                    normalizeComptabilite();
+                }
+            });
+            
+            // Connexion
+            db.ref('.info/connected').on('value', (snap) => {
+                const el = document.getElementById('connectionStatus');
+                if (snap.val()) {
+                    el.textContent = '🟢 Connecté';
+                    el.className = 'connection-status connected';
+                } else {
+                    el.textContent = '🔴 Déconnecté';
+                    el.className = 'connection-status disconnected';
+                }
+            });
+        }
+        
+        // ========== CHAT ==========
+        function sendChat() {
+            const input = document.getElementById('chatInput');
+            const msg = input.value.trim();
+            if (!msg) return;
+            
+            gameRef.child('chat').push({
+                sender: myName, avatar: myAvatar, message: msg,
+                timestamp: firebase.database.ServerValue.TIMESTAMP, isSystem: false
+            });
+            input.value = '';
+        }
+        
+        function sendSystemMessage(msg) {
+            if (!gameRef) return;
+            gameRef.child('chat').push({
+                sender: 'Système', avatar: '📢', message: msg,
+                timestamp: firebase.database.ServerValue.TIMESTAMP, isSystem: true
+            });
+        }
+        
+        function addChatMessage(msg) {
+            const chatBox = document.getElementById('chatBox');
+            if (!chatBox) return;
+            
+            const div = document.createElement('div');
+            div.className = `chat-message ${msg.isSystem ? 'system' : ''}`;
+            div.innerHTML = msg.isSystem 
+                ? msg.message 
+                : `<span class="sender">${msg.avatar} ${msg.sender}:</span> ${msg.message}`;
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+        
+        // ========== UI JOUEURS ==========
+        function updatePlayersUI() {
+            const playerArray = Object.values(playersData).sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+            
+            // Lobby
+            const lobbyEl = document.getElementById('lobbyPlayers');
+            if (lobbyEl) {
+                lobbyEl.innerHTML = playerArray.map(p => `
+                    <div class="player-item ${p.id === myPlayerId ? 'me' : ''}">
+                        <span class="player-avatar">${p.avatar}</span>
+                        <div class="player-info">
+                            <div class="player-name">${p.name} ${p.isBot ? '🤖' : ''}</div>
+                            <div class="player-stats">${p.isHost ? '👑 Hôte' : 'Joueur'}</div>
+                        </div>
+                        ${p.isHost ? '<span class="player-badge badge-host">HOST</span>' : ''}
+                    </div>
+                `).join('');
+            }
+            
+            // Game
+            const gameEl = document.getElementById('gamePlayers');
+            if (gameEl && gameState) {
+                const currentIdx = gameState.currentPlayerIndex || 0;
+                gameEl.innerHTML = playerArray.map((p, idx) => {
+                    const caisse = (COMPTABILITE && COMPTABILITE.caisseJoueurs && COMPTABILITE.caisseJoueurs[p.id]) || {};
+                    return `
+                    <div class="player-item ${p.id === myPlayerId ? 'me' : ''} ${idx === currentIdx ? 'current-turn' : ''}">
+                        <span style="width: 12px; height: 12px; border-radius: 50%; background: ${PLAYER_COLORS[idx]}; flex-shrink: 0;"></span>
+                        <span class="player-avatar">${p.avatar}</span>
+                        <div class="player-info">
+                            <div class="player-name">${p.name} ${p.membreAAA ? '💚' : ''} ${p.isBot ? '🤖' : ''}</div>
+                            <div class="player-stats">
+                                💰${caisse.euro || p.euro || 0}€ 
+                                💚${caisse.espoyr || p.espoyr || 0}# 
+                                ${(caisse.emprunt || p.emprunt || 0) > 0 ? `<span style="color:#ef4444">📋${caisse.emprunt || p.emprunt}€</span>` : ''}
+                            </div>
+                        </div>
+                        ${idx === currentIdx ? '<span class="player-badge badge-ready">🎯</span>' : ''}
+                    </div>
+                `}).join('');
+            }
+        }
+        
+        // ========== LANCEMENT PARTIE ==========
+        async function startGame() {
+            if (!isHost) return;
+            await gameRef.child('state/started').set(true);
+            await gameRef.child('status').set('playing');
+            sendSystemMessage('🚀 La partie commence !');
+        }
+        
+        function leaveGame() {
+            if (gameRef && myPlayerId) {
+                gameRef.child(`players/${myPlayerId}`).remove();
+            }
+            showScreen('homeScreen');
+        }
+        
+        // ========== ROBOTS IA ==========
+        function showAddBotModal() {
+            if (Object.keys(playersData).length >= 4) { alert('Partie complète !'); return; }
+            
+            const profilsList = Object.values(PROFILS_IA).map(p => 
+                `<button class="btn" style="margin: 3px; font-size: 0.8rem;" onclick="addBot('${p.id}')">${p.nom}</button>`
+            ).join('');
+            
+            showModal(`<h3>🤖 Ajouter Robot</h3><div style="display:flex;flex-wrap:wrap;">${profilsList}</div>`,
+                `<button class="btn btn-secondary" onclick="closeModal()">Annuler</button>`);
+        }
+        
+        async function addBot(profilId) {
+            closeModal();
+            const profil = PROFILS_IA[profilId];
+            const botId = 'bot_' + Date.now();
+            const botNames = ['Robot-A', 'Robot-B', 'Robot-C', 'Robot-D'];
+            const botName = botNames[Object.keys(playersData).length - 1] || 'Robot';
+            
+            await db.ref(`parties/${currentGameCode}/players/${botId}`).set({
+                id: botId, name: botName, avatar: '🤖',
+                position: 0, euro: CONFIG.capitalInitial, espoyr: 0, emprunt: 0,
+                isHost: false, isBot: true, botProfil: profilId,
+                membreAAA: profil.membreAAA || false,
+                passagesDepart: 0, passagesDepuisPhase2: 0,
+                joinedAt: firebase.database.ServerValue.TIMESTAMP
+            });
+            
+            await comptaCapitalInitial(botId, CONFIG.capitalInitial);
+            await syncComptabiliteToFirebase();
+            
+            sendSystemMessage(`🤖 ${botName} (${profil.nom}) a rejoint !`);
+        }
+        
+        // ========== UI JEU ==========
+        function updateGameUI() {
+            if (!gameState) return;
+            
+            document.getElementById('turnNumber').textContent = gameState.turn || 1;
+            
+            const phase = gameState.phase || 1;
+            const phaseEl = document.getElementById('phaseNumber');
+            phaseEl.textContent = phase;
+            phaseEl.style.color = { 1: '#10b981', 2: '#f59e0b', 3: '#ef4444' }[phase];
+            
+            const players = Object.values(playersData);
+            const currentIdx = gameState.currentPlayerIndex || 0;
+            const currentPlayer = players[currentIdx];
+            
+            if (currentPlayer) {
+                const isMyTurn = currentPlayer.id === myPlayerId;
+                const isBot = currentPlayer.isBot;
+                
+                document.getElementById('turnIndicator').textContent = 
+                    isMyTurn ? '🎯 TON TOUR !' : `⏳ ${currentPlayer.name}${isBot ? ' 🤖' : ''}`;
+                
+                const diceBtn = document.getElementById('rollDiceBtn');
+                diceBtn.disabled = !isMyTurn;
+                diceBtn.style.opacity = isMyTurn ? '1' : '0.5';
+                
+                document.getElementById('diceMessage').textContent = 
+                    isMyTurn ? 'Lance le dé !' : `${currentPlayer.name} joue...`;
+                
+                if (isBot && isHost) {
+                    setTimeout(() => playBotTurn(currentPlayer), 1500);
+                }
+            }
+            
+            updateBoard();
+        }
+        
+        // ========== PLATEAU ==========
+        async function updateBoard() {
+            const boardEl = document.getElementById('gameBoard');
+            if (!boardEl) return;
+            
+            const players = Object.values(playersData);
+            const activitesSnap = await gameRef.child('activites').once('value');
+            const activites = activitesSnap.val() || {};
+            const equipSnap = await gameRef.child('equipements').once('value');
+            const equipements = equipSnap.val() || {};
+            
+            boardEl.innerHTML = CASES.map(c => {
+                const playersHere = players.filter(p => p.position === c.id);
+                const owner = activites[c.id];
+                const ownerPlayer = owner ? players.find(p => p.id === owner) : null;
+                const nbEquip = equipements[c.id] || 0;
+                
+                let ownerStyle = '';
+                if (ownerPlayer) {
+                    const idx = players.findIndex(p => p.id === owner);
+                    ownerStyle = `border-color: ${PLAYER_COLORS[idx]}`;
+                }
+                
+                const equipIndicator = '⚙'.repeat(nbEquip);
+                
+                return `
+                    <div class="case ${c.type} ${owner ? 'owned' : ''}" style="${ownerStyle}"
+                         onclick="showCaseInfo(${c.id})" title="${c.name}">
+                        <span class="case-number">${c.id}</span>
+                        ${c.hash ? '<span class="case-hash">#</span>' : ''}
+                        <span class="case-icon">${c.icon}</span>
+                        <span class="case-name">${c.name}</span>
+                        ${c.prix ? `<span class="case-price">${c.prix}€${equipIndicator}</span>` : ''}
+                        ${ownerPlayer ? `<span class="owner-indicator">${ownerPlayer.avatar}</span>` : ''}
+                        ${playersHere.length > 0 ? `
+                            <div class="players-on-case">
+                                ${playersHere.map(p => {
+                                    const idx = players.findIndex(pl => pl.id === p.id);
+                                    return `<div class="player-marker" style="background: ${PLAYER_COLORS[idx]}" title="${p.name}"></div>`;
+                                }).join('')}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // ========== LANCER DÉ ==========
+        async function rollDice() {
+            const players = Object.values(playersData);
+            const currentIdx = gameState.currentPlayerIndex || 0;
+            const currentPlayer = players[currentIdx];
+            
+            if (!currentPlayer || currentPlayer.id !== myPlayerId) return;
+            
+            const diceEl = document.getElementById('dice');
+            const diceBtn = document.getElementById('rollDiceBtn');
+            diceBtn.disabled = true;
+            diceEl.classList.add('rolling');
+            
+            const faces = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+            let rolls = 0;
+            const rollInterval = setInterval(async () => {
+                diceEl.textContent = faces[Math.floor(Math.random() * 6)];
+                rolls++;
+                if (rolls > 15) {
+                    clearInterval(rollInterval);
+                    
+                    const result = Math.floor(Math.random() * 6) + 1;
+                    diceEl.textContent = faces[result - 1];
+                    diceEl.classList.remove('rolling');
+                    
+                    const newPosition = (currentPlayer.position + result) % CASES.length;
+                    const passedStart = (currentPlayer.position + result) >= CASES.length;
+                    
+                    await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/position`).set(newPosition);
+                    
+                    sendSystemMessage(`🎲 ${myName} fait ${result} → ${CASES[newPosition].name}`);
+                    
+                    if (passedStart) {
+                        await handleSalary(currentPlayer, result);
+                    }
+                    
+                    setTimeout(() => handleLanding(newPosition), 800);
+                }
+            }, 80);
+        }
+        
+        // ========== SALAIRE ==========
+        async function handleSalary(player, deSalaire) {
+            const phase = gameState.phase || 1;
+            let salaire = CONFIG.salaireBase;
+            const pourcentage = SALARY_PERCENT[deSalaire] || 1;
+            salaire = Math.floor(salaire * pourcentage);
+            
+            // Érosion phases 2 et 3
+            if (phase >= 2) {
+                const passagesP2 = (player.passagesDepuisPhase2 || 0) + 1;
+                const facteurErosion = Math.pow(0.92, passagesP2);
+                salaire = Math.floor(salaire * facteurErosion);
+                
+                await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/passagesDepuisPhase2`).set(passagesP2);
+                
+                if (phase === 3) {
+                    salaire = Math.floor(salaire * 0.80);
+                }
+            }
+            
+            salaire = Math.max(100, salaire);
+            
+            // Comptabilité
+            await comptaSalaire(myPlayerId, salaire, deSalaire);
+            
+            // Mise à jour Firebase
+            const caisse = COMPTABILITE.caisseJoueurs[myPlayerId];
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/euro`).set(caisse.euro);
+            
+            const passages = (player.passagesDepart || 0) + 1;
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/passagesDepart`).set(passages);
+            
+            await syncComptabiliteToFirebase();
+            
+            sendSystemMessage(`💰 ${myName} reçoit ${salaire}€ (dé:${deSalaire} = ${Math.round(pourcentage * 100)}%)`);
+            
+            // Vérifier phase
+            await checkPhaseTransition();
+            
+            showModal(`
+                <h3>💰 Salaire !</h3>
+                <p>Tu passes la case Départ :</p>
+                <p style="font-size: 1.5rem; font-weight: bold; color: var(--green);">${salaire}€</p>
+                <p style="color: var(--gray);">Dé ${deSalaire} = ${Math.round(pourcentage * 100)}%</p>
+                ${phase >= 2 ? `<p style="color: var(--orange);">⚠️ Phase ${phase} : érosion</p>` : ''}
+            `, `<button class="btn btn-primary" onclick="closeModal()">OK</button>`);
+        }
+        
+        // ========== PHASES ==========
+        async function checkPhaseTransition() {
+            const players = Object.values(playersData);
+            const phase = gameState.phase || 1;
+            const toursComplets = gameState.toursComplets || 0;
+            
+            const activitesSnap = await gameRef.child('activites').once('value');
+            const activites = activitesSnap.val() || {};
+            const proprietaires = new Set(Object.values(activites));
+            const tauxEmploi = Math.round((proprietaires.size / players.length) * 100);
+            
+            const detteTotale = Object.values(COMPTABILITE.caisseJoueurs).reduce((s, c) => s + (c.emprunt || 0), 0);
+            
+            if (phase === 1 && toursComplets >= 4) {
+                await gameRef.child('state/phase').set(2);
+                sendSystemMessage(`📊 PHASE 2 ! L'érosion commence...`);
+            } else if (phase === 2 && (tauxEmploi < 50 || detteTotale > 1500 || toursComplets >= 8)) {
+                await gameRef.child('state/phase').set(3);
+                sendSystemMessage(`🌍 PHASE 3 ! Effondrement...`);
+            }
+        }
+        
+        // ========== ARRIVÉE SUR CASE ==========
+        async function handleLanding(position) {
+            const c = CASES[position];
+            const caisse = COMPTABILITE.caisseJoueurs[myPlayerId] || {};
+            
+            if (c.type === 'activite') {
+                const activitesSnap = await gameRef.child('activites').once('value');
+                const activites = activitesSnap.val() || {};
+                const owner = activites[position];
+                
+                if (!owner) {
+                    showBuyModal(c, caisse.euro || 0);
+                } else if (owner !== myPlayerId) {
+                    showPayOrNegotiateModal(c, owner, caisse.euro || 0);
+                } else {
+                    // Ma propriété - équipement ?
+                    const equipSnap = await gameRef.child(`equipements/${position}`).once('value');
+                    const nbEquip = equipSnap.val() || 0;
+                    
+                    if (nbEquip < 2 && (caisse.euro || 0) >= c.prixEquip) {
+                        showEquipModal(c, nbEquip, caisse.euro || 0);
+                    } else {
+                        sendSystemMessage(`${myName} est sur son ${c.icon}`);
+                        nextTurn();
+                    }
+                }
+            } else if (c.type === 'chance') {
+                await handleChance();
+            } else if (c.type === 'malchance') {
+                await handleMalchance();
+            } else if (c.type === 'frais') {
+                await handleFrais(c);
+            } else if (c.type === 'taxe') {
+                await handleTaxe();
+            } else if (c.type === 'ligne2') {
+                await handleLigne2(c);
+            } else {
+                nextTurn();
+            }
+        }
+        
+        // ========== ACHAT ACTIVITÉ ==========
+        function showBuyModal(c, currentEuro) {
+            const canBuy = currentEuro >= c.prix;
+            const bonusHash = Math.floor(c.prix * 0.1);
+            
+            showModal(`
+                <h3>${c.icon} ${c.name}</h3>
+                <p>Activité disponible !</p>
+                <p><strong>Prix :</strong> ${c.prix}€</p>
+                <p><strong>Facture :</strong> ${c.facture}€/passage</p>
+                <p><strong>Bonus :</strong> +${bonusHash}# à l'achat</p>
+                <hr style="margin: 10px 0;">
+                <p>Tu as : <strong>${currentEuro}€</strong></p>
+                ${!canBuy ? '<p style="color: #ef4444;">❌ Pas assez</p>' : ''}
+            `, `
+                ${canBuy ? `<button class="btn btn-primary" onclick="buyActivity(${c.id}, ${c.prix})">🛒 Acheter</button>` : ''}
+                <button class="btn btn-secondary" onclick="closeModal(); nextTurn();">Passer</button>
+            `);
+        }
+        
+        async function buyActivity(caseId, prix) {
+            closeModal();
+            const c = CASES[caseId];
+            
+            // Comptabilité
+            await comptaAchatActivite(myPlayerId, caseId, prix);
+            
+            // Firebase
+            const caisse = COMPTABILITE.caisseJoueurs[myPlayerId];
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}`).update({
+                euro: caisse.euro, espoyr: caisse.espoyr
+            });
+            await gameRef.child(`activites/${caseId}`).set(myPlayerId);
+            await syncComptabiliteToFirebase();
+            
+            const bonusHash = Math.floor(prix * 0.1);
+            sendSystemMessage(`🏪 ${myName} achète ${c.icon} ${c.name} (-${prix}€ +${bonusHash}#)`);
+            
+            nextTurn();
+        }
+        
+        // ========== ÉQUIPEMENT ==========
+        function showEquipModal(c, nbEquip, currentEuro) {
+            const canBuy = currentEuro >= c.prixEquip;
+            
+            showModal(`
+                <h3>${c.icon} ${c.name} - Ta propriété</h3>
+                <p><strong>Équipements :</strong> ${nbEquip}/2</p>
+                <p><strong>Facture actuelle :</strong> ${c.facture * (nbEquip === 2 ? 2 : 1)}€</p>
+                <hr style="margin: 10px 0;">
+                <p>Acheter équipement : ${c.prixEquip}€</p>
+                <p style="font-size: 0.85rem; color: var(--gray);">2 équipements = facture ×2</p>
+                <p>Tu as : <strong>${currentEuro}€</strong></p>
+            `, `
+                ${canBuy ? `<button class="btn btn-primary" onclick="buyEquipement(${c.id}, ${c.prixEquip})">⚙️ Acheter</button>` : ''}
+                <button class="btn btn-secondary" onclick="closeModal(); nextTurn();">Passer</button>
+            `);
+        }
+        
+        async function buyEquipement(caseId, prix) {
+            closeModal();
+            const c = CASES[caseId];
+            
+            // Comptabilité
+            await comptaAchatEquipement(myPlayerId, caseId, prix);
+            
+            // Firebase
+            const caisse = COMPTABILITE.caisseJoueurs[myPlayerId];
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}`).update({
+                euro: caisse.euro, espoyr: caisse.espoyr
+            });
+            
+            const equipSnap = await gameRef.child(`equipements/${caseId}`).once('value');
+            const nbEquip = (equipSnap.val() || 0) + 1;
+            await gameRef.child(`equipements/${caseId}`).set(nbEquip);
+            await syncComptabiliteToFirebase();
+            
+            sendSystemMessage(`⚙️ ${myName} équipe ${c.icon} (${nbEquip}/2)`);
+            
+            nextTurn();
+        }
+        
+        // ========== PAIEMENT / NÉGOCIATION ==========
+        async function showPayOrNegotiateModal(c, ownerId, currentEuro) {
+            const players = Object.values(playersData);
+            const ownerPlayer = players.find(p => p.id === ownerId);
+            
+            const equipSnap = await gameRef.child(`equipements/${c.id}`).once('value');
+            const nbEquip = equipSnap.val() || 0;
+            const facture = c.facture * (nbEquip === 2 ? 2 : 1);
+            
+            const canPay = currentEuro >= facture;
+            const myEspoyr = COMPTABILITE.caisseJoueurs[myPlayerId]?.espoyr || 0;
+            
+            showModal(`
+                <h3>${c.icon} ${c.name}</h3>
+                <p>Propriétaire : <strong>${ownerPlayer?.avatar} ${ownerPlayer?.name}</strong></p>
+                <p>Facture : <strong>${facture}€</strong> ${nbEquip === 2 ? '(×2)' : ''}</p>
+                <hr style="margin: 10px 0;">
+                <p>Tu as : ${currentEuro}€ / ${myEspoyr}#</p>
+                ${!canPay && myEspoyr === 0 ? '<p style="color: #ef4444;">⚠️ Pas assez !</p>' : ''}
+            `, `
+                ${canPay ? `<button class="btn btn-primary" onclick="payOwner(${c.id}, '${ownerId}', ${facture}, 0)">💶 Payer ${facture}€</button>` : ''}
+                ${myEspoyr > 0 ? `<button class="btn btn-secondary" onclick="showNegoModal(${c.id}, '${ownerId}', ${facture})">🤝 Négocier</button>` : ''}
+                <button class="btn" style="background:#dcfce7;color:#059669;" onclick="showWorkModal(${c.id}, '${ownerId}', ${facture})">👷 Travailler</button>
+                ${!canPay && myEspoyr === 0 ? `<button class="btn" style="background:#fee2e2;color:#dc2626;" onclick="createDebt('${ownerId}', ${facture})">📋 Dette</button>` : ''}
+            `);
+        }
+        
+        async function payOwner(caseId, ownerId, euroAmount, hashAmount) {
+            closeModal();
+            const c = CASES[caseId];
+            
+            // Comptabilité
+            await comptaPaiementFacture(myPlayerId, ownerId, caseId, euroAmount, hashAmount);
+            
+            // Firebase
+            const maCaisse = COMPTABILITE.caisseJoueurs[myPlayerId];
+            const ownerCaisse = COMPTABILITE.caisseJoueurs[ownerId];
+            
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}`).update({
+                euro: maCaisse.euro, espoyr: maCaisse.espoyr
+            });
+            
+            // Propriétaire reçoit dans activité
+            const caisseAct = COMPTABILITE.caisseActivites[caseId];
+            await db.ref(`parties/${currentGameCode}/players/${ownerId}`).update({
+                euro: (playersData[ownerId]?.euro || 0) + euroAmount,
+                espoyr: (playersData[ownerId]?.espoyr || 0) + hashAmount
+            });
+            
+            await syncComptabiliteToFirebase();
+            
+            const players = Object.values(playersData);
+            const ownerPlayer = players.find(p => p.id === ownerId);
+            
+            let msg = `💸 ${myName} paie `;
+            if (euroAmount > 0) msg += `${euroAmount}€`;
+            if (hashAmount > 0) msg += `${euroAmount > 0 ? '+' : ''}${hashAmount}#`;
+            msg += ` à ${ownerPlayer?.name}`;
+            sendSystemMessage(msg);
+            
+            nextTurn();
+        }
+        
+        // ========== NÉGOCIATION ==========
+        function showNegoModal(caseId, ownerId, facture) {
+            closeModal();
+            const c = CASES[caseId];
+            const myEuro = COMPTABILITE.caisseJoueurs[myPlayerId]?.euro || 0;
+            const myEspoyr = COMPTABILITE.caisseJoueurs[myPlayerId]?.espoyr || 0;
+            
+            showModal(`
+                <h3>🤝 Négociation</h3>
+                <p>${c.icon} ${c.name} - Facture : ${facture}€</p>
+                <p>Tu as : ${myEuro}€ / ${myEspoyr}#</p>
+                <hr style="margin: 10px 0;">
+                <div style="display: flex; gap: 10px;">
+                    <div style="flex:1;">
+                        <label style="font-size: 0.8rem;">Euros €</label>
+                        <input type="number" id="negoEuro" min="0" max="${Math.min(myEuro, facture)}" value="${Math.min(myEuro, Math.floor(facture/2))}">
+                    </div>
+                    <div style="flex:1;">
+                        <label style="font-size: 0.8rem;">Espoyr #</label>
+                        <input type="number" id="negoHash" min="0" max="${myEspoyr}" value="${Math.min(myEspoyr, Math.ceil(facture/2))}">
+                    </div>
+                </div>
+                <p style="font-size: 0.8rem; color: var(--gray);">Total ≥ ${facture} accepté auto</p>
+            `, `
+                <button class="btn btn-primary" onclick="sendNego(${caseId}, '${ownerId}', ${facture})">📤 Payer</button>
+                <button class="btn btn-secondary" onclick="closeModal(); nextTurn();">Annuler</button>
+            `);
+        }
+        
+        async function sendNego(caseId, ownerId, facture) {
+            const euroOffer = parseInt(document.getElementById('negoEuro').value) || 0;
+            const hashOffer = parseInt(document.getElementById('negoHash').value) || 0;
+            
+            if (euroOffer + hashOffer >= facture) {
+                await payOwner(caseId, ownerId, euroOffer, hashOffer);
+            } else {
+                alert('Le total doit être ≥ ' + facture);
+            }
+        }
+        
+        // ========== TRAVAIL COOPÉRATIF ==========
+        function showWorkModal(caseId, ownerId, facture) {
+            closeModal();
+            const c = CASES[caseId];
+            const players = Object.values(playersData);
+            const ownerPlayer = players.find(p => p.id === ownerId);
+            const gainHash = Math.ceil(facture / 2);
+            
+            showModal(`
+                <h3>👷 Travail Coopératif</h3>
+                <p>Tu proposes de travailler chez ${ownerPlayer?.avatar} ${ownerPlayer?.name}</p>
+                <p>${c.icon} ${c.name}</p>
+                <hr style="margin: 10px 0;">
+                <p>En échange :</p>
+                <ul style="padding-left: 20px; margin: 10px 0;">
+                    <li>Tu gagnes <strong style="color: #059669;">${gainHash}#</strong></li>
+                    <li>Le propriétaire gagne <strong style="color: #059669;">${gainHash}#</strong></li>
+                    <li>Pas de facture à payer</li>
+                </ul>
+            `, `
+                <button class="btn btn-primary" onclick="doWorkCoop(${caseId}, '${ownerId}', ${gainHash})">👷 Travailler</button>
+                <button class="btn btn-secondary" onclick="showPayOrNegotiateModal(CASES[${caseId}], '${ownerId}', COMPTABILITE.caisseJoueurs['${myPlayerId}']?.euro || 0)">Retour</button>
+            `);
+        }
+        
+        async function doWorkCoop(caseId, ownerId, gainHash) {
+            closeModal();
+            const c = CASES[caseId];
+            
+            // Comptabilité
+            await comptaTravailCoop(myPlayerId, ownerId, caseId, gainHash);
+            
+            // Firebase
+            const maCaisse = COMPTABILITE.caisseJoueurs[myPlayerId];
+            const ownerCaisse = COMPTABILITE.caisseJoueurs[ownerId];
+            
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/espoyr`).set(maCaisse.espoyr);
+            await db.ref(`parties/${currentGameCode}/players/${ownerId}/espoyr`).set(ownerCaisse.espoyr);
+            await syncComptabiliteToFirebase();
+            
+            const players = Object.values(playersData);
+            const ownerPlayer = players.find(p => p.id === ownerId);
+            
+            sendSystemMessage(`👷 ${myName} travaille chez ${ownerPlayer?.name} (${c.icon}) : +${gainHash}# chacun !`);
+            
+            nextTurn();
+        }
+        
+        // ========== DETTE ==========
+        async function createDebt(ownerId, amount) {
+            closeModal();
+            
+            // Comptabilité - emprunt forcé à la banque pour payer
+            await comptaEmprunt(myPlayerId, amount);
+            
+            // Le propriétaire reçoit quand même
+            initCaisseJoueur(ownerId);
+            COMPTABILITE.caisseJoueurs[ownerId].euro += amount;
+            
+            // Firebase
+            const maCaisse = COMPTABILITE.caisseJoueurs[myPlayerId];
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}`).update({
+                euro: maCaisse.euro, emprunt: maCaisse.emprunt
+            });
+            await db.ref(`parties/${currentGameCode}/players/${ownerId}/euro`).set(
+                (playersData[ownerId]?.euro || 0) + amount
+            );
+            await syncComptabiliteToFirebase();
+            
+            sendSystemMessage(`📋 ${myName} s'endette de ${amount}€ (banque)`);
+            
+            nextTurn();
+        }
+        
+        // ========== CASES SPÉCIALES ==========
+        async function handleChance() {
+            const card = CHANCE_CARDS[Math.floor(Math.random() * CHANCE_CARDS.length)];
+            
+            if (card.all) {
+                const players = Object.values(playersData);
+                for (const p of players) {
+                    await comptaChance(p.id, card.amount, true);
+                    const caisse = COMPTABILITE.caisseJoueurs[p.id];
+                    await db.ref(`parties/${currentGameCode}/players/${p.id}/euro`).set(caisse.euro);
+                }
+                sendSystemMessage(`🍀 CHANCE: ${card.text}`);
+            } else {
+                await comptaChance(myPlayerId, card.amount, true);
+                const caisse = COMPTABILITE.caisseJoueurs[myPlayerId];
+                await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/euro`).set(caisse.euro);
+                sendSystemMessage(`🍀 ${myName}: ${card.text}`);
+            }
+            
+            await syncComptabiliteToFirebase();
+            
+            showModal(`<h3>🍀 Chance !</h3><p>${card.text}</p>`,
+                `<button class="btn btn-primary" onclick="closeModal(); nextTurn();">OK</button>`);
+        }
+        
+        async function handleMalchance() {
+            const card = MALCHANCE_CARDS[Math.floor(Math.random() * MALCHANCE_CARDS.length)];
+            
+            await comptaChance(myPlayerId, card.amount, false);
+            const caisse = COMPTABILITE.caisseJoueurs[myPlayerId];
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/euro`).set(Math.max(0, caisse.euro));
+            await syncComptabiliteToFirebase();
+            
+            sendSystemMessage(`👨‍👩‍👧‍👦 ${myName}: ${card.text}`);
+            
+            showModal(`<h3>👨‍👩‍👧‍👦 Merci</h3><p>${card.text}</p>`,
+                `<button class="btn btn-primary" onclick="closeModal(); nextTurn();">OK</button>`);
+        }
+        
+        async function handleFrais(c) {
+            await comptaFrais(myPlayerId, c.cout, c.name);
+            const caisse = COMPTABILITE.caisseJoueurs[myPlayerId];
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/euro`).set(Math.max(0, caisse.euro));
+            await syncComptabiliteToFirebase();
+            
+            sendSystemMessage(`${c.icon} ${myName} paie ${c.cout}€ (${c.name})`);
+            
+            showModal(`<h3>${c.icon} ${c.name}</h3><p>Frais : <strong>${c.cout}€</strong></p>`,
+                `<button class="btn btn-primary" onclick="closeModal(); nextTurn();">OK</button>`);
+        }
+        
+        async function handleTaxe() {
+            const caisse = COMPTABILITE.caisseJoueurs[myPlayerId] || {};
+            const taxe = Math.floor((caisse.euro || 0) * 0.1);
+            
+            await comptaTaxe(myPlayerId, taxe);
+            const newCaisse = COMPTABILITE.caisseJoueurs[myPlayerId];
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/euro`).set(newCaisse.euro);
+            await syncComptabiliteToFirebase();
+            
+            sendSystemMessage(`🏛️ ${myName} paie ${taxe}€ de taxe (10%)`);
+            
+            showModal(`<h3>🏛️ Taxe</h3><p>10% du capital : <strong>${taxe}€</strong></p>`,
+                `<button class="btn btn-primary" onclick="closeModal(); nextTurn();">OK</button>`);
+        }
+        
+        async function handleLigne2(c) {
+            const players = Object.values(playersData);
+            
+            for (const p of players) {
+                await comptaFrais(p.id, c.cout, 'Ligne 2');
+                const caisse = COMPTABILITE.caisseJoueurs[p.id];
+                await db.ref(`parties/${currentGameCode}/players/${p.id}/euro`).set(Math.max(0, caisse.euro));
+            }
+            await syncComptabiliteToFirebase();
+            
+            sendSystemMessage(`🚌 LIGNE 2 ! Tout le monde paie ${c.cout}€`);
+            
+            showModal(`<h3>🚌 Ligne 2</h3><p>Tous les joueurs paient <strong>${c.cout}€</strong></p>`,
+                `<button class="btn btn-primary" onclick="closeModal(); nextTurn();">OK</button>`);
+        }
+        
+        // ========== TOUR SUIVANT ==========
+        async function nextTurn() {
+            const players = Object.values(playersData);
+            const currentIdx = gameState.currentPlayerIndex || 0;
+            const nextIdx = (currentIdx + 1) % players.length;
+            
+            const isNewRound = nextIdx === 0;
+            const newTurn = isNewRound ? (gameState.turn || 1) + 1 : gameState.turn;
+            const toursComplets = isNewRound ? (gameState.toursComplets || 0) + 1 : (gameState.toursComplets || 0);
+            
+            // Intérêts si nouveau tour complet
+            if (isNewRound) {
+                await applyInterests();
+            }
+            
+            await gameRef.child('state').update({
+                currentPlayerIndex: nextIdx,
+                turn: newTurn,
+                toursComplets: toursComplets
+            });
+            
+            if (isNewRound) {
+                await checkPhaseTransition();
+            }
+        }
+        
+        // ========== INTÉRÊTS ==========
+        async function applyInterests() {
+            const players = Object.values(playersData);
+            
+            for (const p of players) {
+                const caisse = COMPTABILITE.caisseJoueurs[p.id];
+                if (caisse && caisse.emprunt > 0) {
+                    const interet = Math.floor(caisse.emprunt * CONFIG.tauxInteret);
+                    if (interet > 0) {
+                        await comptaInterets(p.id, interet);
+                        
+                        // Ajouter à la dette
+                        caisse.emprunt += interet;
+                        await db.ref(`parties/${currentGameCode}/players/${p.id}/emprunt`).set(caisse.emprunt);
+                        
+                        sendSystemMessage(`📈 ${p.name} : intérêts +${interet}€ (dette: ${caisse.emprunt}€)`);
+                    }
+                }
+            }
+            await syncComptabiliteToFirebase();
+        }
+        
+        // ========== ROBOTS IA ==========
+        async function playBotTurn(bot) {
+            const profil = PROFILS_IA[bot.botProfil] || PROFILS_IA.EQUILIBRE;
+            
+            const dice = Math.floor(Math.random() * 6) + 1;
+            const newPosition = (bot.position + dice) % CASES.length;
+            const passedStart = (bot.position + dice) >= CASES.length;
+            
+            await db.ref(`parties/${currentGameCode}/players/${bot.id}/position`).set(newPosition);
+            
+            sendSystemMessage(`🤖 ${bot.name} fait ${dice} → ${CASES[newPosition].name}`);
+            
+            // Salaire
+            if (passedStart) {
+                const deSalaire = Math.floor(Math.random() * 6) + 1;
+                const pourcentage = SALARY_PERCENT[deSalaire] || 1;
+                let salaire = Math.floor(CONFIG.salaireBase * pourcentage);
+                salaire = Math.max(100, salaire);
+                
+                await comptaSalaire(bot.id, salaire, deSalaire);
+                const caisse = COMPTABILITE.caisseJoueurs[bot.id];
+                await db.ref(`parties/${currentGameCode}/players/${bot.id}/euro`).set(caisse.euro);
+                await syncComptabiliteToFirebase();
+                
+                sendSystemMessage(`💰 ${bot.name} reçoit ${salaire}€`);
+            }
+            
+            // Gérer case
+            await handleBotLanding(bot.id, newPosition, profil);
+        }
+        
+        async function handleBotLanding(botId, position, profil) {
+            const c = CASES[position];
+            const caisse = COMPTABILITE.caisseJoueurs[botId] || {};
+            const bot = playersData[botId];
+            
+            if (c.type === 'activite') {
+                const activitesSnap = await gameRef.child('activites').once('value');
+                const activites = activitesSnap.val() || {};
+                const owner = activites[position];
+                
+                if (!owner && (caisse.euro || 0) >= c.prix) {
+                    // Décision achat
+                    const shouldBuy = profil.acheteToujours || (caisse.euro || 0) >= c.prix * 1.5;
+                    if (shouldBuy) {
+                        await comptaAchatActivite(botId, position, c.prix);
+                        const newCaisse = COMPTABILITE.caisseJoueurs[botId];
+                        await db.ref(`parties/${currentGameCode}/players/${botId}`).update({
+                            euro: newCaisse.euro, espoyr: newCaisse.espoyr
+                        });
+                        await gameRef.child(`activites/${position}`).set(botId);
+                        await syncComptabiliteToFirebase();
+                        
+                        sendSystemMessage(`🤖 ${bot.name} achète ${c.icon} ${c.name}`);
+                    }
+                } else if (owner && owner !== botId) {
+                    const equipSnap = await gameRef.child(`equipements/${position}`).once('value');
+                    const nbEquip = equipSnap.val() || 0;
+                    const facture = c.facture * (nbEquip === 2 ? 2 : 1);
+                    
+                    if ((caisse.euro || 0) >= facture) {
+                        await comptaPaiementFacture(botId, owner, position, facture, 0);
+                    } else {
+                        await comptaEmprunt(botId, facture);
+                        initCaisseJoueur(owner);
+                        COMPTABILITE.caisseJoueurs[owner].euro += facture;
+                    }
+                    
+                    const botCaisse = COMPTABILITE.caisseJoueurs[botId];
+                    const ownerCaisse = COMPTABILITE.caisseJoueurs[owner];
+                    
+                    await db.ref(`parties/${currentGameCode}/players/${botId}`).update({
+                        euro: botCaisse.euro, emprunt: botCaisse.emprunt || 0
+                    });
+                    await db.ref(`parties/${currentGameCode}/players/${owner}/euro`).set(
+                        (playersData[owner]?.euro || 0) + facture
+                    );
+                    await syncComptabiliteToFirebase();
+                    
+                    sendSystemMessage(`🤖 ${bot.name} paie ${facture}€`);
+                }
+            } else if (c.type === 'frais' || c.type === 'ligne2') {
+                const cout = c.cout || 50;
+                if (c.type === 'ligne2') {
+                    const players = Object.values(playersData);
+                    for (const p of players) {
+                        await comptaFrais(p.id, cout, c.name);
+                        const pCaisse = COMPTABILITE.caisseJoueurs[p.id];
+                        await db.ref(`parties/${currentGameCode}/players/${p.id}/euro`).set(Math.max(0, pCaisse.euro));
+                    }
+                } else {
+                    await comptaFrais(botId, cout, c.name);
+                    const newCaisse = COMPTABILITE.caisseJoueurs[botId];
+                    await db.ref(`parties/${currentGameCode}/players/${botId}/euro`).set(Math.max(0, newCaisse.euro));
+                }
+                await syncComptabiliteToFirebase();
+            } else if (c.type === 'taxe') {
+                const taxe = Math.floor((caisse.euro || 0) * 0.1);
+                await comptaTaxe(botId, taxe);
+                const newCaisse = COMPTABILITE.caisseJoueurs[botId];
+                await db.ref(`parties/${currentGameCode}/players/${botId}/euro`).set(newCaisse.euro);
+                await syncComptabiliteToFirebase();
+            } else if (c.type === 'chance') {
+                const card = CHANCE_CARDS[Math.floor(Math.random() * CHANCE_CARDS.length)];
+                if (!card.all) {
+                    await comptaChance(botId, card.amount, true);
+                    const newCaisse = COMPTABILITE.caisseJoueurs[botId];
+                    await db.ref(`parties/${currentGameCode}/players/${botId}/euro`).set(newCaisse.euro);
+                    await syncComptabiliteToFirebase();
+                }
+            } else if (c.type === 'malchance') {
+                const card = MALCHANCE_CARDS[Math.floor(Math.random() * MALCHANCE_CARDS.length)];
+                await comptaChance(botId, card.amount, false);
+                const newCaisse = COMPTABILITE.caisseJoueurs[botId];
+                await db.ref(`parties/${currentGameCode}/players/${botId}/euro`).set(Math.max(0, newCaisse.euro));
+                await syncComptabiliteToFirebase();
+            }
+            
+            setTimeout(() => nextTurn(), 1000);
+        }
+        
+        // ========== MODALS COMPTABILITÉ ==========
+        
+        function showComptaModal() {
+            const journal = COMPTABILITE.journal.slice(-20).reverse();
+            
+            const rows = journal.map(e => `
+                <div class="journal-entry">
+                    <small style="color:#9ca3af;">#${e.id} T${e.tour}</small>
+                    <strong>${e.joueurNom}</strong>: ${e.libelle}<br>
+                    <span style="color:#ef4444;">D:${e.debit.compte} ${e.debit.nom}</span> |
+                    <span style="color:#10b981;">C:${e.credit.compte} ${e.credit.nom}</span>
+                    <span style="float:right;">${e.debit.euro}€ ${e.debit.espoyr}#</span>
+                </div>
+            `).join('');
+            
+            showModal(`
+                <h3>📒 Journal Comptable</h3>
+                <p style="font-size: 0.8rem; color: var(--gray);">${COMPTABILITE.journal.length} écritures au total</p>
+                <div style="max-height: 400px; overflow-y: auto;">
+                    ${rows || '<p style="color: var(--gray);">Aucune écriture</p>'}
+                </div>
+            `, `<button class="btn btn-secondary" onclick="closeModal()">Fermer</button>`);
+        }
+        
+        function showBilanModal() {
+            const players = Object.values(playersData);
+            
+            // Calculs globaux
+            let totalEuro = 0, totalEspoyr = 0, totalDette = 0, totalActifs = 0;
+            
+            const playerRows = players.map(p => {
+                const caisse = COMPTABILITE.caisseJoueurs[p.id] || {};
+                const euro = caisse.euro || p.euro || 0;
+                const espoyr = caisse.espoyr || p.espoyr || 0;
+                const dette = caisse.emprunt || p.emprunt || 0;
+                const apports = caisse.apportsActivites || 0;
+                
+                totalEuro += euro;
+                totalEspoyr += espoyr;
+                totalDette += dette;
+                totalActifs += apports;
+                
+                return `
+                    <tr>
+                        <td>${p.avatar} ${p.name}</td>
+                        <td class="actif">${euro}€</td>
+                        <td class="actif">${espoyr}#</td>
+                        <td class="actif">${apports}€</td>
+                        <td class="passif">${dette}€</td>
+                        <td>${euro + espoyr + apports - dette}€</td>
+                    </tr>
+                `;
+            }).join('');
+            
+            const bilanBanque = `
+                <tr>
+                    <td colspan="6" style="background:#f3f4f6;"><strong>🏦 Banque</strong></td>
+                </tr>
+                <tr>
+                    <td>Créances</td>
+                    <td class="actif" colspan="2">${COMPTABILITE.banque.creancesJoueurs}€</td>
+                    <td>Masse €</td>
+                    <td class="passif" colspan="2">${COMPTABILITE.banque.masseMonetaire}€</td>
+                </tr>
+            `;
+            
+            const bilanAAA = `
+                <tr>
+                    <td colspan="6" style="background:#dcfce7;"><strong>💚 Pot AAA</strong></td>
+                </tr>
+                <tr>
+                    <td>Solde</td>
+                    <td class="actif" colspan="2">${COMPTABILITE.potAAA.solde}#</td>
+                    <td># en circulation</td>
+                    <td colspan="2">${COMPTABILITE.potAAA.circulationHash}#</td>
+                </tr>
+            `;
+            
+            const bilanEtat = `
+                <tr>
+                    <td colspan="6" style="background:#f3e8ff;"><strong>🏛️ État</strong></td>
+                </tr>
+                <tr>
+                    <td>Trésor</td>
+                    <td class="actif" colspan="2">${COMPTABILITE.etat.tresor}€</td>
+                    <td>Taxes reçues</td>
+                    <td colspan="2">${COMPTABILITE.etat.taxesRecues}€</td>
+                </tr>
+            `;
+            
+            showModal(`
+                <h3>📊 Bilan Économique</h3>
+                <table class="bilan-table">
+                    <thead>
+                        <tr>
+                            <th>Joueur</th>
+                            <th>Caisse €</th>
+                            <th>Caisse #</th>
+                            <th>Activités</th>
+                            <th>Dette</th>
+                            <th>Net</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${playerRows}
+                        <tr class="total">
+                            <td>TOTAL</td>
+                            <td>${totalEuro}€</td>
+                            <td>${totalEspoyr}#</td>
+                            <td>${totalActifs}€</td>
+                            <td>${totalDette}€</td>
+                            <td>${totalEuro + totalEspoyr + totalActifs - totalDette}€</td>
+                        </tr>
+                        ${bilanBanque}
+                        ${bilanAAA}
+                        ${bilanEtat}
+                    </tbody>
+                </table>
+            `, `<button class="btn btn-secondary" onclick="closeModal()">Fermer</button>`);
+        }
+        
+        // ========== POT AAA ==========
+        function showAAAModal() {
+            const isMembre = COMPTABILITE.potAAA.membres?.includes(myPlayerId);
+            const myEspoyr = COMPTABILITE.caisseJoueurs[myPlayerId]?.espoyr || 0;
+            const maCreance = COMPTABILITE.potAAA.creances?.[myPlayerId] || 0;
+            
+            showModal(`
+                <h3>💚 Pot AAA (Aide Amicale Autonome)</h3>
+                <p><strong>Solde du pot :</strong> ${COMPTABILITE.potAAA.solde}#</p>
+                <p><strong># en circulation :</strong> ${COMPTABILITE.potAAA.circulationHash}#</p>
+                <p><strong>Membres :</strong> ${COMPTABILITE.potAAA.membres?.length || 0}</p>
+                <hr style="margin: 10px 0;">
+                ${!isMembre ? `
+                    <p>Tu n'es pas membre. Adhère pour pouvoir cotiser et emprunter des #.</p>
+                ` : `
+                    <p>✅ Tu es membre</p>
+                    <p>Ton solde # : <strong>${myEspoyr}#</strong></p>
+                    ${maCreance > 0 ? `<p style="color:var(--orange);">Crédit en cours : ${maCreance}#</p>` : ''}
+                    <div style="display: flex; gap: 10px; margin: 10px 0;">
+                        <input type="number" id="aaaAmount" min="1" max="100" value="10" placeholder="Montant">
+                    </div>
+                `}
+            `, `
+                ${!isMembre ? `<button class="btn btn-primary" onclick="joinAAA()">Adhérer</button>` : `
+                    <button class="btn btn-primary" onclick="contributeAAA()">⬆️ Cotiser</button>
+                    <button class="btn btn-secondary" onclick="creditAAA()">⬇️ Emprunter</button>
+                `}
+                <button class="btn" style="background:#f3f4f6;" onclick="closeModal()">Fermer</button>
+            `);
+        }
+        
+        async function joinAAA() {
+            COMPTABILITE.potAAA.membres = COMPTABILITE.potAAA.membres || [];
+            if (!COMPTABILITE.potAAA.membres.includes(myPlayerId)) {
+                COMPTABILITE.potAAA.membres.push(myPlayerId);
+            }
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/membreAAA`).set(true);
+            await syncComptabiliteToFirebase();
+            
+            closeModal();
+            sendSystemMessage(`💚 ${myName} rejoint le Pot AAA !`);
+            showAAAModal();
+        }
+        
+        async function contributeAAA() {
+            const amount = parseInt(document.getElementById('aaaAmount').value) || 0;
+            if (amount <= 0) return;
+            
+            const caisse = COMPTABILITE.caisseJoueurs[myPlayerId];
+            if ((caisse?.espoyr || 0) < amount) {
+                alert('Pas assez de # !');
+                return;
+            }
+            
+            await comptaCotisationAAA(myPlayerId, amount);
+            
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/espoyr`).set(caisse.espoyr);
+            await syncComptabiliteToFirebase();
+            
+            closeModal();
+            sendSystemMessage(`💚 ${myName} cotise ${amount}# au Pot AAA`);
+            showAAAModal();
+        }
+        
+        async function creditAAA() {
+            const amount = parseInt(document.getElementById('aaaAmount').value) || 0;
+            if (amount <= 0) return;
+            
+            if (COMPTABILITE.potAAA.solde < amount) {
+                alert('Pas assez dans le pot !');
+                return;
+            }
+            
+            await comptaCreditAAA(myPlayerId, amount);
+            
+            const caisse = COMPTABILITE.caisseJoueurs[myPlayerId];
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/espoyr`).set(caisse.espoyr);
+            await syncComptabiliteToFirebase();
+            
+            closeModal();
+            sendSystemMessage(`💚 ${myName} emprunte ${amount}# au Pot AAA`);
+            showAAAModal();
+        }
+        
+        // ========== BANQUE ==========
+        function showBankModal() {
+            const caisse = COMPTABILITE.caisseJoueurs[myPlayerId] || {};
+            const dette = caisse.emprunt || 0;
+            
+            // Limite emprunt
+            const players = Object.values(playersData);
+            const masseMonetaire = Object.values(COMPTABILITE.caisseJoueurs).reduce((s, c) => s + (c.euro || 0), 0);
+            const limiteCalculee = Math.max(CONFIG.limiteEmpruntMin, Math.floor(masseMonetaire / players.length));
+            const disponible = Math.max(0, limiteCalculee - dette);
+            
+            showModal(`
+                <h3>🏦 Banque</h3>
+                <p><strong>Ta dette :</strong> ${dette}€</p>
+                <p><strong>Limite d'emprunt :</strong> ${limiteCalculee}€</p>
+                <p style="font-size: 0.8rem; color: var(--gray);">= max(${CONFIG.limiteEmpruntMin}€, ${masseMonetaire}€ ÷ ${players.length})</p>
+                <hr style="margin: 10px 0;">
+                <p><strong style="color: ${disponible > 0 ? 'var(--green)' : 'var(--red)'};">Disponible : ${disponible}€</strong></p>
+                ${disponible > 0 ? `
+                    <label>Montant à emprunter :</label>
+                    <input type="number" id="bankLoanAmount" min="10" max="${disponible}" value="${Math.min(100, disponible)}" step="10">
+                    <p style="font-size: 0.8rem; color: var(--orange);">⚠️ Intérêts : ${CONFIG.tauxInteret * 100}% par tour</p>
+                ` : `<p style="color: var(--red);">❌ Limite atteinte</p>`}
+                ${dette > 0 && (caisse.euro || 0) > 0 ? `
+                    <hr style="margin: 10px 0;">
+                    <label>Rembourser :</label>
+                    <input type="number" id="bankRepayAmount" min="10" max="${Math.min(dette, caisse.euro || 0)}" value="${Math.min(dette, caisse.euro || 0)}" step="10">
+                ` : ''}
+            `, `
+                ${disponible > 0 ? `<button class="btn btn-primary" onclick="takeBankLoan()">💰 Emprunter</button>` : ''}
+                ${dette > 0 && (caisse.euro || 0) > 0 ? `<button class="btn btn-secondary" onclick="repayBankLoan()">💸 Rembourser</button>` : ''}
+                <button class="btn" style="background:#f3f4f6;" onclick="closeModal()">Fermer</button>
+            `);
+        }
+        
+        async function takeBankLoan() {
+            const amount = parseInt(document.getElementById('bankLoanAmount').value) || 0;
+            if (amount <= 0) return;
+            
+            await comptaEmprunt(myPlayerId, amount);
+            
+            const caisse = COMPTABILITE.caisseJoueurs[myPlayerId];
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}`).update({
+                euro: caisse.euro, emprunt: caisse.emprunt
+            });
+            await syncComptabiliteToFirebase();
+            
+            closeModal();
+            sendSystemMessage(`🏦 ${myName} emprunte ${amount}€`);
+        }
+        
+        async function repayBankLoan() {
+            const amount = parseInt(document.getElementById('bankRepayAmount').value) || 0;
+            if (amount <= 0) return;
+            
+            await comptaRemboursement(myPlayerId, amount);
+            
+            const caisse = COMPTABILITE.caisseJoueurs[myPlayerId];
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}`).update({
+                euro: caisse.euro, emprunt: caisse.emprunt
+            });
+            await syncComptabiliteToFirebase();
+            
+            closeModal();
+            sendSystemMessage(`💸 ${myName} rembourse ${amount}€`);
+        }
+        
+        // ========== INFO CASE ==========
+        async function showCaseInfo(caseId) {
+            const c = CASES[caseId];
+            if (!c || c.type !== 'activite') {
+                showModal(`<h3>${c.icon} ${c.name}</h3><p>${c.type}</p>`,
+                    `<button class="btn btn-secondary" onclick="closeModal()">Fermer</button>`);
+                return;
+            }
+            
+            const activitesSnap = await gameRef.child('activites').once('value');
+            const activites = activitesSnap.val() || {};
+            const equipSnap = await gameRef.child('equipements').once('value');
+            const equipements = equipSnap.val() || {};
+            
+            const owner = activites[caseId];
+            const nbEquip = equipements[caseId] || 0;
+            const factureActuelle = c.facture * (nbEquip === 2 ? 2 : 1);
+            const caisseAct = COMPTABILITE.caisseActivites[caseId] || {};
+            
+            const players = Object.values(playersData);
+            const ownerPlayer = owner ? players.find(p => p.id === owner) : null;
+            
+            let content = `
+                <h3>${c.icon} ${c.name}</h3>
+                <p><strong>Prix :</strong> ${c.prix}€</p>
+                <p><strong>Facture base :</strong> ${c.facture}€</p>
+                <p><strong>Équipements :</strong> ${nbEquip}/2 ${'⚙️'.repeat(nbEquip)}</p>
+                <p><strong>Facture actuelle :</strong> ${factureActuelle}€ ${nbEquip === 2 ? '(×2)' : ''}</p>
+                <hr style="margin: 10px 0;">
+                <p><strong>Caisse activité :</strong> ${caisseAct.euro || 0}€ / ${caisseAct.espoyr || 0}#</p>
+                <p><strong>Recettes totales :</strong> ${caisseAct.recettes || 0}</p>
+            `;
+            
+            if (ownerPlayer) {
+                content += `<p><strong>Propriétaire :</strong> ${ownerPlayer.avatar} ${ownerPlayer.name}</p>`;
+            } else {
+                content += `<p style="color: var(--orange);">🏷️ Disponible</p>`;
+            }
+            
+            showModal(content, `<button class="btn btn-secondary" onclick="closeModal()">Fermer</button>`);
+        }
+        
+        // ========== SAUVEGARDE ==========
+        async function saveGame() {
+            const gameSnap = await gameRef.once('value');
+            const gameData = gameSnap.val();
+            
+            const saveData = {
+                version: 'ESPOYR_Multi_V3_Compta',
+                savedAt: new Date().toISOString(),
+                code: currentGameCode,
+                game: gameData
+            };
+            
+            const blob = new Blob([JSON.stringify(saveData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ESPOYR_${currentGameCode}_T${gameState?.turn || 1}_${new Date().toISOString().slice(0,10)}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            sendSystemMessage(`💾 Sauvegarde par ${myName}`);
+        }
+        
+    </script>
+</body>
+</html>
