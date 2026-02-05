@@ -4551,10 +4551,9 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             `, ``);
         }
         
-       async function choisirSensEtLancer(sens) {
+    async function choisirSensEtLancer(sens) {
     closeModal();
 
-    // Déterminer le joueur actif (celui dont c'est le tour)
     const players = Object.values(playersData);
     const currentIdx = gameState.currentPlayerIndex || 0;
     const currentPlayer = players[currentIdx];
@@ -4562,17 +4561,15 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
 
     const activePlayerId = currentPlayer.id;
 
-    // Sauvegarder le sens pour le joueur actif
     await gameRef.child(`sensJoueurs/${activePlayerId}`).set(sens);
 
-    // Message système correct (nom du joueur actif)
     const sensText = sens === 1 ? '➡️ Sens horaire' : '⬅️ Sens anti-horaire';
     const playerName = currentPlayer.name || myName;
     sendSystemMessage(`🎯 ${playerName} choisit ${sensText}`);
 
-    // Lancer le dé
     executerLancerDe(currentPlayer, sens);
 }
+
 
         
         // Animer le passage sur chaque case (avec protection contre le blocage)
