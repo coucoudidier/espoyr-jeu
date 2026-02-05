@@ -4479,12 +4479,34 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             const currentIdx = gameState.currentPlayerIndex || 0;
             const currentPlayer = players[currentIdx];
             
-            if (!currentPlayer || currentPlayer.id !== myPlayerId) return;
+          
+
+
+                if (!currentPlayer) return;
+
+            // ✅ Mode Dé physique : seul l'hôte peut lancer (pour tout le monde)
+               if (gameConfig?.mode === 'DICE_HOST') {
+               if (!isHost) {
+                 sendSystemMessage(`⏳ Attends l'hôte pour le dé.`);
+                  return;
+                   }
+             // L'hôte peut lancer même si ce n'est pas "son" joueur
+             } else {
+            // Mode normal : seul le joueur actif peut lancer
+            if (currentPlayer.id !== myPlayerId) return;
+             }
+
+    
             
             // Vérifier si le joueur a déjà choisi son sens (premier lancer)
             let monSens = null;
             try {
-                const sensPersoSnap = await gameRef.child(`sensJoueurs/${myPlayerId}`).once('value');
+                
+                const activePlayerId = currentPlayer.id;
+                const sensPersoSnap = await gameRef.child(`sensJoueurs/${activePlayerId}`).once('value');
+
+
+                
                 monSens = sensPersoSnap.val();
             } catch (e) {
                 console.warn('⚠️ Impossible de lire sensJoueurs, fallback sur sens global', e);
