@@ -3508,31 +3508,34 @@ activiteId: actId
                 `, ``);
             });
         }
+async function selectGameMode(mode) {
+  // 1) Stockage local
+  gameConfig = gameConfig || {};
+  gameConfig.mode = mode;
 
-        function selectGameMode(mode) {
-            
-                let minPlayers = 2;
-                if (mode === 'SOLO') minPlayers = 1;
-                if (mode === 'DICE_HOST') minPlayers = 2;
-            
-        
-            closeModal();
-            if (typeof window.__resolveGameMode === 'function') {
-                window.__resolveGameMode({ mode, minPlayers });
-            }
-            window.__resolveGameMode = null;
-        }
+  // 2) Stockage Firebase (pour tous les joueurs)
+  try {
+    if (typeof db !== 'undefined' && currentGameCode) {
+      await db.ref(`parties/${currentGameCode}/gameConfig`).update({
+        mode
+      });
+    }
+  } catch (e) {
+    console.warn("Impossible d'enregistrer le mode de jeu", e);
+  }
 
-        
-        function closeModal() {
-            document.getElementById('modalContainer').innerHTML = '';
-        }
-        
-        function generateCode() {
-            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-            return Array.from({length: 6}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-        }
-        
+  // 3) Fermer le modal
+  closeModal();
+
+  // 4) Feedback visuel
+  let label = 'Mode inconnu';
+  if (mode === 'DICE_HOST') label = '🎲 Dé physique (maître du jeu)';
+  if (mode === 'MULTI') label = '👥 Multijoueur';
+  if (mode === 'SOLO') label = '🧪 Solo';
+
+  sendSystemMessage?.(`⚙️ Mode sélectionné : ${label}`);
+}
+
         // Avatar selection
         document.querySelectorAll('.avatar-btn').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -3566,6 +3569,13 @@ activiteId: actId
                 
                 // IMPORTANT: Initialiser gameRef AVANT les opérations comptables
                 gameRef = db.ref(`parties/${code}`);
+                    
+                    // 🔄 Synchronisation du mode de jeu (pour tous)
+                    db.ref(`parties/${currentGameCode}/gameConfig`).on('value', snap => {
+                              gameConfig = snap.val() || {};
+                    });
+
+        
                 
                 // Initialiser GAME_SAVE pour audit + replay
                 GAME_SAVE = {
@@ -4484,16 +4494,17 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
 
                 if (!currentPlayer) return;
 
-            // ✅ Mode Dé physique : seul l'hôte peut lancer (pour tout le monde)
-               if (gameConfig?.mode === 'DICE_HOST') {
-               if (!isHost) {
-                 sendSystemMessage(`⏳ Attends l'hôte pour le dé.`);
-                  return;
-                   }
-             // L'hôte peut lancer même si ce n'est pas "son" joueur
-             } else {
-            // Mode normal : seul le joueur actif peut lancer
-            if (currentPlayer.id !== myPlayerId) return;
+          // ✅ Dé physique : seul l’hôte clique (pour le joueur actif)
+// ✅ Normal : seul le joueur actif clique
+if (gameConfig?.mode === 'DICE_HOST') {
+  if (!isHost) {
+    sendSystemMessage('⏳ Attends l’hôte pour le dé.');
+    return;
+  }
+} else {
+  if (currentPlayer.id !== myPlayerId) return;
+
+
              }
 
     
@@ -4551,24 +4562,29 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             `, ``);
         }
         
-    async function choisirSensEtLancer(sens) {
-    closeModal();
+async function choisirSensEtLancer(sens) {
+  closeModal();
 
-    const players = Object.values(playersData);
-    const currentIdx = gameState.currentPlayerIndex || 0;
-    const currentPlayer = players[currentIdx];
-    if (!currentPlayer) return;
+  // Joueur actif = celui dont c'est le tour
+  const players = Object.values(playersData || {});
+  const currentIdx = gameState?.currentPlayerIndex || 0;
+  const currentPlayer = players[currentIdx];
+  if (!currentPlayer) return;
 
-    const activePlayerId = currentPlayer.id;
+  const activePlayerId = currentPlayer.id;
 
-    await gameRef.child(`sensJoueurs/${activePlayerId}`).set(sens);
+  // Sauvegarder le sens POUR LE JOUEUR ACTIF (même si c'est l'hôte qui clique)
+  await gameRef.child(`sensJoueurs/${activePlayerId}`).set(sens);
 
-    const sensText = sens === 1 ? '➡️ Sens horaire' : '⬅️ Sens anti-horaire';
-    const playerName = currentPlayer.name || myName;
-    sendSystemMessage(`🎯 ${playerName} choisit ${sensText}`);
+  // Message avec le nom du joueur actif
+  const sensText = (sens === 1) ? '➡️ Sens horaire' : '⬅️ Sens anti-horaire';
+  const playerName = currentPlayer.name || `Joueur ${activePlayerId}`;
+  sendSystemMessage(`🎯 ${playerName} choisit ${sensText}`);
 
-    executerLancerDe(currentPlayer, sens);
+  // Lancer le dé pour le joueur actif
+  executerLancerDe(currentPlayer, sens);
 }
+
 
 
         
