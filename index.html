@@ -4551,22 +4551,29 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             `, ``);
         }
         
-        async function choisirSensEtLancer(sens) {
-            closeModal();
-            
-            // Sauvegarder le sens choisi pour ce joueur
-            await gameRef.child(`sensJoueurs/${myPlayerId}`).set(sens);
-            
-            const sensText = sens === 1 ? '➡️ Sens horaire' : '⬅️ Sens anti-horaire';
-            sendSystemMessage(`🎯 ${myName} choisit ${sensText}`);
-            
-            // Lancer le dé
-            const players = Object.values(playersData);
-            const currentIdx = gameState.currentPlayerIndex || 0;
-            const currentPlayer = players[currentIdx];
-            
-            executerLancerDe(currentPlayer, sens);
-        }
+       async function choisirSensEtLancer(sens) {
+    closeModal();
+
+    // Déterminer le joueur actif (celui dont c'est le tour)
+    const players = Object.values(playersData);
+    const currentIdx = gameState.currentPlayerIndex || 0;
+    const currentPlayer = players[currentIdx];
+    if (!currentPlayer) return;
+
+    const activePlayerId = currentPlayer.id;
+
+    // Sauvegarder le sens pour le joueur actif
+    await gameRef.child(`sensJoueurs/${activePlayerId}`).set(sens);
+
+    // Message système correct (nom du joueur actif)
+    const sensText = sens === 1 ? '➡️ Sens horaire' : '⬅️ Sens anti-horaire';
+    const playerName = currentPlayer.name || myName;
+    sendSystemMessage(`🎯 ${playerName} choisit ${sensText}`);
+
+    // Lancer le dé
+    executerLancerDe(currentPlayer, sens);
+}
+
         
         // Animer le passage sur chaque case (avec protection contre le blocage)
         async function animatePassingCases(startPos, steps, sens) {
@@ -4596,7 +4603,9 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             }
         }
         
-        async function executerLancerDe(currentPlayer, sens) {
+      
+           async function executerLancerDe(currentPlayer, sens, forcedResult = null) {
+ 
             const diceEl = document.getElementById('dice');
             const diceBtn = document.getElementById('rollDiceBtn');
             diceBtn.disabled = true;
@@ -4611,7 +4620,12 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                     clearInterval(rollInterval);
                     
                     // Utiliser le RNG seedé pour reproductibilité
-                    const result = rollDiceValue();
+                 
+                    const result = (forcedResult != null) ? forcedResult : rollDiceValue();
+
+
+
+                    
                     diceEl.textContent = faces[result - 1];
                     diceEl.classList.remove('rolling');
                     
@@ -4635,16 +4649,20 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                     
                     // LOG EVENT: ROLL_DICE
                     const ledgerIds = [];
-                    
+
                     // *** BONUS AAA : Si membre, création de 50# dans le Pot AAA ***
-                    const isMembre = COMPTABILITE.potAAA.membres?.includes(myPlayerId);
+                    const activePlayerId = currentPlayer.id;
+                    const isMembre = COMPTABILITE.potAAA.membres?.includes(activePlayerId);
+
                     if (isMembre) {
-                        const ecriture = await comptaBonusAAALancer(myPlayerId);
-                        if (ecriture?.ledgerEntryId) ledgerIds.push(ecriture.ledgerEntryId);
+                        await comptaBonusAAALancer(activePlayerId);
                         sendSystemMessage(`💚 +50# créés dans le Pot AAA (bonus membre)`);
-                    }
+
+                        }
+
                     
-                    logEvent('ROLL_DICE', myPlayerId, {
+                    
+                   logEvent('ROLL_DICE', activePlayerId, {
                         diceValue: result,
                         fromPosition: currentPlayer.position,
                         toPosition: newPosition,
@@ -4653,10 +4671,13 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                         bonusAAA: isMembre ? 50 : 0
                     }, ledgerIds);
                     
-                    await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/position`).set(newPosition);
+                    await db.ref(`parties/${currentGameCode}/players/${activePlayerId}/position`).set(newPosition);
+
                     
                     const sensIcon = sens === 1 ? '➡️' : '⬅️';
-                    sendSystemMessage(`🎲 ${myName} fait ${result} ${sensIcon} ${CASES[newPosition].name}`);
+                   const playerName = currentPlayer.name || myName;
+                   sendSystemMessage(`🎲 ${playerName} fait ${result} ${sensIcon} ${CASES[newPosition].name}`);
+
                     
                     if (passedStart) {
                         await handleSalary(currentPlayer, result);
