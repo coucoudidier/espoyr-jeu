@@ -434,24 +434,6 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     
     <script>
-
-function closeModal() {
-  const modal = document.getElementById('modalContainer');
-  if (modal) {
-    modal.style.display = 'none';
-    modal.innerHTML = '';
-  }
-}
-
-function showModal(content) {
-  const modal = document.getElementById('modalContainer');
-  if (!modal) return;
-  modal.innerHTML = content;
-  modal.style.display = 'flex';
-}
-
-
-        
         // ========== FIREBASE CONFIG ==========
         const firebaseConfig = {
             apiKey: "AIzaSyC5hPhmhgQNY1qrFQ63XOIFNXhdy5EsDMM",
@@ -639,12 +621,6 @@ function showModal(content) {
         
         // Ancien (gardé pour compatibilité)
         const SALARY_PERCENT = { 1: 0.50, 2: 0.75, 3: 1.00, 4: 1.00, 5: 1.25, 6: 1.50 };
-
-
-
-
-
-        
         
         // ========== FONCTION UTILITAIRE ARRONDI ==========
         function arrondir2(n) {
@@ -849,12 +825,6 @@ function isAbsent(player) {
         });
 
 
-        
-
-
-
-
-        
         
         // Tracker les équipements faits ce tour (1 seul par tour complet par case)
         let equipementsCeTour = {};  // { caseId: tourComplet }
@@ -3538,34 +3508,31 @@ activiteId: actId
                 `, ``);
             });
         }
-async function selectGameMode(mode) {
-  // 1) Stockage local
-  gameConfig = gameConfig || {};
-  gameConfig.mode = mode;
 
-  // 2) Stockage Firebase (pour tous les joueurs)
-  try {
-    if (typeof db !== 'undefined' && currentGameCode) {
-      await db.ref(`parties/${currentGameCode}/gameConfig`).update({
-        mode
-      });
-    }
-  } catch (e) {
-    console.warn("Impossible d'enregistrer le mode de jeu", e);
-  }
+        function selectGameMode(mode) {
+            
+                let minPlayers = 2;
+                if (mode === 'SOLO') minPlayers = 1;
+                if (mode === 'DICE_HOST') minPlayers = 2;
+            
+        
+            closeModal();
+            if (typeof window.__resolveGameMode === 'function') {
+                window.__resolveGameMode({ mode, minPlayers });
+            }
+            window.__resolveGameMode = null;
+        }
 
-  // 3) Fermer le modal
-  closeModal();
-
-  // 4) Feedback visuel
-  let label = 'Mode inconnu';
-  if (mode === 'DICE_HOST') label = '🎲 Dé physique (maître du jeu)';
-  if (mode === 'MULTI') label = '👥 Multijoueur';
-  if (mode === 'SOLO') label = '🧪 Solo';
-
-  sendSystemMessage?.(`⚙️ Mode sélectionné : ${label}`);
-}
-
+        
+        function closeModal() {
+            document.getElementById('modalContainer').innerHTML = '';
+        }
+        
+        function generateCode() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            return Array.from({length: 6}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+        }
+        
         // Avatar selection
         document.querySelectorAll('.avatar-btn').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -3599,13 +3566,6 @@ async function selectGameMode(mode) {
                 
                 // IMPORTANT: Initialiser gameRef AVANT les opérations comptables
                 gameRef = db.ref(`parties/${code}`);
-                    
-                    // 🔄 Synchronisation du mode de jeu (pour tous)
-                    db.ref(`parties/${currentGameCode}/gameConfig`).on('value', snap => {
-                              gameConfig = snap.val() || {};
-                    });
-
-        
                 
                 // Initialiser GAME_SAVE pour audit + replay
                 GAME_SAVE = {
@@ -4519,35 +4479,12 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             const currentIdx = gameState.currentPlayerIndex || 0;
             const currentPlayer = players[currentIdx];
             
-          
-
-
-                if (!currentPlayer) return;
-
-          // ✅ Dé physique : seul l’hôte clique (pour le joueur actif)
-// ✅ Normal : seul le joueur actif clique
-if (gameConfig?.mode === 'DICE_HOST') {
-  if (!isHost) {
-    sendSystemMessage('⏳ Attends l’hôte pour le dé.');
-    return;
-  }
-} else {
-  if (currentPlayer.id !== myPlayerId) return;
-
-
-             }
-
-    
+            if (!currentPlayer || currentPlayer.id !== myPlayerId) return;
             
             // Vérifier si le joueur a déjà choisi son sens (premier lancer)
             let monSens = null;
             try {
-                
-                const activePlayerId = currentPlayer.id;
-                const sensPersoSnap = await gameRef.child(`sensJoueurs/${activePlayerId}`).once('value');
-
-
-                
+                const sensPersoSnap = await gameRef.child(`sensJoueurs/${myPlayerId}`).once('value');
                 monSens = sensPersoSnap.val();
             } catch (e) {
                 console.warn('⚠️ Impossible de lire sensJoueurs, fallback sur sens global', e);
@@ -4592,31 +4529,22 @@ if (gameConfig?.mode === 'DICE_HOST') {
             `, ``);
         }
         
-async function choisirSensEtLancer(sens) {
-  closeModal();
-
-  // Joueur actif = celui dont c'est le tour
-  const players = Object.values(playersData || {});
-  const currentIdx = gameState?.currentPlayerIndex || 0;
-  const currentPlayer = players[currentIdx];
-  if (!currentPlayer) return;
-
-  const activePlayerId = currentPlayer.id;
-
-  // Sauvegarder le sens POUR LE JOUEUR ACTIF (même si c'est l'hôte qui clique)
-  await gameRef.child(`sensJoueurs/${activePlayerId}`).set(sens);
-
-  // Message avec le nom du joueur actif
-  const sensText = (sens === 1) ? '➡️ Sens horaire' : '⬅️ Sens anti-horaire';
-  const playerName = currentPlayer.name || `Joueur ${activePlayerId}`;
-  sendSystemMessage(`🎯 ${playerName} choisit ${sensText}`);
-
-  // Lancer le dé pour le joueur actif
-  executerLancerDe(currentPlayer, sens);
-}
-
-
-
+        async function choisirSensEtLancer(sens) {
+            closeModal();
+            
+            // Sauvegarder le sens choisi pour ce joueur
+            await gameRef.child(`sensJoueurs/${myPlayerId}`).set(sens);
+            
+            const sensText = sens === 1 ? '➡️ Sens horaire' : '⬅️ Sens anti-horaire';
+            sendSystemMessage(`🎯 ${myName} choisit ${sensText}`);
+            
+            // Lancer le dé
+            const players = Object.values(playersData);
+            const currentIdx = gameState.currentPlayerIndex || 0;
+            const currentPlayer = players[currentIdx];
+            
+            executerLancerDe(currentPlayer, sens);
+        }
         
         // Animer le passage sur chaque case (avec protection contre le blocage)
         async function animatePassingCases(startPos, steps, sens) {
@@ -4646,9 +4574,7 @@ async function choisirSensEtLancer(sens) {
             }
         }
         
-      
-           async function executerLancerDe(currentPlayer, sens, forcedResult = null) {
- 
+        async function executerLancerDe(currentPlayer, sens) {
             const diceEl = document.getElementById('dice');
             const diceBtn = document.getElementById('rollDiceBtn');
             diceBtn.disabled = true;
@@ -4663,12 +4589,7 @@ async function choisirSensEtLancer(sens) {
                     clearInterval(rollInterval);
                     
                     // Utiliser le RNG seedé pour reproductibilité
-                 
-                    const result = (forcedResult != null) ? forcedResult : rollDiceValue();
-
-
-
-                    
+                    const result = rollDiceValue();
                     diceEl.textContent = faces[result - 1];
                     diceEl.classList.remove('rolling');
                     
@@ -4692,20 +4613,16 @@ async function choisirSensEtLancer(sens) {
                     
                     // LOG EVENT: ROLL_DICE
                     const ledgerIds = [];
-
+                    
                     // *** BONUS AAA : Si membre, création de 50# dans le Pot AAA ***
-                    const activePlayerId = currentPlayer.id;
-                    const isMembre = COMPTABILITE.potAAA.membres?.includes(activePlayerId);
-
+                    const isMembre = COMPTABILITE.potAAA.membres?.includes(myPlayerId);
                     if (isMembre) {
-                        await comptaBonusAAALancer(activePlayerId);
+                        const ecriture = await comptaBonusAAALancer(myPlayerId);
+                        if (ecriture?.ledgerEntryId) ledgerIds.push(ecriture.ledgerEntryId);
                         sendSystemMessage(`💚 +50# créés dans le Pot AAA (bonus membre)`);
-
-                        }
-
+                    }
                     
-                    
-                   logEvent('ROLL_DICE', activePlayerId, {
+                    logEvent('ROLL_DICE', myPlayerId, {
                         diceValue: result,
                         fromPosition: currentPlayer.position,
                         toPosition: newPosition,
@@ -4714,13 +4631,10 @@ async function choisirSensEtLancer(sens) {
                         bonusAAA: isMembre ? 50 : 0
                     }, ledgerIds);
                     
-                    await db.ref(`parties/${currentGameCode}/players/${activePlayerId}/position`).set(newPosition);
-
+                    await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/position`).set(newPosition);
                     
                     const sensIcon = sens === 1 ? '➡️' : '⬅️';
-                   const playerName = currentPlayer.name || myName;
-                   sendSystemMessage(`🎲 ${playerName} fait ${result} ${sensIcon} ${CASES[newPosition].name}`);
-
+                    sendSystemMessage(`🎲 ${myName} fait ${result} ${sensIcon} ${CASES[newPosition].name}`);
                     
                     if (passedStart) {
                         await handleSalary(currentPlayer, result);
