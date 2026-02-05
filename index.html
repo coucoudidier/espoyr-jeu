@@ -91,7 +91,7 @@
             font-weight: 700;
             background: #111827;
             color: #ffffff;
-            vertical-align: middle;
+            vertical-align: middle;            
         }
         .player-info { flex: 1; }
         .player-name { font-weight: 600; color: #1f2937; }
@@ -3499,6 +3499,8 @@ activiteId: actId
                     <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
                         <button class="btn btn-primary" style="min-width:180px;" onclick="selectGameMode('SOLO')">🧍 Jouer seul</button>
                         <button class="btn btn-secondary" style="min-width:180px;" onclick="selectGameMode('MULTI')">👥 Jouer en multi</button>
+                        <button class="btn btn-warning" style="min-width:180px;" onclick="selectGameMode('DICE_HOST')">  🎲 Dé physique (maître du jeu)</button>
+
                     </div>
                     <p style="font-size: 0.85rem; color: var(--gray); margin-top: 12px; text-align:center;">
                         Les robots restent <strong>optionnels</strong> dans les deux modes.
@@ -3508,7 +3510,12 @@ activiteId: actId
         }
 
         function selectGameMode(mode) {
-            const minPlayers = (mode === 'SOLO') ? 1 : 2;
+            
+                let minPlayers = 2;
+                if (mode === 'SOLO') minPlayers = 1;
+                if (mode === 'DICE_HOST') minPlayers = 2;
+            
+        
             closeModal();
             if (typeof window.__resolveGameMode === 'function') {
                 window.__resolveGameMode({ mode, minPlayers });
@@ -4472,12 +4479,34 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             const currentIdx = gameState.currentPlayerIndex || 0;
             const currentPlayer = players[currentIdx];
             
-            if (!currentPlayer || currentPlayer.id !== myPlayerId) return;
+          
+
+
+                if (!currentPlayer) return;
+
+            // ✅ Mode Dé physique : seul l'hôte peut lancer (pour tout le monde)
+               if (gameConfig?.mode === 'DICE_HOST') {
+               if (!isHost) {
+                 sendSystemMessage(`⏳ Attends l'hôte pour le dé.`);
+                  return;
+                   }
+             // L'hôte peut lancer même si ce n'est pas "son" joueur
+             } else {
+            // Mode normal : seul le joueur actif peut lancer
+            if (currentPlayer.id !== myPlayerId) return;
+             }
+
+    
             
             // Vérifier si le joueur a déjà choisi son sens (premier lancer)
             let monSens = null;
             try {
-                const sensPersoSnap = await gameRef.child(`sensJoueurs/${myPlayerId}`).once('value');
+                
+                const activePlayerId = currentPlayer.id;
+                const sensPersoSnap = await gameRef.child(`sensJoueurs/${activePlayerId}`).once('value');
+
+
+                
                 monSens = sensPersoSnap.val();
             } catch (e) {
                 console.warn('⚠️ Impossible de lire sensJoueurs, fallback sur sens global', e);
@@ -4522,22 +4551,26 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             `, ``);
         }
         
-        async function choisirSensEtLancer(sens) {
-            closeModal();
-            
-            // Sauvegarder le sens choisi pour ce joueur
-            await gameRef.child(`sensJoueurs/${myPlayerId}`).set(sens);
-            
-            const sensText = sens === 1 ? '➡️ Sens horaire' : '⬅️ Sens anti-horaire';
-            sendSystemMessage(`🎯 ${myName} choisit ${sensText}`);
-            
-            // Lancer le dé
-            const players = Object.values(playersData);
-            const currentIdx = gameState.currentPlayerIndex || 0;
-            const currentPlayer = players[currentIdx];
-            
-            executerLancerDe(currentPlayer, sens);
-        }
+    async function choisirSensEtLancer(sens) {
+    closeModal();
+
+    const players = Object.values(playersData);
+    const currentIdx = gameState.currentPlayerIndex || 0;
+    const currentPlayer = players[currentIdx];
+    if (!currentPlayer) return;
+
+    const activePlayerId = currentPlayer.id;
+
+    await gameRef.child(`sensJoueurs/${activePlayerId}`).set(sens);
+
+    const sensText = sens === 1 ? '➡️ Sens horaire' : '⬅️ Sens anti-horaire';
+    const playerName = currentPlayer.name || myName;
+    sendSystemMessage(`🎯 ${playerName} choisit ${sensText}`);
+
+    executerLancerDe(currentPlayer, sens);
+}
+
+
         
         // Animer le passage sur chaque case (avec protection contre le blocage)
         async function animatePassingCases(startPos, steps, sens) {
@@ -4567,7 +4600,9 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             }
         }
         
-        async function executerLancerDe(currentPlayer, sens) {
+      
+           async function executerLancerDe(currentPlayer, sens, forcedResult = null) {
+ 
             const diceEl = document.getElementById('dice');
             const diceBtn = document.getElementById('rollDiceBtn');
             diceBtn.disabled = true;
@@ -4582,7 +4617,12 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                     clearInterval(rollInterval);
                     
                     // Utiliser le RNG seedé pour reproductibilité
-                    const result = rollDiceValue();
+                 
+                    const result = (forcedResult != null) ? forcedResult : rollDiceValue();
+
+
+
+                    
                     diceEl.textContent = faces[result - 1];
                     diceEl.classList.remove('rolling');
                     
@@ -4606,16 +4646,20 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                     
                     // LOG EVENT: ROLL_DICE
                     const ledgerIds = [];
-                    
+
                     // *** BONUS AAA : Si membre, création de 50# dans le Pot AAA ***
-                    const isMembre = COMPTABILITE.potAAA.membres?.includes(myPlayerId);
+                    const activePlayerId = currentPlayer.id;
+                    const isMembre = COMPTABILITE.potAAA.membres?.includes(activePlayerId);
+
                     if (isMembre) {
-                        const ecriture = await comptaBonusAAALancer(myPlayerId);
-                        if (ecriture?.ledgerEntryId) ledgerIds.push(ecriture.ledgerEntryId);
+                        await comptaBonusAAALancer(activePlayerId);
                         sendSystemMessage(`💚 +50# créés dans le Pot AAA (bonus membre)`);
-                    }
+
+                        }
+
                     
-                    logEvent('ROLL_DICE', myPlayerId, {
+                    
+                   logEvent('ROLL_DICE', activePlayerId, {
                         diceValue: result,
                         fromPosition: currentPlayer.position,
                         toPosition: newPosition,
@@ -4624,10 +4668,13 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                         bonusAAA: isMembre ? 50 : 0
                     }, ledgerIds);
                     
-                    await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/position`).set(newPosition);
+                    await db.ref(`parties/${currentGameCode}/players/${activePlayerId}/position`).set(newPosition);
+
                     
                     const sensIcon = sens === 1 ? '➡️' : '⬅️';
-                    sendSystemMessage(`🎲 ${myName} fait ${result} ${sensIcon} ${CASES[newPosition].name}`);
+                   const playerName = currentPlayer.name || myName;
+                   sendSystemMessage(`🎲 ${playerName} fait ${result} ${sensIcon} ${CASES[newPosition].name}`);
+
                     
                     if (passedStart) {
                         await handleSalary(currentPlayer, result);
@@ -10563,3 +10610,4 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
     </script>
 </body>
 </html>
+
