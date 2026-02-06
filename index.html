@@ -3534,13 +3534,26 @@ activiteId: actId
         }
 
         function selectGameMode(mode) {
-            const minPlayers = (mode === 'SOLO') ? 1 : 2;
-            closeModal();
-            if (typeof window.__resolveGameMode === 'function') {
-                window.__resolveGameMode({ mode, minPlayers });
-            }
-            window.__resolveGameMode = null;
-        }
+  closeModal();
+
+  let diceMode = 'AUTO';
+
+  // 🎲 Si on choisit le mode dé physique
+  if (mode === 'DICE_HOST') {
+    diceMode = 'PHYSIQUE';
+  }
+
+  if (typeof window.__resolveGameMode === 'function') {
+    window.__resolveGameMode({
+      mode,
+      minPlayers,
+      diceMode
+    });
+  }
+
+  window.__resolveGameMode = null;
+}
+
 
         
         function closeModal() {
