@@ -3536,23 +3536,23 @@ activiteId: actId
         function selectGameMode(mode) {
   closeModal();
 
+  // ✅ minPlayers doit être défini ici
+  const minPlayers = (mode === 'SOLO') ? 1 : 2;
+
+  // ✅ diceMode par défaut
   let diceMode = 'AUTO';
 
-  // 🎲 Si on choisit le mode dé physique
+  // 🎲 Si bouton "dé physique"
   if (mode === 'DICE_HOST') {
     diceMode = 'PHYSIQUE';
   }
 
   if (typeof window.__resolveGameMode === 'function') {
-    window.__resolveGameMode({
-      mode,
-      minPlayers,
-      diceMode
-    });
+    window.__resolveGameMode({ mode, minPlayers, diceMode });
   }
-
   window.__resolveGameMode = null;
 }
+
 
 
         
