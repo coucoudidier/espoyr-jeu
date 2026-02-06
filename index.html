@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="fr">
-    <head>
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title># ESPOYR Multijoueur V3 - Comptabilité Bancaire BCE</title>
@@ -3499,36 +3499,22 @@ activiteId: actId
                     <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
                         <button class="btn btn-primary" style="min-width:180px;" onclick="selectGameMode('SOLO')">🧍 Jouer seul</button>
                         <button class="btn btn-secondary" style="min-width:180px;" onclick="selectGameMode('MULTI')">👥 Jouer en multi</button>
-                        <button class="btn btn-warning" style="min-width:180px;" onclick="selectGameMode('DICE_HOST')">  🎲 Dé physique (maître du jeu)</button>
+                    </div>
+                    <p style="font-size: 0.85rem; color: var(--gray); margin-top: 12px; text-align:center;">
+                        Les robots restent <strong>optionnels</strong> dans les deux modes.
+                    </p>
+                `, ``);
+            });
+        }
 
-                        function selectGameMode(mode) {
-  // On conserve le mécanisme existant basé sur __resolveGameMode,
-  // mais on enrichit la config avec diceMode.
-
-  // mode reçu depuis les boutons:
-  // 'SOLO' | 'MULTI' | 'DICE_HOST' (si tu ajoutes un bouton dé physique plus tard)
-
-  let finalMode = mode;
-  let diceMode = 'AUTO'; // 'AUTO' | 'PHYSIQUE'
-
-  if (mode === 'DICE_HOST') {
-    finalMode = 'MULTI';
-    diceMode = 'PHYSIQUE';
-  } else {
-    diceMode = 'AUTO';
-  }      
-
-  const minPlayers = (finalMode === 'SOLO') ? 1 : 2;
-
-  closeModal();
-
-  if (typeof window.__resolveGameMode === 'function') {
-    // On ajoute diceMode dans l'objet de retour
-    window.__resolveGameMode({ mode: finalMode, minPlayers, diceMode });
-  }
-  window.__resolveGameMode = null;
-}
-
+        function selectGameMode(mode) {
+            const minPlayers = (mode === 'SOLO') ? 1 : 2;
+            closeModal();
+            if (typeof window.__resolveGameMode === 'function') {
+                window.__resolveGameMode({ mode, minPlayers });
+            }
+            window.__resolveGameMode = null;
+        }
 
         
         function closeModal() {
@@ -3555,12 +3541,9 @@ activiteId: actId
             if (!myName) { showError('Entre ton nom !'); return; }
 
             // Choix Solo / Multi (le robot reste optionnel dans les deux modes)
-    chooseGameMode().then(({ mode, minPlayers, diceMode }) => {
-                 diceMode = diceMode || 'AUTO';                                                                                 // sécurité si jamais undefined
-
+            chooseGameMode().then(({ mode, minPlayers }) => {
                 // Stocker dans la config de partie (persistée en Firebase)
-               const partyConfig = { ...CONFIG, mode, minPlayers, diceMode };
-
+                const partyConfig = { ...CONFIG, mode, minPlayers };
                 gameConfig = { ...partyConfig };
 
                 // Demander le profil économique
@@ -3576,10 +3559,6 @@ activiteId: actId
                 
                 // IMPORTANT: Initialiser gameRef AVANT les opérations comptables
                 gameRef = db.ref(`parties/${code}`);
-
-        // ✅ Sauver la config de partie (mode + minPlayers + diceMode) pour tous les joueurs
-await gameRef.child('gameConfig').set(partyConfig);
-
                 
                 // Initialiser GAME_SAVE pour audit + replay
                 GAME_SAVE = {
@@ -3618,8 +3597,7 @@ await gameRef.child('gameConfig').set(partyConfig);
                     code, hostId: myPlayerId, status: 'waiting',
                     createdAt: firebase.database.ServerValue.TIMESTAMP,
                     config: partyConfig,
-          state: { turn: 1, phase: 1, currentPlayerIndex: 0, turnOrder: [], started: false, toursComplets: 0 },
-
+                    state: { turn: 1, phase: 1, currentPlayerIndex: 0, started: false, toursComplets: 0 },
                     activites: {}, equipements: {},
                     comptabilite: COMPTABILITE
                 });
@@ -3726,60 +3704,6 @@ await gameRef.child('gameConfig').set(partyConfig);
                 window.profilCallback = null;
             }
         }
-       
-        
-        //   Mode PHYSIQUE : petit modal “Entrez 1-6” côté hôtepuis forcedResult
-
-        
-function askPhysicalDiceValue() {
-  return new Promise((resolve) => {
-    const idInput = `diceInput_${Date.now()}`;
-
-    showModal(`
-      <h3>🎲 Dé physique</h3>
-      <p style="font-size:0.9rem; color: var(--gray); margin: 8px 0 14px;">
-        Entrez le résultat du dé (1 à 6)
-      </p>
-
-      <input id="${idInput}" type="number" min="1" max="6"
-        style="width:100%; padding:10px; border-radius:10px; border:1px solid #ddd; font-size:1rem;"
-        placeholder="1-6" />
-
-      <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:14px;">
-        <button class="btn btn-secondary" onclick="closeModal(); window.__resolvePhysicalDice && window.__resolvePhysicalDice(null);">Annuler</button>
-        <button class="btn btn-primary" onclick="
-          (function(){
-            const v = parseInt(document.getElementById('${idInput}').value, 10);
-            if (!Number.isInteger(v) || v < 1 || v > 6) { alert('Entre un nombre de 1 à 6'); return; }
-            closeModal();
-            window.__resolvePhysicalDice && window.__resolvePhysicalDice(v);
-          })()
-        ">Valider</button>
-      </div>
-    `, ``);
-
-    window.__resolvePhysicalDice = (val) => {
-      window.__resolvePhysicalDice = null;
-      resolve(val);
-    };
-  });
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        
         
         // ========== REJOINDRE PARTIE ==========
         async function joinGame() {
@@ -4430,47 +4354,14 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             
             if (currentPlayer) {
                 const isMyTurn = currentPlayer.id === myPlayerId;
-
-// ✅ Autorisation de clic selon mode de dé
-if (gameConfig?.diceMode === 'PHYSIQUE') {
-  if (!isHost) return;        // seul l’hôte clique
-} else {
-  if (!isMyTurn) return;      // seul le joueur actif clique
-}
-
-
-       
                 const isBot = currentPlayer.isBot;
                 
                 document.getElementById('turnIndicator').textContent = 
                     isMyTurn ? '🎯 TON TOUR !' : `⏳ ${currentPlayer.name}${isBot ? ' 🤖' : ''}`;
                 
                 const diceBtn = document.getElementById('rollDiceBtn');
-
-
-
-
-// Dé physique: seul l'hôte peut cliquer
-if (gameConfig?.diceMode === 'PHYSIQUE') {
-  diceBtn.disabled = !isHost;
-  diceBtn.style.opacity = isHost ? '1' : '0.5';
-  return; // important: on ne continue pas la logique normale
-}
-
-
-
-
-
-
-                
-                if (gameConfig?.diceMode === 'PHYSIQUE') {
-  diceBtn.disabled = !isHost;
-  diceBtn.style.opacity = isHost ? '1' : '0.5';
-} else {
-  diceBtn.disabled = !isMyTurn;
-  diceBtn.style.opacity = isMyTurn ? '1' : '0.5';
-}
-
+                diceBtn.disabled = !isMyTurn;
+                diceBtn.style.opacity = isMyTurn ? '1' : '0.5';
                 
                 document.getElementById('diceMessage').textContent = 
                     isMyTurn ? 'Lance le dé !' : `${currentPlayer.name} joue...`;
@@ -4577,23 +4468,11 @@ if (gameConfig?.diceMode === 'PHYSIQUE') {
                 return;
             }
 
-           const currentIdx = gameState.currentPlayerIndex || 0;
-
-// ✅ Si turnOrder existe, on prend le joueur actif via turnOrder
-let currentPlayer = null;
-if (Array.isArray(gameState.turnOrder) && gameState.turnOrder.length > 0) {
-  const activeId = gameState.turnOrder[currentIdx % gameState.turnOrder.length];
-  currentPlayer = playersData?.[activeId] || null;
-} else {
-  // Fallback ancien comportement (ordre implicite)
-  const players = Object.values(playersData || {});
-  currentPlayer = players[currentIdx] || null;
-}
-
-if (!currentPlayer) return;
-
-const activePlayerId = currentPlayer.id;
-
+            const players = Object.values(playersData);
+            const currentIdx = gameState.currentPlayerIndex || 0;
+            const currentPlayer = players[currentIdx];
+            
+            if (!currentPlayer || currentPlayer.id !== myPlayerId) return;
             
             // Vérifier si le joueur a déjà choisi son sens (premier lancer)
             let monSens = null;
@@ -4612,26 +4491,7 @@ const activePlayerId = currentPlayer.id;
             }
             
             // Lancer le dé avec le sens choisi
-           let forced = null;
-
-// Mode dé physique: l'hôte saisit 1..6
-if (gameConfig?.diceMode === 'PHYSIQUE') {
-  if (!isHost) return; // seul l'hôte encode
-  if (gameConfig?.diceMode === 'PHYSIQUE') {
-  if (!isHost) return; // ✅ seul l’hôte encode le dé
-  forced = await askPhysicalDiceValue();
-  if (forced == null) return;
-}
-
-
-        
-  forced = await askPhysicalDiceValue();
-  if (forced == null) return; // annulation
-}
-
-
-executerLancerDe(currentPlayer, monSens, forced);
-
+            executerLancerDe(currentPlayer, monSens);
         }
         
         // Modal de choix du sens pour le joueur
@@ -4662,159 +4522,22 @@ executerLancerDe(currentPlayer, monSens, forced);
             `, ``);
         }
         
-     async function choisirSensEtLancer(sens) {
-  closeModal();
-
-  // Sauvegarder le sens choisi pour ce joueur
-  await gameRef.child(`sensJoueurs/${myPlayerId}`).set(sens);
-
-  const sensText = sens === 1 ? '➡️ Sens horaire' : '⬅️ Sens anti-horaire';
-  sendSystemMessage(`🎯 ${myName} choisit ${sensText}`);
-
-// Lancer le dé
-const players = Object.values(playersData);
-const currentIdx = gameState.currentPlayerIndex || 0;
-const currentPlayer = players[currentIdx];
-if (!currentPlayer) return;
-
-// Déterminer si c’est le tour du joueur courant
-const isMyTurn = currentPlayer.id === myPlayerId;
-
-// 🎲 Autorisation selon le mode de dé
-if (gameConfig?.diceMode === 'PHYSIQUE') {
-  // Dé physique → seul l’hôte peut lancer
-  if (!isHost) return;
-} else {
-  // Dé automatique → seul le joueur actif peut lancer
-  if (!isMyTurn) return;
-}
-
-let forced = null;
-
-
-  // Mode dé physique : seul l'hôte saisit 1..6
-  if (gameConfig?.diceMode === 'PHYSIQUE') {
-    if (!isHost) return;
-    forced = await askPhysicalDiceValue();
-    if (forced == null) return;
-  }
-
-  executerLancerDe(currentPlayer, sens, forced);
-}
-
-executerLancerDe(currentPlayer, sens, forced);
-
+        async function choisirSensEtLancer(sens) {
+            closeModal();
+            
+            // Sauvegarder le sens choisi pour ce joueur
+            await gameRef.child(`sensJoueurs/${myPlayerId}`).set(sens);
+            
+            const sensText = sens === 1 ? '➡️ Sens horaire' : '⬅️ Sens anti-horaire';
+            sendSystemMessage(`🎯 ${myName} choisit ${sensText}`);
+            
+            // Lancer le dé
+            const players = Object.values(playersData);
+            const currentIdx = gameState.currentPlayerIndex || 0;
+            const currentPlayer = players[currentIdx];
+            
+            executerLancerDe(currentPlayer, sens);
         }
-        
-        
-        
-        
-      // ✅ Demande à l'hôte d'encoder le résultat du dé physique (1..6)
-// Retourne un nombre 1..6, ou null si Annuler.
-function askPhysicalDiceValue() {
-  return new Promise((resolve) => {
-    // Valeur par défaut
-    let val = 1;
-
-    // Petit helper pour valider/normaliser
-    const normalize = (v) => {
-      const n = parseInt(v, 10);
-      if (Number.isNaN(n)) return null;
-      if (n < 1 || n > 6) return null;
-      return n;
-    };
-
-    // Afficher un modal
-    showModal(`
-      <div style="max-width:520px; width: calc(100% - 30px); background:#fff; border-radius:14px; padding:18px;">
-        <h3 style="margin:0 0 10px 0;">🎲 Dé physique (maître du jeu)</h3>
-        <p style="margin:0 0 12px 0; color:#6b7280; font-size:0.9rem;">
-          Entrez le résultat du dé (1 à 6)
-        </p>
-
-        <div style="display:flex; gap:10px; align-items:center; margin-bottom:14px;">
-          <input id="physicalDiceInput" type="number" min="1" max="6" value="1"
-                 style="flex:1; padding:10px; border:1px solid #e5e7eb; border-radius:10px; font-size:1rem;"
-          />
-          <button id="physicalDiceOk" class="btn btn-primary" style="min-width:120px;">OK</button>
-        </div>
-
-        <div style="display:flex; justify-content:flex-end; gap:10px;">
-          <button id="physicalDiceCancel" class="btn btn-secondary">Annuler</button>
-        </div>
-
-        <p id="physicalDiceError" style="display:none; margin:10px 0 0 0; color:#ef4444; font-size:0.85rem;">
-          ⚠️ Valeur invalide. Choisis un nombre entre 1 et 6.
-        </p>
-      </div>
-    `);
-
-    // Récupérer les éléments
-    const input = document.getElementById('physicalDiceInput');
-    const okBtn = document.getElementById('physicalDiceOk');
-    const cancelBtn = document.getElementById('physicalDiceCancel');
-    const err = document.getElementById('physicalDiceError');
-
-    // Sécurité si jamais le modal n'est pas là
-    if (!input || !okBtn || !cancelBtn) {
-      closeModal?.();
-      resolve(null);
-      return;
-    }
-
-    // Focus direct
-    input.focus();
-    input.select();
-
-    const finish = (result) => {
-      // éviter double resolve
-      resolve(result);
-      closeModal();
-    };
-
-    const trySubmit = () => {
-      const n = normalize(input.value);
-      if (n === null) {
-        if (err) err.style.display = 'block';
-        input.focus();
-        input.select();
-        return;
-      }
-      finish(n);
-    };
-
-    okBtn.onclick = trySubmit;
-
-    cancelBtn.onclick = () => finish(null);
-
-    input.oninput = () => {
-      if (err) err.style.display = 'none';
-    };
-
-    input.onkeydown = (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        trySubmit();
-      }
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        finish(null);
-      }
-    };
-  });
-}
-  
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
         
         // Animer le passage sur chaque case (avec protection contre le blocage)
         async function animatePassingCases(startPos, steps, sens) {
@@ -4859,7 +4582,7 @@ function askPhysicalDiceValue() {
                     clearInterval(rollInterval);
                     
                     // Utiliser le RNG seedé pour reproductibilité
-                    const result = Value();
+                    const result = rollDiceValue();
                     diceEl.textContent = faces[result - 1];
                     diceEl.classList.remove('rolling');
                     
@@ -10351,8 +10074,7 @@ function askPhysicalDiceValue() {
                 status: 'playing',
                 createdAt: firebase.database.ServerValue.TIMESTAMP,
                 config: gameConfig,
-    state: fbData.state || { turn: 1, phase: 1, currentPlayerIndex: 0, turnOrder: [], started: true, toursComplets: 0 },
-
+                state: fbData.state || { turn: 1, phase: 1, currentPlayerIndex: 0, started: true, toursComplets: 0 },
                 activites: fbData.activites || {},
                 equipements: fbData.equipements || {},
                 comptabilite: COMPTABILITE,
