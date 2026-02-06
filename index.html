@@ -3567,10 +3567,13 @@ activiteId: actId
             if (!myName) { showError('Entre ton nom !'); return; }
 
             // Choix Solo / Multi (le robot reste optionnel dans les deux modes)
-            chooseGameMode().then(({ mode, minPlayers }) => {
+            chooseGameMode().then(({ mode, minPlayers, diceMode }) => {
                 // Stocker dans la config de partie (persistée en Firebase)
-                const partyConfig = { ...CONFIG, mode, minPlayers };
+                const partyConfig = { ...CONFIG, mode, minPlayers, diceMode };
                 gameConfig = { ...partyConfig };
+                console.log('DEBUG choix mode:', { mode, minPlayers, diceMode });
+                console.log('DEBUG gameConfig final:', gameConfig);
+
 
                 // Demander le profil économique
                 showProfilChoiceModal(async (profil) => {
