@@ -556,6 +556,30 @@
             // Permet d'utiliser les anciens numéros V3 tout en ayant les nouveaux
             // Pour l'instant vide car les deux sont dans PLAN_COMPTABLE
         };
+
+
+// introduction de physique 
+        
+function askPhysicalDiceValue() {
+  // Retourne un nombre 1..6 ou null si annulé
+  const s = prompt("Dé physique (hôte) : entre un nombre de 1 à 6");
+  if (s === null) return null;
+  const n = parseInt(s, 10);
+  if (!Number.isInteger(n) || n < 1 || n > 6) {
+    alert("Valeur invalide. Entre 1 et 6.");
+    return null;
+  }
+  return n;
+}
+
+
+
+
+
+
+
+
+        
         
         // ========== PLATEAU ESPOYR (23 cases) ==========
         const CASES = [
@@ -4468,30 +4492,61 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                 return;
             }
 
-            const players = Object.values(playersData);
-            const currentIdx = gameState.currentPlayerIndex || 0;
-            const currentPlayer = players[currentIdx];
-            
-            if (!currentPlayer || currentPlayer.id !== myPlayerId) return;
+const players = Object.values(playersData || {});
+const currentIdx = gameState.currentPlayerIndex || 0;
+const currentPlayer = players[currentIdx];
+if (!currentPlayer) return;
+
+const isMyTurn = currentPlayer.id === myPlayerId;
+const diceMode = gameConfig?.diceMode || 'AUTO';
+
+        // 🎲 Autorisation selon le mode de dé
+if (diceMode === 'PHYSIQUE') {
+  // 🔒 Dé physique : SEUL l’hôte peut cliquer
+  if (!isHost) return;
+} else {
+  // 🎲 Dé automatique : SEUL le joueur actif peut cliquer
+  if (!isMyTurn) return;
+}
+
+
+
             
             // Vérifier si le joueur a déjà choisi son sens (premier lancer)
             let monSens = null;
             try {
-                const sensPersoSnap = await gameRef.child(`sensJoueurs/${myPlayerId}`).once('value');
-                monSens = sensPersoSnap.val();
+                const sensPersoSnap = await gameRef.child(`sensJoueurs/${currentPlayer.id}`).once('value');
+monSens = sensPersoSnap.val();
+
             } catch (e) {
                 console.warn('⚠️ Impossible de lire sensJoueurs, fallback sur sens global', e);
                 monSens = (gameState?.sensDeplacent || sensDeplacementGlobal || 1);
             }
             
-            if (monSens === null) {
-                // Premier lancer de ce joueur → demander le sens
-                showSensChoiceModal();
-                return;
-            }
+          if (monSens === null) {
+  // Le joueur actif doit choisir son sens lui-même.
+  // En mode PHYSIQUE, si l'hôte clique mais que le joueur n'a pas choisi, on bloque.
+  if (!isMyTurn) {
+    sendSystemMessage(`⏳ Attente : ${currentPlayer.name} doit d'abord choisir son sens (premier lancer).`);
+    return;
+  }
+  showSensChoiceModal();
+  return;
+}
+
             
             // Lancer le dé avec le sens choisi
-            executerLancerDe(currentPlayer, monSens);
+           let forced = null;
+
+if (diceMode === 'PHYSIQUE') {
+  // seul l'hôte encode le résultat du dé
+  if (!isHost) return;
+  forced = await askPhysicalDiceValue();
+  if (forced == null) return; // annulation
+}
+
+executerLancerDe(currentPlayer, monSens, forced);
+
         }
         
         // Modal de choix du sens pour le joueur
