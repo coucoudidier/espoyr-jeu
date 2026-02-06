@@ -4516,54 +4516,55 @@ const currentPlayer = players[currentIdx];
 if (!currentPlayer) return;
 
 const isMyTurn = currentPlayer.id === myPlayerId;
-const diceMode = (gameConfig?.diceMode || gameState?.diceMode || 'AUTO');
+const diceMode = (gameConfig?.diceMode || 'AUTO');
 
-        // 🎲 Autorisation selon le mode de dé
+// 1) Lire le sens du joueur actif
+let monSens = null;
+try {
+  const sensPersoSnap = await gameRef.child(`sensJoueurs/${currentPlayer.id}`).once('value');
+  monSens = sensPersoSnap.val();
+} catch (e) {
+  console.warn('⚠️ Impossible de lire sensJoueurs, fallback sur sens global', e);
+  monSens = (gameState?.sensDeplacent || sensDeplacementGlobal || 1);
+}
+
+// 2) Autorisation selon le mode
 if (diceMode === 'PHYSIQUE') {
-  // 🔒 Dé physique : SEUL l’hôte peut cliquer
-  if (!isHost) return;
+  // Cas spécial : le joueur actif doit pouvoir cliquer pour CHOISIR son sens (si pas encore choisi)
+  const playerMustChooseSens = (monSens === null) && isMyTurn;
+
+  // Autorisé si : hôte OU (joueur actif qui doit choisir le sens)
+  if (!isHost && !playerMustChooseSens) return;
+
 } else {
-  // 🎲 Dé automatique : SEUL le joueur actif peut cliquer
+  // AUTO : seul le joueur actif
   if (!isMyTurn) return;
 }
 
-
-
-            
-            // Vérifier si le joueur a déjà choisi son sens (premier lancer)
-            let monSens = null;
-            try {
-                const sensPersoSnap = await gameRef.child(`sensJoueurs/${currentPlayer.id}`).once('value');
-monSens = sensPersoSnap.val();
-
-            } catch (e) {
-                console.warn('⚠️ Impossible de lire sensJoueurs, fallback sur sens global', e);
-                monSens = (gameState?.sensDeplacent || sensDeplacementGlobal || 1);
-            }
-            
-          if (monSens === null) {
-  // Le joueur actif doit choisir son sens lui-même.
-  // En mode PHYSIQUE, si l'hôte clique mais que le joueur n'a pas choisi, on bloque.
+// 3) Si sens pas choisi : le joueur actif doit choisir
+if (monSens === null) {
   if (!isMyTurn) {
-    sendSystemMessage(`⏳ Attente : ${currentPlayer.name} doit d'abord choisir son sens (premier lancer).`);
+    sendSystemMessage(`⏳ ${currentPlayer.name} doit d'abord choisir son sens (premier lancer).`);
     return;
   }
   showSensChoiceModal();
   return;
 }
 
-            
-            // Lancer le dé avec le sens choisi
-           let forced = null;
+// 4) Lancer : en PHYSIQUE l'hôte encode le dé
+let forced = null;
 
 if (diceMode === 'PHYSIQUE') {
-  // seul l'hôte encode le résultat du dé
-  if (!isHost) return;
+  if (!isHost) {
+    sendSystemMessage(`🎲 Dé physique : attente de l'hôte pour encoder le lancer.`);
+    return;
+  }
   forced = await askPhysicalDiceValue();
-  if (forced == null) return; // annulation
+  if (forced == null) return;
 }
 
 executerLancerDe(currentPlayer, monSens, forced);
+
 
         }
         
@@ -4606,20 +4607,23 @@ executerLancerDe(currentPlayer, monSens, forced);
             
            // En mode PHYSIQUE : le joueur choisit le sens, mais NE lance PAS.
 // C'est l'hôte qui cliquera ensuite "Lancer" et encodera 1..6.
+// Lancer le dé
 const diceMode = (gameConfig?.diceMode || 'AUTO');
 
 if (diceMode === 'PHYSIQUE') {
-  sendSystemMessage(`🎲 Dé physique : ${myName} a choisi son sens. L'hôte peut maintenant lancer et encoder le résultat.`);
+  sendSystemMessage(`🎲 Dé physique : ${myName} a choisi son sens. L'hôte peut maintenant encoder le lancer.`);
+  // On ne lance PAS ici : c'est l'hôte qui clique ensuite.
   return;
 }
 
-// Mode AUTO : on peut lancer tout de suite
+// Mode AUTO : on lance directement
 const players = Object.values(playersData || {});
 const currentIdx = gameState.currentPlayerIndex || 0;
 const currentPlayer = players[currentIdx];
 if (!currentPlayer) return;
 
-executerLancerDe(currentPlayer, sens, null);
+executerLancerDe(currentPlayer, sens);
+
 
         }
         
