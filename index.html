@@ -3736,40 +3736,44 @@ await gameRef.child('gameConfig').set(partyConfig);
         }
        
         
-        //   Mode PHYSIQUE : petit modal “Entrez 1-6” côté hôtepuis forcedResult
-
-        
+       // ✅ Dé physique : l'hôte encode 1..6. Retourne 1..6 ou null si Annuler.
 function askPhysicalDiceValue() {
   return new Promise((resolve) => {
-    const idInput = `diceInput_${Date.now()}`;
+    showModal(
+      `
+        <h3>🎲 Dé physique (maître du jeu)</h3>
+        <p style="font-size:0.9rem;color:var(--gray);margin-bottom:12px;">
+          Entrez le résultat du dé (1 à 6)
+        </p>
 
-    showModal(`
-      <h3>🎲 Dé physique</h3>
-      <p style="font-size:0.9rem; color: var(--gray); margin: 8px 0 14px;">
-        Entrez le résultat du dé (1 à 6)
-      </p>
+        <input id="physicalDiceInput" type="number" min="1" max="6" value="1"
+          style="width:100%;padding:10px 12px;border:2px solid #e5e7eb;border-radius:10px;font-size:1rem;" />
 
-      <input id="${idInput}" type="number" min="1" max="6"
-        style="width:100%; padding:10px; border-radius:10px; border:1px solid #ddd; font-size:1rem;"
-        placeholder="1-6" />
+        <p id="physicalDiceError" style="display:none;margin-top:10px;color:var(--red);font-size:0.85rem;">
+          ⚠️ Valeur invalide (1 à 6).
+        </p>
+      `,
+      `
+        <button class="btn btn-primary" onclick="(function(){
+          const input = document.getElementById('physicalDiceInput');
+          const err = document.getElementById('physicalDiceError');
+          const n = parseInt(input && input.value, 10);
+          if (!n || n < 1 || n > 6) { if(err) err.style.display='block'; return; }
+          window.__physicalDiceResolve && window.__physicalDiceResolve(n);
+          window.__physicalDiceResolve = null;
+          closeModal();
+        })()">OK</button>
 
-      <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:14px;">
-        <button class="btn btn-secondary" onclick="closeModal(); window.__resolvePhysicalDice && window.__resolvePhysicalDice(null);">Annuler</button>
-        <button class="btn btn-primary" onclick="
-          (function(){
-            const v = parseInt(document.getElementById('${idInput}').value, 10);
-            if (!Number.isInteger(v) || v < 1 || v > 6) { alert('Entre un nombre de 1 à 6'); return; }
-            closeModal();
-            window.__resolvePhysicalDice && window.__resolvePhysicalDice(v);
-          })()
-        ">Valider</button>
-      </div>
-    `, ``);
+        <button class="btn btn-secondary" onclick="(function(){
+          window.__physicalDiceResolve && window.__physicalDiceResolve(null);
+          window.__physicalDiceResolve = null;
+          closeModal();
+        })()">Annuler</button>
+      `
+    );
 
-    window.__resolvePhysicalDice = (val) => {
-      window.__resolvePhysicalDice = null;
-      resolve(val);
-    };
+    // Hook global simple (évite des listeners cassés)
+    window.__physicalDiceResolve = resolve;
   });
 }
 
