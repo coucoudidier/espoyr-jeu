@@ -4516,7 +4516,7 @@ const currentPlayer = players[currentIdx];
 if (!currentPlayer) return;
 
 const isMyTurn = currentPlayer.id === myPlayerId;
-const diceMode = gameConfig?.diceMode || 'AUTO';
+const diceMode = (gameConfig?.diceMode || gameState?.diceMode || 'AUTO');
 
         // 🎲 Autorisation selon le mode de dé
 if (diceMode === 'PHYSIQUE') {
@@ -4604,12 +4604,23 @@ executerLancerDe(currentPlayer, monSens, forced);
             const sensText = sens === 1 ? '➡️ Sens horaire' : '⬅️ Sens anti-horaire';
             sendSystemMessage(`🎯 ${myName} choisit ${sensText}`);
             
-            // Lancer le dé
-            const players = Object.values(playersData);
-            const currentIdx = gameState.currentPlayerIndex || 0;
-            const currentPlayer = players[currentIdx];
-            
-            executerLancerDe(currentPlayer, sens);
+           // En mode PHYSIQUE : le joueur choisit le sens, mais NE lance PAS.
+// C'est l'hôte qui cliquera ensuite "Lancer" et encodera 1..6.
+const diceMode = (gameConfig?.diceMode || 'AUTO');
+
+if (diceMode === 'PHYSIQUE') {
+  sendSystemMessage(`🎲 Dé physique : ${myName} a choisi son sens. L'hôte peut maintenant lancer et encoder le résultat.`);
+  return;
+}
+
+// Mode AUTO : on peut lancer tout de suite
+const players = Object.values(playersData || {});
+const currentIdx = gameState.currentPlayerIndex || 0;
+const currentPlayer = players[currentIdx];
+if (!currentPlayer) return;
+
+executerLancerDe(currentPlayer, sens, null);
+
         }
         
         // Animer le passage sur chaque case (avec protection contre le blocage)
