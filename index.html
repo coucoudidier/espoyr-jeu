@@ -11546,7 +11546,10 @@ function demanderValeurDePhysique(nomJoueur) {
         
 
 function ecouterDemandesDe() {
-    if (!gameRef) return;
+    if (!gameRef) {
+        setTimeout(ecouterDemandesDe, 2000);
+        return;
+    }
 
 gameRef.child('state/demandeDe').on('value', async (snap) => {
         if (!isHost) return;
@@ -11582,7 +11585,10 @@ gameRef.child('state/demandeDe').on('value', async (snap) => {
 // quelle valeur l'hôte a encodée, puis effectue le déplacement.
 
 function ecouterReponsesDe() {
-    if (!gameRef) return;
+    if (!gameRef) {
+        setTimeout(ecouterReponsesDe, 2000);
+        return;
+    }
 
     gameRef.child('state/reponseDe').on('value', async (snap) => {
         if (!snap.exists()) return;
