@@ -4083,7 +4083,43 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                 <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
             `);
         }
+
+// ✅ appelée par le modal : onclick="choisirSensEtLancer(1/-1)"
+async function choisirSensEtLancer(sens) {
+  closeModal();
+
+  // stocker le sens pour CE joueur
+  await gameRef.child(`sensJoueurs/${myPlayerId}`).set(sens);
+
+  const sensText = sens === 1 ? '➡️ Sens horaire' : '⬅️ Sens anti-horaire';
+  sendSystemMessage(`🎯 ${myName} choisit ${sensText}`);
+
+  const diceMode = (gameConfig?.diceMode || gameState?.diceMode || gameState?.config?.diceMode || 'AUTO');
+
+  // MODE PHYSIQUE : le joueur choisit son sens, puis l'hôte encode le dé
+  if (diceMode === 'PHYSIQUE') {
+    sendSystemMessage(`🎲 Dé physique : ${myName} a choisi son sens. ⏳ L'hôte peut maintenant encoder le résultat.`);
+    return;
+  }
+
+  // MODE AUTO : on lance direct
+  const players = Object.values(playersData || {});
+  const currentIdx = (gameState.currentPlayerIndex ?? 0);
+  const currentPlayer = players[currentIdx];
+  if (!currentPlayer) return;
+
+  executerLancerDe(currentPlayer, sens, null);
+}
+
+
         
+
+
+
+
+
+
+            
         // Variable pour le sens de déplacement (gardé pour compatibilité)
         let sensDeplacementGlobal = 1;  // 1 = horaire, -1 = anti-horaire
         
