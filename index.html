@@ -4493,99 +4493,86 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             }).join('');
         }
         
-        // ========== LANCER DÉ ==========
-        async function rollDice() {
-            try {
-                if (typeof gameRef === 'undefined' || !gameRef) {
-                    alert('Connexion non initialisée : impossible de lancer le dé (gameRef manquant). Recharge la page ou rejoins à nouveau la partie.');
-                    return;
-                }
-                if (typeof playersData === 'undefined' || !playersData || typeof gameState === 'undefined' || !gameState) {
-                    alert('Données de partie incomplètes : impossible de lancer le dé.');
-                    return;
-                }
-            } catch (e) {
-                console.error(e);
-                alert('Erreur interne : impossible de lancer le dé. Ouvre la console (F12) pour voir le détail.');
-                return;
-            }
+// ========== LANCER DÉ ==========
+async function rollDice() {
+  // Garde-fous
+  if (!gameRef) { alert("gameRef manquant"); return; }
+  if (!playersData || !gameState) { alert("Données de partie incomplètes"); return; }
 
-const players = Object.values(playersData || {});
-const currentIdx = gameState.currentPlayerIndex || 0;
-const currentPlayer = players[currentIdx];
-if (!currentPlayer) return;
+  const players = Object.values(playersData || {});
+  const currentIdx = (gameState.currentPlayerIndex ?? 0);
+  const currentPlayer = players[currentIdx];
+  if (!currentPlayer) return;
 
-const isMyTurn = currentPlayer.id === myPlayerId;
-const diceMode = (gameConfig?.diceMode || gameState?.diceMode || gameState?.config?.diceMode || 'AUTO');     
+  const isMyTurn = (currentPlayer.id === myPlayerId);
 
+  // IMPORTANT : diceMode peut venir de plusieurs endroits selon tes versions
+  const diceMode = (gameConfig?.diceMode || gameState?.diceMode || gameState?.config?.diceMode || 'AUTO');
 
+  // Lire le sens du JOUEUR ACTIF
+  let monSens = null;
+  try {
+    const sensSnap = await gameRef.child(`sensJoueurs/${currentPlayer.id}`).once('value');
+    monSens = sensSnap.val();
+  } catch (e) {
+    console.warn('⚠️ lecture sensJoueurs impossible, fallback', e);
+    monSens = (gameState?.sensDeplacent || sensDeplacementGlobal || 1);
+  }
 
-            
-            // Vérifier si le joueur a déjà choisi son sens (premier lancer)
-            let monSens = null;
-            try {
-                const sensPersoSnap = await gameRef.child(`sensJoueurs/${currentPlayer.id}`).once('value');
-monSens = sensPersoSnap.val();
+  // =========================
+  // MODE PHYSIQUE
+  // =========================
+  if (diceMode === 'PHYSIQUE') {
 
-            } catch (e) {
-                console.warn('⚠️ Impossible de lire sensJoueurs, fallback sur sens global', e);
-                monSens = (gameState?.sensDeplacent || sensDeplacementGlobal || 1);
-            }
+    // --- Joueur (non hôte) ---
+    if (!isHost) {
+      if (!isMyTurn) return; // pas ton tour => rien
 
- // Le joueur actif doit choisir son sens lui-même.
-  // En mode PHYSIQUE, si l'hôte clique mais que le joueur n'a pas choisi, on bloque.
-        
-         // =========================
-// Gestion des droits + sens
-// =========================
+      // Ton tour et sens pas choisi => tu choisis ton sens
+      if (monSens === null) {
+        showSensChoiceModal();
+        return;
+      }
 
-if (diceMode === 'PHYSIQUE') {
-
-  // --- Cas joueur (non hôte) ---
-  if (!isHost) {
-    // pas ton tour => rien
-    if (!isMyTurn) return;
-
-    // ton tour et pas de sens => tu choisis le sens
-    if (monSens === null) {
-      showSensChoiceModal();
+      // Ton tour mais sens déjà choisi => tu attends l'hôte
+      sendSystemMessage(`⏳ Attente : l'hôte doit encoder le résultat du dé physique.`);
       return;
     }
 
-    // ton tour mais sens déjà choisi => tu attends l'hôte
-    sendSystemMessage(`⏳ Attente : l'hôte doit encoder le résultat du dé physique.`);
+    // --- Hôte ---
+    // L'hôte ne peut encoder que si le joueur actif a choisi son sens
+    if (monSens === null) {
+      sendSystemMessage(`⏳ Attente : ${currentPlayer.name || 'le joueur'} doit d'abord choisir son sens (premier lancer).`);
+      return;
+    }
+
+    // L'hôte encode 1..6
+    let forced = await askPhysicalDiceValue();
+    if (forced == null) return;
+
+    forced = Number(forced);
+    if (!Number.isInteger(forced) || forced < 1 || forced > 6) {
+      alert("Valeur invalide : entre 1 et 6");
+      return;
+    }
+
+    executerLancerDe(currentPlayer, monSens, forced);
     return;
   }
 
-  // --- Cas hôte ---
-  // L'hôte ne peut encoder le dé que si le joueur actif a choisi son sens
+  // =========================
+  // MODE AUTO
+  // =========================
+  if (!isMyTurn) return;
+
   if (monSens === null) {
-    sendSystemMessage(`⏳ Attente : ${currentPlayer.name} doit d'abord choisir son sens (premier lancer).`);
+    showSensChoiceModal();
     return;
   }
 
-  // OK : l'hôte encode le résultat
-  let forced = await askPhysicalDiceValue();
-  if (forced == null) return;
-  executerLancerDe(currentPlayer, monSens, forced);
-  return;
+  executerLancerDe(currentPlayer, monSens, null);
 }
-
-// =========================
-// Mode AUTO
-// =========================
-if (!isMyTurn) return;
-
-if (monSens === null) {
-  showSensChoiceModal();
-  return;
-}
-
-executerLancerDe(currentPlayer, monSens, null);
-return;
-
-
-            
+       
             // Lancer le dé avec le sens choisi
 
         
