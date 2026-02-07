@@ -576,590 +576,6 @@
 //   - logEvent(), GAME_SAVE
 //   - gameConfig.diceMode ('AUTO' | 'PHYSIQUE')
 //   - PLAYER_COLORS[], updateBoard(), updatePlayersUI()
-// ============================================================
-
-const NB_CASES = CASES.length;  // 23
-
-// ─── Utilitaires ───────────────────────────────────────────
-
-/** Calcule la nouvelle position après un déplacement de `pas` cases */
-function calculerNouvellePosition(posActuelle, pas, sens) {
-    // sens = 1 (horaire, croissant) ou -1 (anti-horaire, décroissant)
-    return ((posActuelle + pas * sens) % NB_CASES + NB_CASES) % NB_CASES;
-}
-
-/** Vérifie si le joueur a déjà un sens enregistré */
-function joueurASens(idJoueur) {
-    const j = playersData[idJoueur];
-    return j && (j.sensDeplacement === 1 || j.sensDeplacement === -1);
-}
-
-/** Retourne le sens enregistré du joueur (1 ou -1), ou null */
-function getSensJoueur(idJoueur) {
-    const j = playersData[idJoueur];
-    if (!j) return null;
-    const s = j.sensDeplacement;
-    return (s === 1 || s === -1) ? s : null;
-}
-
-// ─── Emojis faces du dé ────────────────────────────────────
-
-
-
-function emojiDe(val) {
-    return FACES_DE[val] || '🎲';
-}
-   
-
-// ─── Animation dé virtuel (cosmétique) ─────────────────────
-
-function animerDe(valFinale) {
-    return new Promise(resolve => {
-        const elDe = document.getElementById('dice');
-        if (!elDe) { resolve(); return; }
-
-        elDe.classList.add('rolling');
-        let compteur = 0;
-        const maxTicks = 12;
-
-        const intervalle = setInterval(() => {
-            elDe.textContent = emojiDe(Math.floor(Math.random() * 6) + 1);
-            compteur++;
-            if (compteur >= maxTicks) {
-                clearInterval(intervalle);
-                elDe.classList.remove('rolling');
-                elDe.textContent = emojiDe(valFinale);
-                resolve();
-            }
-        }, 80);
-    });
-}
-
-// ─── Animation déplacement case par case ───────────────────
-
-function animerDeplacement(idJoueur, posDepart, posArrivee, sens) {
-    return new Promise(resolve => {
-        const etapes = [];
-        let pos = posDepart;
-
-        // Construire la liste des cases traversées
-        while (pos !== posArrivee) {
-            pos = ((pos + sens) % NB_CASES + NB_CASES) % NB_CASES;
-            etapes.push(pos);
-        }
-
-        if (etapes.length === 0) { resolve(); return; }
-
-        let i = 0;
-        const intervalle = setInterval(() => {
-            // Mettre en surbrillance la case traversée
-            const elCase = document.querySelector(`.case[data-id="${etapes[i]}"]`);
-            if (elCase) {
-                elCase.classList.add('passing');
-                setTimeout(() => elCase.classList.remove('passing'), 300);
-            }
-            i++;
-            if (i >= etapes.length) {
-                clearInterval(intervalle);
-                // Mettre en surbrillance la case d'arrivée
-                const elArrivee = document.querySelector(`.case[data-id="${posArrivee}"]`);
-                if (elArrivee) elArrivee.classList.add('current');
-                resolve();
-            }
-        }, 200);
-    });
-}
-
-// ─── Vérifier passage par la case Départ ───────────────────
-
-function aTraverseLaCase0(posDepart, posArrivee, sens) {
-    if (posDepart === posArrivee) return false;
-    let pos = posDepart;
-    while (pos !== posArrivee) {
-        pos = ((pos + sens) % NB_CASES + NB_CASES) % NB_CASES;
-        if (pos === 0 && posArrivee !== 0) return true;
-        if (pos === posArrivee) break;
-    }
-    return false;
-}
-
-// ============================================================
-// FLUX PRINCIPAL : rollDice()
-// ============================================================
-// Appelé quand le joueur clique sur "🎲 Lancer"
-// Gère les deux modes (AUTO / PHYSIQUE) et le premier lancer
-// ============================================================
-
-async function rollDice() {
-    if (!gameState || !gameRef) return;
-
-    const listeJoueurs = Object.values(playersData)
-        .sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
-    const indexActuel = gameState.currentPlayerIndex || 0;
-    const joueurActuel = listeJoueurs[indexActuel];
-
-    if (!joueurActuel) return;
-
-    // ── Seul le joueur actif (ou l'hôte pour un bot) peut lancer ──
-    const estMonTour = (joueurActuel.id === myPlayerId);
-    const estTourBot = !!joueurActuel.isBot;
-
-    if (!estMonTour && !(isHost && estTourBot)) return;
-
-    // Désactiver le bouton pendant le traitement
-    const btnLancer = document.getElementById('rollDiceBtn');
-    if (btnLancer) btnLancer.disabled = true;
-
-    try {
-        // ── Déterminer la valeur du dé ──
-        let valeurDe;
-        const modeDe = gameConfig.diceMode || 'AUTO';
-
-        if (modeDe === 'PHYSIQUE' && isHost) {
-            // MODE PHYSIQUE : l'hôte encode la valeur via modal graphique
-            valeurDe = await demanderValeurDePhysique(joueurActuel.name);
-            if (valeurDe === null) {
-                // Annulé → réactiver le bouton
-                if (btnLancer) btnLancer.disabled = false;
-                return;
-            }
-        } else if (modeDe === 'PHYSIQUE' && !isHost) {
-            // Un non-hôte ne peut pas lancer en mode physique
-            // On écrit une demande dans Firebase pour signaler à l'hôte
-            await gameRef.child('state/demandeDe').set({
-                playerId: joueurActuel.id,
-                playerName: joueurActuel.name,
-                demandeLe: firebase.database.ServerValue.TIMESTAMP
-            });
-            document.getElementById('diceMessage').textContent =
-                `⏳ En attente de l'hôte pour le dé de ${joueurActuel.name}...`;
-            if (btnLancer) btnLancer.disabled = false;
-            return;
-        } else {
-            // MODE AUTO : dé virtuel automatique
-            valeurDe = rollDiceValue();
-        }
-
-        // ── Animer le dé ──
-        await animerDe(valeurDe);
-        document.getElementById('diceMessage').textContent =
-            `${joueurActuel.avatar} ${joueurActuel.name} : ${emojiDe(valeurDe)} (${valeurDe})`;
-
-        // ── Premier lancer ? → choix du sens ──
-        if (!joueurASens(joueurActuel.id)) {
-            await choisirSens(joueurActuel, valeurDe);
-            return;  // choisirSens gère la suite du déplacement
-        }
-
-        // ── Déplacement normal ──
-        const sens = getSensJoueur(joueurActuel.id);
-        await effectuerDeplacement(joueurActuel, valeurDe, sens);
-
-    } catch (err) {
-        console.error('❌ Erreur rollDice:', err);
-        sendSystemMessage(`⚠️ Erreur lors du lancer: ${err.message}`);
-    } finally {
-        if (btnLancer) btnLancer.disabled = false;
-    }
-}
-
-// ============================================================
-// CHOIX DU SENS (premier lancer uniquement)
-// ============================================================
-
-function choisirSens(joueur, valeurDe) {
-    return new Promise((resolve) => {
-        // Si c'est un bot, choisir aléatoirement
-        if (joueur.isBot) {
-            const sens = Math.random() > 0.5 ? 1 : -1;
-            confirmerSens(joueur, valeurDe, sens).then(resolve);
-            return;
-        }
-
-        // Si c'est le joueur local OU l'hôte qui gère un joueur absent
-        const peutChoisir = (joueur.id === myPlayerId) ||
-                            (isHost && isAbsent(joueur));
-
-        if (!peutChoisir) {
-            // Attendre que le joueur choisisse (via écouteur Firebase)
-            document.getElementById('diceMessage').textContent =
-                `⏳ ${joueur.name} choisit son sens de déplacement...`;
-
-            const ecouteur = gameRef.child(`players/${joueur.id}/sensDeplacement`)
-                .on('value', (snap) => {
-                    if (snap.val() === 1 || snap.val() === -1) {
-                        gameRef.child(`players/${joueur.id}/sensDeplacement`).off('value', ecouteur);
-                        // Le sens est choisi, continuer le déplacement
-                        effectuerDeplacement(joueur, valeurDe, snap.val()).then(resolve);
-                    }
-                });
-            return;
-        }
-
-        // Afficher le modal de choix
-        const posActuelle = joueur.position || 0;
-        const caseHoraire = calculerNouvellePosition(posActuelle, valeurDe, 1);
-        const caseAntiHoraire = calculerNouvellePosition(posActuelle, valeurDe, -1);
-        const nomHoraire = CASES[caseHoraire]?.name || `Case ${caseHoraire}`;
-        const nomAntiHoraire = CASES[caseAntiHoraire]?.name || `Case ${caseAntiHoraire}`;
-
-        showModal(`
-            <h3>🧭 Choisis ton sens de déplacement</h3>
-            <p style="color: var(--gray); font-size: 0.9rem; margin-bottom: 12px;">
-                ${joueur.avatar} <strong>${joueur.name}</strong> — Premier lancer : ${emojiDe(valeurDe)} (${valeurDe})
-            </p>
-            <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 15px;">
-                ⚠️ Ce choix est <strong>définitif</strong> pour toute la partie !
-            </p>
-
-            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-                <div onclick="window.__callbackChoixSens(1)"
-                     style="flex:1; min-width: 140px; background: #dbeafe; border: 3px solid #3b82f6;
-                            border-radius: 12px; padding: 15px; cursor: pointer; text-align: center;
-                            transition: all 0.2s;"
-                     onmouseover="this.style.transform='scale(1.03)'"
-                     onmouseout="this.style.transform='scale(1)'">
-                    <p style="font-size: 1.5rem; margin: 0;">➡️</p>
-                    <p style="font-weight: bold; margin: 6px 0 2px 0;">Horaire</p>
-                    <p style="font-size: 0.8rem; color: #6b7280;">
-                        → case ${caseHoraire} : ${CASES[caseHoraire]?.icon || ''} ${nomHoraire}
-                    </p>
-                </div>
-
-                <div onclick="window.__callbackChoixSens(-1)"
-                     style="flex:1; min-width: 140px; background: #fef3c7; border: 3px solid #f59e0b;
-                            border-radius: 12px; padding: 15px; cursor: pointer; text-align: center;
-                            transition: all 0.2s;"
-                     onmouseover="this.style.transform='scale(1.03)'"
-                     onmouseout="this.style.transform='scale(1)'">
-                    <p style="font-size: 1.5rem; margin: 0;">⬅️</p>
-                    <p style="font-weight: bold; margin: 6px 0 2px 0;">Anti-horaire</p>
-                    <p style="font-size: 0.8rem; color: #6b7280;">
-                        → case ${caseAntiHoraire} : ${CASES[caseAntiHoraire]?.icon || ''} ${nomAntiHoraire}
-                    </p>
-                </div>
-            </div>
-        `, '');
-
-        // Callback global pour le modal
-        window.__callbackChoixSens = (sens) => {
-            closeModal();
-            window.__callbackChoixSens = null;
-            confirmerSens(joueur, valeurDe, sens).then(resolve);
-        };
-    });
-}
-
-/** Sauvegarde le sens dans Firebase et enchaîne le déplacement */
-async function confirmerSens(joueur, valeurDe, sens) {
-    // Sauvegarder dans Firebase (permanent, ne changera plus)
-    await gameRef.child(`players/${joueur.id}/sensDeplacement`).set(sens);
-
-    // Mettre à jour le cache local
-    if (playersData[joueur.id]) {
-        playersData[joueur.id].sensDeplacement = sens;
-    }
-
-    const labelSens = sens === 1 ? '➡️ Horaire' : '⬅️ Anti-horaire';
-    sendSystemMessage(`${joueur.avatar} ${joueur.name} a choisi le sens ${labelSens}`);
-
-    // JOURNAL ÉVÉNEMENT
-    logEvent('CHOIX_SENS', joueur.id, {
-        sens,
-        labelSens,
-        valeurDe,
-        position: joueur.position || 0
-    });
-
-    // Enchaîner le déplacement
-    await effectuerDeplacement(joueur, valeurDe, sens);
-}
-
-// ============================================================
-// DÉPLACEMENT EFFECTIF
-// ============================================================
-
-async function effectuerDeplacement(joueur, valeurDe, sens) {
-    const posDepart = joueur.position || 0;
-    const posArrivee = calculerNouvellePosition(posDepart, valeurDe, sens);
-
-    // Vérifier passage par la case Départ
-    const passageDepart = aTraverseLaCase0(posDepart, posArrivee, sens);
-
-    // Animation case par case
-    await animerDeplacement(joueur.id, posDepart, posArrivee, sens);
-
-    // Préparer les mises à jour Firebase
-    const miseAJour = {
-        [`players/${joueur.id}/position`]: posArrivee,
-        [`players/${joueur.id}/lastDice`]: valeurDe
-    };
-
-    if (passageDepart) {
-        const passages = (joueur.passagesDepart || 0) + 1;
-        miseAJour[`players/${joueur.id}/passagesDepart`] = passages;
-
-        // Phase 2 : compter les passages depuis la phase 2
-        if ((gameState?.phase || 1) >= 2) {
-            const p2 = (joueur.passagesDepuisPhase2 || 0) + 1;
-            miseAJour[`players/${joueur.id}/passagesDepuisPhase2`] = p2;
-        }
-    }
-
-    // Écrire dans Firebase
-    await gameRef.update(miseAJour);
-
-    // Nettoyer la demande de dé si présente (mode physique)
-    try { await gameRef.child('state/demandeDe').remove(); } catch(e) {}
-
-    // Mettre à jour le cache local
-    if (playersData[joueur.id]) {
-        playersData[joueur.id].position = posArrivee;
-        playersData[joueur.id].lastDice = valeurDe;
-    }
-
-    // JOURNAL ÉVÉNEMENT
-    logEvent('DEPLACEMENT', joueur.id, {
-        de: posDepart,
-        vers: posArrivee,
-        valeurDe: valeurDe,
-        sens,
-        passageDepart,
-        nomCase: CASES[posArrivee]?.name || `Case ${posArrivee}`
-    });
-
-    // Afficher le résultat dans la zone de dé
-    const infoCase = CASES[posArrivee];
-    const iconeSens = sens === 1 ? '➡️' : '⬅️';
-    document.getElementById('diceMessage').textContent =
-        `${iconeSens} ${joueur.avatar} ${joueur.name} → ${infoCase?.icon || ''} ${infoCase?.name || 'Case ' + posArrivee}`;
-
-    if (passageDepart) {
-        sendSystemMessage(`🏁 ${joueur.avatar} ${joueur.name} passe par la case Départ !`);
-    }
-
-    // Rafraîchir le plateau
-    updateBoard();
-
-    // ── Traiter la case d'arrivée ──
-    // Appeler handleCaseAction si elle existe dans le code principal
-    if (typeof handleCaseAction === 'function') {
-        await handleCaseAction(joueur.id, posArrivee, valeurDe);
-    } else {
-        console.log(`📍 ${joueur.name} arrive sur la case ${posArrivee} (${infoCase?.type})`);
-        // Si handleCaseAction n'existe pas encore, décommente la ligne suivante :
-        // if (typeof nextTurn === 'function') await nextTurn();
-    }
-}
-
-// ============================================================
-// MODE PHYSIQUE : Modal graphique pour l'hôte
-// ============================================================
-// Remplace l'ancien prompt() par un modal avec 6 boutons visuels
-
-function demanderValeurDePhysique(nomJoueur) {
-    return new Promise((resolve) => {
-        showModal(`
-            <h3>🎲 Dé physique</h3>
-            <p style="color: var(--gray); font-size: 0.9rem; margin-bottom: 12px;">
-                C'est le tour de <strong>${nomJoueur}</strong>.
-                <br>Encodez la valeur du dé physique :
-            </p>
-
-            <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin: 15px 0;">
-                ${[1,2,3,4,5,6].map(v => `
-                    <button onclick="window.__callbackDePhysique(${v})"
-                            style="width: 60px; height: 60px; font-size: 1.8rem;
-                                   border: 3px solid #e5e7eb; border-radius: 12px;
-                                   background: white; cursor: pointer;
-                                   transition: all 0.15s;"
-                            onmouseover="this.style.borderColor='#f59e0b'; this.style.transform='scale(1.1)'"
-                            onmouseout="this.style.borderColor='#e5e7eb'; this.style.transform='scale(1)'">
-                        ${emojiDe(v)}
-                    </button>
-                `).join('')}
-            </div>
-        `, `
-            <button class="btn" style="background: #f3f4f6; color: var(--gray);"
-                    onclick="window.__callbackDePhysique(null)">Annuler</button>
-        `);
-
-        window.__callbackDePhysique = (val) => {
-            closeModal();
-            window.__callbackDePhysique = null;
-            resolve(val);
-        };
-    });
-}
-
-// ============================================================
-// ÉCOUTE DES DEMANDES DE DÉ (mode PHYSIQUE, côté hôte)
-// ============================================================
-// L'hôte écoute `state/demandeDe` : quand un joueur non-hôte
-// clique sur "Lancer", une demande est créée dans Firebase.
-// L'hôte reçoit alors un modal pour encoder la valeur.
-
-function ecouterDemandesDe() {
-    if (!isHost || !gameRef) return;
-
-    gameRef.child('state/demandeDe').on('value', async (snap) => {
-        if (!snap.exists()) return;
-
-        const demande = snap.val();
-        if (!demande || !demande.playerId) return;
-
-        // L'hôte reçoit la demande et affiche le modal
-        const valeurDe = await demanderValeurDePhysique(demande.playerName || 'Joueur');
-        if (valeurDe === null) {
-            // L'hôte a annulé → supprimer la demande
-            await gameRef.child('state/demandeDe').remove();
-            return;
-        }
-
-        // Écrire la réponse dans Firebase pour le joueur
-        await gameRef.child('state/reponseDe').set({
-            playerId: demande.playerId,
-            valeur: valeurDe,
-            reponduLe: firebase.database.ServerValue.TIMESTAMP
-        });
-
-        // Supprimer la demande traitée
-        await gameRef.child('state/demandeDe').remove();
-    });
-}
-
-// ============================================================
-// ÉCOUTE DES RÉPONSES DE DÉ (mode PHYSIQUE, côté joueur)
-// ============================================================
-// Le joueur non-hôte écoute `state/reponseDe` pour savoir
-// quelle valeur l'hôte a encodée, puis effectue le déplacement.
-
-function ecouterReponsesDe() {
-    if (!gameRef) return;
-
-    gameRef.child('state/reponseDe').on('value', async (snap) => {
-        if (!snap.exists()) return;
-
-        const reponse = snap.val();
-        if (!reponse || !reponse.playerId || !reponse.valeur) return;
-
-        // C'est pertinent uniquement si c'est le tour de ce joueur
-        const listeJoueurs = Object.values(playersData)
-            .sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
-        const indexActuel = gameState?.currentPlayerIndex || 0;
-        const joueurActuel = listeJoueurs[indexActuel];
-
-        if (!joueurActuel || joueurActuel.id !== reponse.playerId) return;
-
-        // Seul le joueur concerné (ou l'hôte pour un bot) traite la réponse
-        const estMoi = (reponse.playerId === myPlayerId);
-        const estBotEtHote = (isHost && joueurActuel.isBot);
-
-        if (!estMoi && !estBotEtHote) return;
-
-        const valeurDe = reponse.valeur;
-
-        // Animer le dé
-        await animerDe(valeurDe);
-        document.getElementById('diceMessage').textContent =
-            `${joueurActuel.avatar} ${joueurActuel.name} : ${emojiDe(valeurDe)} (${valeurDe})`;
-
-        // Choix du sens si c'est le premier lancer
-        if (!joueurASens(joueurActuel.id)) {
-            await choisirSens(joueurActuel, valeurDe);
-        } else {
-            const sens = getSensJoueur(joueurActuel.id);
-            await effectuerDeplacement(joueurActuel, valeurDe, sens);
-        }
-
-        // Nettoyer la réponse traitée
-        try { await gameRef.child('state/reponseDe').remove(); } catch(e) {}
-    });
-}
-
-// ============================================================
-// BOTS : lancer automatique
-// ============================================================
-
-async function lancerDeBot(botJoueur) {
-    if (!botJoueur || !botJoueur.isBot) return;
-    if (!isHost) return;  // Seul l'hôte gère les bots
-
-    const modeDe = gameConfig.diceMode || 'AUTO';
-
-    let valeurDe;
-    if (modeDe === 'PHYSIQUE') {
-        // En mode physique, l'hôte encode aussi pour les bots
-        valeurDe = await demanderValeurDePhysique(`🤖 ${botJoueur.name}`);
-        if (valeurDe === null) return;  // Annulé par l'hôte
-    } else {
-        // Mode auto : dé virtuel
-        valeurDe = rollDiceValue();
-    }
-
-    // Animer le dé
-    await animerDe(valeurDe);
-    document.getElementById('diceMessage').textContent =
-        `${botJoueur.avatar} ${botJoueur.name} : ${emojiDe(valeurDe)} (${valeurDe})`;
-
-    // Premier lancer → le bot choisit un sens aléatoire
-    if (!joueurASens(botJoueur.id)) {
-        const sens = Math.random() > 0.5 ? 1 : -1;
-        await confirmerSens(botJoueur, valeurDe, sens);
-    } else {
-        const sens = getSensJoueur(botJoueur.id);
-        await effectuerDeplacement(botJoueur, valeurDe, sens);
-    }
-}
-
-// ============================================================
-// INDICATEUR DE SENS DANS LA BARRE DE STATUT
-// ============================================================
-
-function mettreAJourIndicateurSens() {
-    const el = document.getElementById('sensIndicator');
-    if (!el || !gameState) return;
-
-    const listeJoueurs = Object.values(playersData)
-        .sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
-    const indexActuel = gameState.currentPlayerIndex || 0;
-    const joueurActuel = listeJoueurs[indexActuel];
-
-    if (!joueurActuel) { el.textContent = ''; return; }
-
-    const sens = getSensJoueur(joueurActuel.id);
-    if (sens === 1) {
-        el.textContent = '➡️ Horaire';
-        el.style.color = '#3b82f6';
-    } else if (sens === -1) {
-        el.textContent = '⬅️ Anti-horaire';
-        el.style.color = '#f59e0b';
-    } else {
-        el.textContent = '🧭 À choisir';
-        el.style.color = '#6b7280';
-    }
-}
-
-// ============================================================
-// INITIALISATION : à appeler après subscribeToGame()
-// ============================================================
-
-function initSystemeDe() {
-    const modeDe = gameConfig.diceMode || 'AUTO';
-
-    if (modeDe === 'PHYSIQUE') {
-        // Hôte : écouter les demandes de dé des autres joueurs
-        if (isHost) {
-            ecouterDemandesDe();
-        }
-        // Tous les joueurs : écouter les réponses de l'hôte
-        ecouterReponsesDe();
-
-        console.log('🎲 Mode DÉ PHYSIQUE activé');
-    } else {
-        console.log('🎲 Mode DÉ AUTOMATIQUE activé');
-    }
-}
 
 
 
@@ -11706,6 +11122,595 @@ function initSystemeDe() {
                 sendSystemMessage(`📍 Saut vers Event ${index + 1}: ${event.action} (Tour ${event.turn})`);
             }
         }
+
+        // ============================================================
+
+const NB_CASES = CASES.length;  // 23
+
+// ─── Utilitaires ───────────────────────────────────────────
+
+/** Calcule la nouvelle position après un déplacement de `pas` cases */
+function calculerNouvellePosition(posActuelle, pas, sens) {
+    // sens = 1 (horaire, croissant) ou -1 (anti-horaire, décroissant)
+    return ((posActuelle + pas * sens) % NB_CASES + NB_CASES) % NB_CASES;
+}
+
+/** Vérifie si le joueur a déjà un sens enregistré */
+function joueurASens(idJoueur) {
+    const j = playersData[idJoueur];
+    return j && (j.sensDeplacement === 1 || j.sensDeplacement === -1);
+}
+
+/** Retourne le sens enregistré du joueur (1 ou -1), ou null */
+function getSensJoueur(idJoueur) {
+    const j = playersData[idJoueur];
+    if (!j) return null;
+    const s = j.sensDeplacement;
+    return (s === 1 || s === -1) ? s : null;
+}
+
+// ─── Emojis faces du dé ────────────────────────────────────
+
+
+
+function emojiDe(val) {
+    return FACES_DE[val] || '🎲';
+}
+   
+
+// ─── Animation dé virtuel (cosmétique) ─────────────────────
+
+function animerDe(valFinale) {
+    return new Promise(resolve => {
+        const elDe = document.getElementById('dice');
+        if (!elDe) { resolve(); return; }
+
+        elDe.classList.add('rolling');
+        let compteur = 0;
+        const maxTicks = 12;
+
+        const intervalle = setInterval(() => {
+            elDe.textContent = emojiDe(Math.floor(Math.random() * 6) + 1);
+            compteur++;
+            if (compteur >= maxTicks) {
+                clearInterval(intervalle);
+                elDe.classList.remove('rolling');
+                elDe.textContent = emojiDe(valFinale);
+                resolve();
+            }
+        }, 80);
+    });
+}
+
+// ─── Animation déplacement case par case ───────────────────
+
+function animerDeplacement(idJoueur, posDepart, posArrivee, sens) {
+    return new Promise(resolve => {
+        const etapes = [];
+        let pos = posDepart;
+
+        // Construire la liste des cases traversées
+        while (pos !== posArrivee) {
+            pos = ((pos + sens) % NB_CASES + NB_CASES) % NB_CASES;
+            etapes.push(pos);
+        }
+
+        if (etapes.length === 0) { resolve(); return; }
+
+        let i = 0;
+        const intervalle = setInterval(() => {
+            // Mettre en surbrillance la case traversée
+            const elCase = document.querySelector(`.case[data-id="${etapes[i]}"]`);
+            if (elCase) {
+                elCase.classList.add('passing');
+                setTimeout(() => elCase.classList.remove('passing'), 300);
+            }
+            i++;
+            if (i >= etapes.length) {
+                clearInterval(intervalle);
+                // Mettre en surbrillance la case d'arrivée
+                const elArrivee = document.querySelector(`.case[data-id="${posArrivee}"]`);
+                if (elArrivee) elArrivee.classList.add('current');
+                resolve();
+            }
+        }, 200);
+    });
+}
+
+// ─── Vérifier passage par la case Départ ───────────────────
+
+function aTraverseLaCase0(posDepart, posArrivee, sens) {
+    if (posDepart === posArrivee) return false;
+    let pos = posDepart;
+    while (pos !== posArrivee) {
+        pos = ((pos + sens) % NB_CASES + NB_CASES) % NB_CASES;
+        if (pos === 0 && posArrivee !== 0) return true;
+        if (pos === posArrivee) break;
+    }
+    return false;
+}
+
+// ============================================================
+// FLUX PRINCIPAL : rollDice()
+// ============================================================
+// Appelé quand le joueur clique sur "🎲 Lancer"
+// Gère les deux modes (AUTO / PHYSIQUE) et le premier lancer
+// ============================================================
+
+async function rollDice() {
+    if (!gameState || !gameRef) return;
+
+    const listeJoueurs = Object.values(playersData)
+        .sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+    const indexActuel = gameState.currentPlayerIndex || 0;
+    const joueurActuel = listeJoueurs[indexActuel];
+
+    if (!joueurActuel) return;
+
+    // ── Seul le joueur actif (ou l'hôte pour un bot) peut lancer ──
+    const estMonTour = (joueurActuel.id === myPlayerId);
+    const estTourBot = !!joueurActuel.isBot;
+
+    if (!estMonTour && !(isHost && estTourBot)) return;
+
+    // Désactiver le bouton pendant le traitement
+    const btnLancer = document.getElementById('rollDiceBtn');
+    if (btnLancer) btnLancer.disabled = true;
+
+    try {
+        // ── Déterminer la valeur du dé ──
+        let valeurDe;
+        const modeDe = gameConfig.diceMode || 'AUTO';
+
+        if (modeDe === 'PHYSIQUE' && isHost) {
+            // MODE PHYSIQUE : l'hôte encode la valeur via modal graphique
+            valeurDe = await demanderValeurDePhysique(joueurActuel.name);
+            if (valeurDe === null) {
+                // Annulé → réactiver le bouton
+                if (btnLancer) btnLancer.disabled = false;
+                return;
+            }
+        } else if (modeDe === 'PHYSIQUE' && !isHost) {
+            // Un non-hôte ne peut pas lancer en mode physique
+            // On écrit une demande dans Firebase pour signaler à l'hôte
+            await gameRef.child('state/demandeDe').set({
+                playerId: joueurActuel.id,
+                playerName: joueurActuel.name,
+                demandeLe: firebase.database.ServerValue.TIMESTAMP
+            });
+            document.getElementById('diceMessage').textContent =
+                `⏳ En attente de l'hôte pour le dé de ${joueurActuel.name}...`;
+            if (btnLancer) btnLancer.disabled = false;
+            return;
+        } else {
+            // MODE AUTO : dé virtuel automatique
+            valeurDe = rollDiceValue();
+        }
+
+        // ── Animer le dé ──
+        await animerDe(valeurDe);
+        document.getElementById('diceMessage').textContent =
+            `${joueurActuel.avatar} ${joueurActuel.name} : ${emojiDe(valeurDe)} (${valeurDe})`;
+
+        // ── Premier lancer ? → choix du sens ──
+        if (!joueurASens(joueurActuel.id)) {
+            await choisirSens(joueurActuel, valeurDe);
+            return;  // choisirSens gère la suite du déplacement
+        }
+
+        // ── Déplacement normal ──
+        const sens = getSensJoueur(joueurActuel.id);
+        await effectuerDeplacement(joueurActuel, valeurDe, sens);
+
+    } catch (err) {
+        console.error('❌ Erreur rollDice:', err);
+        sendSystemMessage(`⚠️ Erreur lors du lancer: ${err.message}`);
+    } finally {
+        if (btnLancer) btnLancer.disabled = false;
+    }
+}
+
+// ============================================================
+// CHOIX DU SENS (premier lancer uniquement)
+// ============================================================
+
+function choisirSens(joueur, valeurDe) {
+    return new Promise((resolve) => {
+        // Si c'est un bot, choisir aléatoirement
+        if (joueur.isBot) {
+            const sens = Math.random() > 0.5 ? 1 : -1;
+            confirmerSens(joueur, valeurDe, sens).then(resolve);
+            return;
+        }
+
+        // Si c'est le joueur local OU l'hôte qui gère un joueur absent
+        const peutChoisir = (joueur.id === myPlayerId) ||
+                            (isHost && isAbsent(joueur));
+
+        if (!peutChoisir) {
+            // Attendre que le joueur choisisse (via écouteur Firebase)
+            document.getElementById('diceMessage').textContent =
+                `⏳ ${joueur.name} choisit son sens de déplacement...`;
+
+            const ecouteur = gameRef.child(`players/${joueur.id}/sensDeplacement`)
+                .on('value', (snap) => {
+                    if (snap.val() === 1 || snap.val() === -1) {
+                        gameRef.child(`players/${joueur.id}/sensDeplacement`).off('value', ecouteur);
+                        // Le sens est choisi, continuer le déplacement
+                        effectuerDeplacement(joueur, valeurDe, snap.val()).then(resolve);
+                    }
+                });
+            return;
+        }
+
+        // Afficher le modal de choix
+        const posActuelle = joueur.position || 0;
+        const caseHoraire = calculerNouvellePosition(posActuelle, valeurDe, 1);
+        const caseAntiHoraire = calculerNouvellePosition(posActuelle, valeurDe, -1);
+        const nomHoraire = CASES[caseHoraire]?.name || `Case ${caseHoraire}`;
+        const nomAntiHoraire = CASES[caseAntiHoraire]?.name || `Case ${caseAntiHoraire}`;
+
+        showModal(`
+            <h3>🧭 Choisis ton sens de déplacement</h3>
+            <p style="color: var(--gray); font-size: 0.9rem; margin-bottom: 12px;">
+                ${joueur.avatar} <strong>${joueur.name}</strong> — Premier lancer : ${emojiDe(valeurDe)} (${valeurDe})
+            </p>
+            <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 15px;">
+                ⚠️ Ce choix est <strong>définitif</strong> pour toute la partie !
+            </p>
+
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <div onclick="window.__callbackChoixSens(1)"
+                     style="flex:1; min-width: 140px; background: #dbeafe; border: 3px solid #3b82f6;
+                            border-radius: 12px; padding: 15px; cursor: pointer; text-align: center;
+                            transition: all 0.2s;"
+                     onmouseover="this.style.transform='scale(1.03)'"
+                     onmouseout="this.style.transform='scale(1)'">
+                    <p style="font-size: 1.5rem; margin: 0;">➡️</p>
+                    <p style="font-weight: bold; margin: 6px 0 2px 0;">Horaire</p>
+                    <p style="font-size: 0.8rem; color: #6b7280;">
+                        → case ${caseHoraire} : ${CASES[caseHoraire]?.icon || ''} ${nomHoraire}
+                    </p>
+                </div>
+
+                <div onclick="window.__callbackChoixSens(-1)"
+                     style="flex:1; min-width: 140px; background: #fef3c7; border: 3px solid #f59e0b;
+                            border-radius: 12px; padding: 15px; cursor: pointer; text-align: center;
+                            transition: all 0.2s;"
+                     onmouseover="this.style.transform='scale(1.03)'"
+                     onmouseout="this.style.transform='scale(1)'">
+                    <p style="font-size: 1.5rem; margin: 0;">⬅️</p>
+                    <p style="font-weight: bold; margin: 6px 0 2px 0;">Anti-horaire</p>
+                    <p style="font-size: 0.8rem; color: #6b7280;">
+                        → case ${caseAntiHoraire} : ${CASES[caseAntiHoraire]?.icon || ''} ${nomAntiHoraire}
+                    </p>
+                </div>
+            </div>
+        `, '');
+
+        // Callback global pour le modal
+        window.__callbackChoixSens = (sens) => {
+            closeModal();
+            window.__callbackChoixSens = null;
+            confirmerSens(joueur, valeurDe, sens).then(resolve);
+        };
+    });
+}
+
+/** Sauvegarde le sens dans Firebase et enchaîne le déplacement */
+async function confirmerSens(joueur, valeurDe, sens) {
+    // Sauvegarder dans Firebase (permanent, ne changera plus)
+    await gameRef.child(`players/${joueur.id}/sensDeplacement`).set(sens);
+
+    // Mettre à jour le cache local
+    if (playersData[joueur.id]) {
+        playersData[joueur.id].sensDeplacement = sens;
+    }
+
+    const labelSens = sens === 1 ? '➡️ Horaire' : '⬅️ Anti-horaire';
+    sendSystemMessage(`${joueur.avatar} ${joueur.name} a choisi le sens ${labelSens}`);
+
+    // JOURNAL ÉVÉNEMENT
+    logEvent('CHOIX_SENS', joueur.id, {
+        sens,
+        labelSens,
+        valeurDe,
+        position: joueur.position || 0
+    });
+
+    // Enchaîner le déplacement
+    await effectuerDeplacement(joueur, valeurDe, sens);
+}
+
+// ============================================================
+// DÉPLACEMENT EFFECTIF
+// ============================================================
+
+async function effectuerDeplacement(joueur, valeurDe, sens) {
+    const posDepart = joueur.position || 0;
+    const posArrivee = calculerNouvellePosition(posDepart, valeurDe, sens);
+
+    // Vérifier passage par la case Départ
+    const passageDepart = aTraverseLaCase0(posDepart, posArrivee, sens);
+
+    // Animation case par case
+    await animerDeplacement(joueur.id, posDepart, posArrivee, sens);
+
+    // Préparer les mises à jour Firebase
+    const miseAJour = {
+        [`players/${joueur.id}/position`]: posArrivee,
+        [`players/${joueur.id}/lastDice`]: valeurDe
+    };
+
+    if (passageDepart) {
+        const passages = (joueur.passagesDepart || 0) + 1;
+        miseAJour[`players/${joueur.id}/passagesDepart`] = passages;
+
+        // Phase 2 : compter les passages depuis la phase 2
+        if ((gameState?.phase || 1) >= 2) {
+            const p2 = (joueur.passagesDepuisPhase2 || 0) + 1;
+            miseAJour[`players/${joueur.id}/passagesDepuisPhase2`] = p2;
+        }
+    }
+
+    // Écrire dans Firebase
+    await gameRef.update(miseAJour);
+
+    // Nettoyer la demande de dé si présente (mode physique)
+    try { await gameRef.child('state/demandeDe').remove(); } catch(e) {}
+
+    // Mettre à jour le cache local
+    if (playersData[joueur.id]) {
+        playersData[joueur.id].position = posArrivee;
+        playersData[joueur.id].lastDice = valeurDe;
+    }
+
+    // JOURNAL ÉVÉNEMENT
+    logEvent('DEPLACEMENT', joueur.id, {
+        de: posDepart,
+        vers: posArrivee,
+        valeurDe: valeurDe,
+        sens,
+        passageDepart,
+        nomCase: CASES[posArrivee]?.name || `Case ${posArrivee}`
+    });
+
+    // Afficher le résultat dans la zone de dé
+    const infoCase = CASES[posArrivee];
+    const iconeSens = sens === 1 ? '➡️' : '⬅️';
+    document.getElementById('diceMessage').textContent =
+        `${iconeSens} ${joueur.avatar} ${joueur.name} → ${infoCase?.icon || ''} ${infoCase?.name || 'Case ' + posArrivee}`;
+
+    if (passageDepart) {
+        sendSystemMessage(`🏁 ${joueur.avatar} ${joueur.name} passe par la case Départ !`);
+    }
+
+    // Rafraîchir le plateau
+    updateBoard();
+
+    // ── Traiter la case d'arrivée ──
+    // Appeler handleCaseAction si elle existe dans le code principal
+    if (typeof handleCaseAction === 'function') {
+        await handleCaseAction(joueur.id, posArrivee, valeurDe);
+    } else {
+        console.log(`📍 ${joueur.name} arrive sur la case ${posArrivee} (${infoCase?.type})`);
+        // Si handleCaseAction n'existe pas encore, décommente la ligne suivante :
+        // if (typeof nextTurn === 'function') await nextTurn();
+    }
+}
+
+// ============================================================
+// MODE PHYSIQUE : Modal graphique pour l'hôte
+// ============================================================
+// Remplace l'ancien prompt() par un modal avec 6 boutons visuels
+
+function demanderValeurDePhysique(nomJoueur) {
+    return new Promise((resolve) => {
+        showModal(`
+            <h3>🎲 Dé physique</h3>
+            <p style="color: var(--gray); font-size: 0.9rem; margin-bottom: 12px;">
+                C'est le tour de <strong>${nomJoueur}</strong>.
+                <br>Encodez la valeur du dé physique :
+            </p>
+
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin: 15px 0;">
+                ${[1,2,3,4,5,6].map(v => `
+                    <button onclick="window.__callbackDePhysique(${v})"
+                            style="width: 60px; height: 60px; font-size: 1.8rem;
+                                   border: 3px solid #e5e7eb; border-radius: 12px;
+                                   background: white; cursor: pointer;
+                                   transition: all 0.15s;"
+                            onmouseover="this.style.borderColor='#f59e0b'; this.style.transform='scale(1.1)'"
+                            onmouseout="this.style.borderColor='#e5e7eb'; this.style.transform='scale(1)'">
+                        ${emojiDe(v)}
+                    </button>
+                `).join('')}
+            </div>
+        `, `
+            <button class="btn" style="background: #f3f4f6; color: var(--gray);"
+                    onclick="window.__callbackDePhysique(null)">Annuler</button>
+        `);
+
+        window.__callbackDePhysique = (val) => {
+            closeModal();
+            window.__callbackDePhysique = null;
+            resolve(val);
+        };
+    });
+}
+
+// ============================================================
+// ÉCOUTE DES DEMANDES DE DÉ (mode PHYSIQUE, côté hôte)
+// ============================================================
+// L'hôte écoute `state/demandeDe` : quand un joueur non-hôte
+// clique sur "Lancer", une demande est créée dans Firebase.
+// L'hôte reçoit alors un modal pour encoder la valeur.
+
+function ecouterDemandesDe() {
+    if (!isHost || !gameRef) return;
+
+    gameRef.child('state/demandeDe').on('value', async (snap) => {
+        if (!snap.exists()) return;
+
+        const demande = snap.val();
+        if (!demande || !demande.playerId) return;
+
+        // L'hôte reçoit la demande et affiche le modal
+        const valeurDe = await demanderValeurDePhysique(demande.playerName || 'Joueur');
+        if (valeurDe === null) {
+            // L'hôte a annulé → supprimer la demande
+            await gameRef.child('state/demandeDe').remove();
+            return;
+        }
+
+        // Écrire la réponse dans Firebase pour le joueur
+        await gameRef.child('state/reponseDe').set({
+            playerId: demande.playerId,
+            valeur: valeurDe,
+            reponduLe: firebase.database.ServerValue.TIMESTAMP
+        });
+
+        // Supprimer la demande traitée
+        await gameRef.child('state/demandeDe').remove();
+    });
+}
+
+// ============================================================
+// ÉCOUTE DES RÉPONSES DE DÉ (mode PHYSIQUE, côté joueur)
+// ============================================================
+// Le joueur non-hôte écoute `state/reponseDe` pour savoir
+// quelle valeur l'hôte a encodée, puis effectue le déplacement.
+
+function ecouterReponsesDe() {
+    if (!gameRef) return;
+
+    gameRef.child('state/reponseDe').on('value', async (snap) => {
+        if (!snap.exists()) return;
+
+        const reponse = snap.val();
+        if (!reponse || !reponse.playerId || !reponse.valeur) return;
+
+        // C'est pertinent uniquement si c'est le tour de ce joueur
+        const listeJoueurs = Object.values(playersData)
+            .sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+        const indexActuel = gameState?.currentPlayerIndex || 0;
+        const joueurActuel = listeJoueurs[indexActuel];
+
+        if (!joueurActuel || joueurActuel.id !== reponse.playerId) return;
+
+        // Seul le joueur concerné (ou l'hôte pour un bot) traite la réponse
+        const estMoi = (reponse.playerId === myPlayerId);
+        const estBotEtHote = (isHost && joueurActuel.isBot);
+
+        if (!estMoi && !estBotEtHote) return;
+
+        const valeurDe = reponse.valeur;
+
+        // Animer le dé
+        await animerDe(valeurDe);
+        document.getElementById('diceMessage').textContent =
+            `${joueurActuel.avatar} ${joueurActuel.name} : ${emojiDe(valeurDe)} (${valeurDe})`;
+
+        // Choix du sens si c'est le premier lancer
+        if (!joueurASens(joueurActuel.id)) {
+            await choisirSens(joueurActuel, valeurDe);
+        } else {
+            const sens = getSensJoueur(joueurActuel.id);
+            await effectuerDeplacement(joueurActuel, valeurDe, sens);
+        }
+
+        // Nettoyer la réponse traitée
+        try { await gameRef.child('state/reponseDe').remove(); } catch(e) {}
+    });
+}
+
+// ============================================================
+// BOTS : lancer automatique
+// ============================================================
+
+async function lancerDeBot(botJoueur) {
+    if (!botJoueur || !botJoueur.isBot) return;
+    if (!isHost) return;  // Seul l'hôte gère les bots
+
+    const modeDe = gameConfig.diceMode || 'AUTO';
+
+    let valeurDe;
+    if (modeDe === 'PHYSIQUE') {
+        // En mode physique, l'hôte encode aussi pour les bots
+        valeurDe = await demanderValeurDePhysique(`🤖 ${botJoueur.name}`);
+        if (valeurDe === null) return;  // Annulé par l'hôte
+    } else {
+        // Mode auto : dé virtuel
+        valeurDe = rollDiceValue();
+    }
+
+    // Animer le dé
+    await animerDe(valeurDe);
+    document.getElementById('diceMessage').textContent =
+        `${botJoueur.avatar} ${botJoueur.name} : ${emojiDe(valeurDe)} (${valeurDe})`;
+
+    // Premier lancer → le bot choisit un sens aléatoire
+    if (!joueurASens(botJoueur.id)) {
+        const sens = Math.random() > 0.5 ? 1 : -1;
+        await confirmerSens(botJoueur, valeurDe, sens);
+    } else {
+        const sens = getSensJoueur(botJoueur.id);
+        await effectuerDeplacement(botJoueur, valeurDe, sens);
+    }
+}
+
+// ============================================================
+// INDICATEUR DE SENS DANS LA BARRE DE STATUT
+// ============================================================
+
+function mettreAJourIndicateurSens() {
+    const el = document.getElementById('sensIndicator');
+    if (!el || !gameState) return;
+
+    const listeJoueurs = Object.values(playersData)
+        .sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+    const indexActuel = gameState.currentPlayerIndex || 0;
+    const joueurActuel = listeJoueurs[indexActuel];
+
+    if (!joueurActuel) { el.textContent = ''; return; }
+
+    const sens = getSensJoueur(joueurActuel.id);
+    if (sens === 1) {
+        el.textContent = '➡️ Horaire';
+        el.style.color = '#3b82f6';
+    } else if (sens === -1) {
+        el.textContent = '⬅️ Anti-horaire';
+        el.style.color = '#f59e0b';
+    } else {
+        el.textContent = '🧭 À choisir';
+        el.style.color = '#6b7280';
+    }
+}
+
+// ============================================================
+// INITIALISATION : à appeler après subscribeToGame()
+// ============================================================
+
+function initSystemeDe() {
+    const modeDe = gameConfig.diceMode || 'AUTO';
+
+    if (modeDe === 'PHYSIQUE') {
+        // Hôte : écouter les demandes de dé des autres joueurs
+        if (isHost) {
+            ecouterDemandesDe();
+        }
+        // Tous les joueurs : écouter les réponses de l'hôte
+        ecouterReponsesDe();
+
+        console.log('🎲 Mode DÉ PHYSIQUE activé');
+    } else {
+        console.log('🎲 Mode DÉ AUTOMATIQUE activé');
+    }
+}
+
+
+
+        
         
     </script>
 </body>
