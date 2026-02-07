@@ -4938,34 +4938,29 @@ function demanderValeurDePhysique(nomJoueur) {
 // L'hôte reçoit alors un modal pour encoder la valeur.
 
 function ecouterDemandesDe() {
-    if (!gameRef) return;
-
+    if (!gameRef) {
+        setTimeout(ecouterDemandesDe, 2000);
+        return;
+    }
+    gameRef.child('state/demandeDe').off();
     gameRef.child('state/demandeDe').on('value', async (snap) => {
+        if (!isHost) return;
         if (!snap.exists()) return;
-
         const demande = snap.val();
         if (!demande || !demande.playerId) return;
-
-        // L'hôte reçoit la demande et affiche le modal
         const valeurDe = await demanderValeurDePhysique(demande.playerName || 'Joueur');
         if (valeurDe === null) {
-            // L'hôte a annulé → supprimer la demande
             await gameRef.child('state/demandeDe').remove();
             return;
         }
-
-        // Écrire la réponse dans Firebase pour le joueur
         await gameRef.child('state/reponseDe').set({
             playerId: demande.playerId,
             valeur: valeurDe,
-            reponduLe: firebase.database.ServerValue.TIMESTAMP
+            reponduLe: Date.now()
         });
-
-        // Supprimer la demande traitée
         await gameRef.child('state/demandeDe').remove();
     });
 }
-
 // ============================================================
 // ÉCOUTE DES RÉPONSES DE DÉ (mode PHYSIQUE, côté joueur)
 // ============================================================
