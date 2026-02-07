@@ -11488,14 +11488,21 @@ async function effectuerDeplacement(joueur, valeurDe, sens) {
     // Rafraîchir le plateau
     updateBoard();
 
+  // ── Bonus AAA si membre ──
+    const estMembre = COMPTABILITE?.potAAA?.membres?.includes(joueur.id);
+    if (estMembre && typeof comptaBonusAAALancer === 'function') {
+        await comptaBonusAAALancer(joueur.id);
+        sendSystemMessage('💚 +50# créés dans le Pot AAA (bonus membre)');
+    }
+
+    // ── Salaire si passage par la case Départ ──
+    if (passageDepart && typeof handleSalary === 'function') {
+        await handleSalary(joueur, valeurDe);
+    }
+
     // ── Traiter la case d'arrivée ──
-    // Appeler handleCaseAction si elle existe dans le code principal
-    if (typeof handleCaseAction === 'function') {
-        await handleCaseAction(joueur.id, posArrivee, valeurDe);
-    } else {
-        console.log(`📍 ${joueur.name} arrive sur la case ${posArrivee} (${infoCase?.type})`);
-        // Si handleCaseAction n'existe pas encore, décommente la ligne suivante :
-        // if (typeof nextTurn === 'function') await nextTurn();
+    if (typeof handleLanding === 'function') {
+        setTimeout(() => handleLanding(posArrivee), 300);
     }
 }
 
