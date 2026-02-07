@@ -4083,64 +4083,7 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                 <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
             `);
         }
-
-// ✅ appelée par le modal : onclick="choisirSensEtLancer(1/-1)"
-async function choisirSensEtLancer(sens) {
-  closeModal();
-
-  // stocker le sens pour CE joueur
-  await gameRef.child(`sensJoueurs/${myPlayerId}`).set(sens);
-
-  const sensText = sens === 1 ? '➡️ Sens horaire' : '⬅️ Sens anti-horaire';
-  sendSystemMessage(`🎯 ${myName} choisit ${sensText}`);
-
-  const diceMode = (gameConfig?.diceMode || gameState?.diceMode || gameState?.config?.diceMode || 'AUTO');
-
- // =========================
-// DROITS + SENS + LANCER
-// =========================
-if (diceMode === 'PHYSIQUE') {
-
-  // --- Joueur actif (non hôte) : il peut seulement choisir le sens ---
-  if (!isHost) {
-    if (!isMyTurn) return;              // pas ton tour -> rien
-    if (monSens === null) {             // ton tour et sens pas choisi -> demander
-      showSensChoiceModal();
-      return;
-    }
-    // sens déjà choisi -> attendre l'hôte
-    sendSystemMessage(`⏳ Attente : l'hôte doit encoder le résultat du dé physique.`);
-    return;
-  }
-
-  // --- Hôte : il encode le dé seulement si le joueur actif a choisi son sens ---
-  if (monSens === null) {
-    sendSystemMessage(`⏳ Attente : ${currentPlayer.name} doit d'abord choisir son sens (premier lancer).`);
-    return;
-  }
-
-  const forced = await askPhysicalDiceValue();
-  if (forced == null) return;
-  executerLancerDe(currentPlayer, monSens, forced);
-  return;
-}
-
-// --- MODE AUTO ---
-if (!isMyTurn) return;
-if (monSens === null) { showSensChoiceModal(); return; }
-executerLancerDe(currentPlayer, monSens, null);
-return;
-
-
-
         
-
-
-
-
-
-
-            
         // Variable pour le sens de déplacement (gardé pour compatibilité)
         let sensDeplacementGlobal = 1;  // 1 = horaire, -1 = anti-horaire
         
@@ -4550,75 +4493,270 @@ return;
             }).join('');
         }
         
-/// ========== LANCER DÉ ==========
-async function rollDice() {
-  // Garde-fous
-  if (!gameRef) { alert("gameRef manquant"); return; }
-  if (!playersData || !gameState) { alert("Données de partie incomplètes"); return; }
+        // ========== LANCER DÉ ==========
+        async function rollDice() {
+            try {
+                if (typeof gameRef === 'undefined' || !gameRef) {
+                    alert('Connexion non initialisée : impossible de lancer le dé (gameRef manquant). Recharge la page ou rejoins à nouveau la partie.');
+                    return;
+                }
+                if (typeof playersData === 'undefined' || !playersData || typeof gameState === 'undefined' || !gameState) {
+                    alert('Données de partie incomplètes : impossible de lancer le dé.');
+                    return;
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Erreur interne : impossible de lancer le dé. Ouvre la console (F12) pour voir le détail.');
+                return;
+            }
 
-  const players = Object.values(playersData || {});
-  const currentIdx = (gameState.currentPlayerIndex ?? 0);
-  const currentPlayer = players[currentIdx];
-  if (!currentPlayer) return;
+const players = Object.values(playersData || {});
+const currentIdx = gameState.currentPlayerIndex || 0;
+const currentPlayer = players[currentIdx];
+if (!currentPlayer) return;
 
-  const isMyTurn = (currentPlayer.id === myPlayerId);
+const isMyTurn = currentPlayer.id === myPlayerId;
+const diceMode = (gameConfig?.diceMode || gameState?.diceMode || 'AUTO');
 
-  // diceMode: 'AUTO' ou 'PHYSIQUE'
-  const diceMode = (gameConfig?.diceMode || gameState?.diceMode || gameState?.config?.diceMode || 'AUTO');
+       
 
-  // Lire le sens du JOUEUR ACTIF (celui dont c'est le tour)
-  let monSens = null;
-  try {
-    const sensSnap = await gameRef.child(`sensJoueurs/${currentPlayer.id}`).once('value');
-    monSens = sensSnap.val();
-  } catch (e) {
-    console.warn('⚠️ lecture sensJoueurs impossible, fallback', e);
-    monSens = (gameState?.sensDeplacent || sensDeplacementGlobal || 1);
+
+
+            
+            // Vérifier si le joueur a déjà choisi son sens (premier lancer)
+            let monSens = null;
+            try {
+                const sensPersoSnap = await gameRef.child(`sensJoueurs/${currentPlayer.id}`).once('value');
+monSens = sensPersoSnap.val();
+
+            } catch (e) {
+                console.warn('⚠️ Impossible de lire sensJoueurs, fallback sur sens global', e);
+                monSens = (gameState?.sensDeplacent || sensDeplacementGlobal || 1);
+            }
+
+ // Le joueur actif doit choisir son sens lui-même.
+  // En mode PHYSIQUE, si l'hôte clique mais que le joueur n'a pas choisi, on bloque.
+        
+         // =========================
+// Gestion des droits + sens
+// =========================
+
+if (diceMode === 'PHYSIQUE') {
+
+  // --- Cas joueur (non hôte) ---
+  if (!isHost) {
+    // pas ton tour => rien
+    if (!isMyTurn) return;
+
+    // ton tour et pas de sens => tu choisis le sens
+    if (monSens === null) {
+      showSensChoiceModal();
+      return;
+    }
+
+    // ton tour mais sens déjà choisi => tu attends l'hôte
+    sendSystemMessage(`⏳ Attente : l'hôte doit encoder le résultat du dé physique.`);
+    return;
   }
 
-  // -------------------------------------------------------
-  // 1) SENS : toujours demandé au JOUEUR ACTIF en premier
-  // -------------------------------------------------------
+  // --- Cas hôte ---
+  // L'hôte ne peut encoder le dé que si le joueur actif a choisi son sens
   if (monSens === null) {
-    if (!isMyTurn) {
-      sendSystemMessage(`⏳ Attente : ${currentPlayer.name || 'le joueur'} doit choisir son sens.`);
-      return;
-    }
-    showSensChoiceModal(); // le joueur choisit horaire/anti-horaire
+    sendSystemMessage(`⏳ Attente : ${currentPlayer.name} doit d'abord choisir son sens (premier lancer).`);
     return;
   }
 
-  // -------------------------------------------------------
-  // 2) Ensuite, on lance selon le mode
-  // -------------------------------------------------------
-
-  // ===== MODE PHYSIQUE : l'hôte encode 1..6 =====
-  if (diceMode === 'PHYSIQUE') {
-    // Si je ne suis pas l'hôte, j'attends
-    if (!isHost) {
-      sendSystemMessage(`⏳ Attente : l'hôte doit encoder le résultat du dé physique.`);
-      return;
-    }
-
-    // L'hôte encode 1..6
-    let forced = await askPhysicalDiceValue();
-    if (forced == null) return; // annulation
-
-    forced = Number(forced);
-    if (!Number.isInteger(forced) || forced < 1 || forced > 6) {
-      alert("Valeur invalide : entre 1 et 6");
-      return;
-    }
-
-    executerLancerDe(currentPlayer, monSens, forced);
-    return;
-  }
-
-  // ===== MODE AUTO : seul le joueur actif lance =====
-  if (!isMyTurn) return;
-  executerLancerDe(currentPlayer, monSens, null);
+  // OK : l'hôte encode le résultat
+  let forced = await askPhysicalDiceValue();
+  if (forced == null) return;
+  executerLancerDe(currentPlayer, monSens, forced);
+  return;
 }
 
+// =========================
+// Mode AUTO
+// =========================
+if (!isMyTurn) return;
+
+if (monSens === null) {
+  showSensChoiceModal();
+  return;
+}
+
+executerLancerDe(currentPlayer, monSens, null);
+return;
+
+
+            
+            // Lancer le dé avec le sens choisi
+           let forced = null;
+
+if (diceMode === 'PHYSIQUE') {
+  // seul l'hôte encode le résultat du dé
+  if (!isHost) return;
+  forced = await askPhysicalDiceValue();
+  if (forced == null) return; // annulation
+}
+
+executerLancerDe(currentPlayer, monSens, forced);
+
+        }
+        
+        // Modal de choix du sens pour le joueur
+        function showSensChoiceModal() {
+            showModal(`
+                <h3>🎯 Choisis ton sens de déplacement</h3>
+                <p style="font-size: 0.9rem; color: var(--gray); margin-bottom: 15px;">
+                    Pour ce premier lancer, dans quel sens veux-tu te déplacer ?
+                </p>
+                
+                <div style="display: flex; gap: 15px; justify-content: center;">
+                    <div onclick="choisirSensEtLancer(1)" style="cursor: pointer; background: #dcfce7; padding: 20px; border-radius: 12px; text-align: center; flex: 1; border: 2px solid transparent; transition: all 0.2s;" onmouseover="this.style.borderColor='#059669'" onmouseout="this.style.borderColor='transparent'">
+                        <p style="font-size: 2rem; margin: 0;">➡️</p>
+                        <p style="margin: 10px 0 0 0; font-weight: bold; color: #059669;">Sens horaire</p>
+                        <p style="margin: 4px 0 0 0; font-size: 0.8rem; color: #6b7280;">1 → 2 → 3 → ...</p>
+                    </div>
+                    
+                    <div onclick="choisirSensEtLancer(-1)" style="cursor: pointer; background: #dbeafe; padding: 20px; border-radius: 12px; text-align: center; flex: 1; border: 2px solid transparent; transition: all 0.2s;" onmouseover="this.style.borderColor='#2563eb'" onmouseout="this.style.borderColor='transparent'">
+                        <p style="font-size: 2rem; margin: 0;">⬅️</p>
+                        <p style="margin: 10px 0 0 0; font-weight: bold; color: #2563eb;">Sens anti-horaire</p>
+                        <p style="margin: 4px 0 0 0; font-size: 0.8rem; color: #6b7280;">... → 3 → 2 → 1</p>
+                    </div>
+                </div>
+                
+                <p style="font-size: 0.8rem; color: #6b7280; margin-top: 15px; text-align: center;">
+                    💡 Tu pourras changer de sens à tout moment via le bouton ⚙️ Config
+                </p>
+            `, ``);
+        }
+        
+        async function choisirSensEtLancer(sens) {
+            closeModal();
+            
+            // Sauvegarder le sens choisi pour ce joueur
+            await gameRef.child(`sensJoueurs/${myPlayerId}`).set(sens);
+            
+            const sensText = sens === 1 ? '➡️ Sens horaire' : '⬅️ Sens anti-horaire';
+            sendSystemMessage(`🎯 ${myName} choisit ${sensText}`);
+            
+           // En mode PHYSIQUE : le joueur choisit le sens, mais NE lance PAS.
+// C'est l'hôte qui cliquera ensuite "Lancer" et encodera 1..6.
+const diceMode = (gameConfig?.diceMode || gameState?.diceMode || 'AUTO');
+
+
+if (diceMode === 'PHYSIQUE') {
+  sendSystemMessage(`🎲 Dé physique : ${myName} a choisi son sens. L'hôte peut maintenant lancer et encoder le résultat.`);
+  return;
+}
+
+// Mode AUTO : on peut lancer tout de suite
+const players = Object.values(playersData || {});
+const currentIdx = gameState.currentPlayerIndex || 0;
+const currentPlayer = players[currentIdx];
+if (!currentPlayer) return;
+
+executerLancerDe(currentPlayer, sens, null);
+
+        }
+        
+        // Animer le passage sur chaque case (avec protection contre le blocage)
+        async function animatePassingCases(startPos, steps, sens) {
+            try {
+                const casesCount = CASES.length;
+                for (let i = 1; i <= steps; i++) {
+                    let passPos;
+                    if (sens === 1) {
+                        passPos = (startPos + i) % casesCount;
+                    } else {
+                        passPos = (startPos - i + casesCount) % casesCount;
+                    }
+                    
+                    // Trouver l'élément de la case
+                    const caseEl = document.querySelector(`[data-case-id="${passPos}"]`);
+                    if (caseEl) {
+                        caseEl.classList.add('passing');
+                        // Retirer la classe après l'animation
+                        setTimeout(() => caseEl.classList.remove('passing'), 150);
+                    }
+                    
+                    // Attendre entre chaque case
+                    await new Promise(resolve => setTimeout(resolve, 120));
+                }
+            } catch (e) {
+                console.error('Erreur animation passage:', e);
+            }
+        }
+        
+        async function executerLancerDe(currentPlayer, sens, forced = null) {
+            const diceEl = document.getElementById('dice');
+            const diceBtn = document.getElementById('rollDiceBtn');
+            diceBtn.disabled = true;
+            diceEl.classList.add('rolling');
+            
+            const faces = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+            let rolls = 0;
+            const rollInterval = setInterval(async () => {
+                diceEl.textContent = faces[Math.floor(Math.random() * 6)];
+                rolls++;
+                if (rolls > 15) {
+                    clearInterval(rollInterval);
+                    
+                    // Utiliser le RNG seedé pour reproductibilité
+                    const result = (forced != null) ? forced : rollDiceValue();
+                    diceEl.textContent = faces[result - 1];
+                    diceEl.classList.remove('rolling');
+                    
+                    // Calculer la nouvelle position selon le sens du joueur
+                    let newPosition;
+                    let passedStart = false;
+                    
+                    if (sens === 1) {
+                        // Sens horaire : 0 → 1 → 2 → ... → 23 → 0
+                        newPosition = (currentPlayer.position + result) % CASES.length;
+                        passedStart = (currentPlayer.position + result) >= CASES.length;
+                    } else {
+                        // Sens anti-horaire : 0 → 23 → 22 → ... → 1 → 0
+                        newPosition = (currentPlayer.position - result + CASES.length) % CASES.length;
+                        // Passage par départ si on passe en dessous de 0 (position initiale)
+                        passedStart = (currentPlayer.position - result) < 0;
+                    }
+                    
+                    // *** ANIMATION : Passer sur chaque case ***
+                    await animatePassingCases(currentPlayer.position, result, sens);
+                    
+                    // LOG EVENT: ROLL_DICE
+                    const ledgerIds = [];
+                    
+                    // *** BONUS AAA : Si membre, création de 50# dans le Pot AAA ***
+                    const isMembre = COMPTABILITE.potAAA.membres?.includes(myPlayerId);
+                    if (isMembre) {
+                        const ecriture = await comptaBonusAAALancer(myPlayerId);
+                        if (ecriture?.ledgerEntryId) ledgerIds.push(ecriture.ledgerEntryId);
+                        sendSystemMessage(`💚 +50# créés dans le Pot AAA (bonus membre)`);
+                    }
+                    
+                    logEvent('ROLL_DICE', myPlayerId, {
+                        diceValue: result,
+                        fromPosition: currentPlayer.position,
+                        toPosition: newPosition,
+                        passedStart,
+                        sens,
+                        bonusAAA: isMembre ? 50 : 0
+                    }, ledgerIds);
+                    
+                    await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/position`).set(newPosition);
+                    
+                    const sensIcon = sens === 1 ? '➡️' : '⬅️';
+                    sendSystemMessage(`🎲 ${myName} fait ${result} ${sensIcon} ${CASES[newPosition].name}`);
+                    
+                    if (passedStart) {
+                        await handleSalary(currentPlayer, result);
+                    }
+                    
+                    setTimeout(() => handleLanding(newPosition), 300);
+                }
+            }, 80);
+        }
         
         // Bonus AAA : 50# créés dans le Pot à chaque lancer d'un membre
         async function comptaBonusAAALancer(joueurId) {
