@@ -5083,16 +5083,10 @@ function mettreAJourIndicateurSens() {
 // ============================================================
 
 function initSystemeDe() {
-    if (!isHost && !gameRef) {
-        setTimeout(initSystemeDe, 2000);
-        return;
-    }
-    if (isHost) {
         ecouterDemandesDe();
+        ecouterReponsesDe();
+        console.log('🎲 Système de dé initialisé');
     }
-    ecouterReponsesDe();
-    console.log('🎲 Système de dé initialisé (isHost: ' + isHost + ', mode: ' + (gameConfig.diceMode || 'AUTO') + ')');
-}
 
       
         
@@ -11554,7 +11548,8 @@ function demanderValeurDePhysique(nomJoueur) {
 function ecouterDemandesDe() {
     if (!gameRef) return;
 
-    gameRef.child('state/demandeDe').on('value', async (snap) => {
+gameRef.child('state/demandeDe').on('value', async (snap) => {
+        if (!isHost) return;
         if (!snap.exists()) return;
 
         const demande = snap.val();
