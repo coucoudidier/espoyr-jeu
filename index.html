@@ -4938,7 +4938,7 @@ function demanderValeurDePhysique(nomJoueur) {
 // L'hôte reçoit alors un modal pour encoder la valeur.
 
 function ecouterDemandesDe() {
-    if (!isHost || !gameRef) return;
+    if (!gameRef) return;
 
     gameRef.child('state/demandeDe').on('value', async (snap) => {
         if (!snap.exists()) return;
