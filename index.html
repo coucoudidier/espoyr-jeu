@@ -10672,6 +10672,13 @@ async function rollDice() {
                 sendSystemMessage(`📍 Saut vers Event ${index + 1}: ${event.action} (Tour ${event.turn})`);
             }
         }
+    // ✅ Rendre les handlers accessibles aux onclick="" (si script en module)
+window.createGame = createGame;
+window.joinGame = joinGame;                 // si tu as joinGame()
+window.loadSavedGame = loadSavedGame;       // si tu as loadSavedGame()
+window.selectGameMode = selectGameMode;     // si tu as selectGameMode()
+window.rollDice = rollDice;                 // si bouton rollDice
+
         
     </script>
 </body>
