@@ -4596,36 +4596,61 @@ executerLancerDe(currentPlayer, monSens, forced);
             `, ``);
         }
         
-        async function choisirSensEtLancer(sens) {
-            closeModal();
-            
-            // Sauvegarder le sens choisi pour ce joueur
-            await gameRef.child(`sensJoueurs/${myPlayerId}`).set(sens);
-            
-            const sensText = sens === 1 ? '➡️ Sens horaire' : '⬅️ Sens anti-horaire';
-            sendSystemMessage(`🎯 ${myName} choisit ${sensText}`);
-            
-           // En mode PHYSIQUE : le joueur choisit le sens, mais NE lance PAS.
-// C'est l'hôte qui cliquera ensuite "Lancer" et encodera 1..6.
-// Lancer le dé
-const diceMode = (gameConfig?.diceMode || 'AUTO');
+async function choisirSensEtLancer(sens) {
+  closeModal();
 
-if (diceMode === 'PHYSIQUE') {
-  sendSystemMessage(`🎲 Dé physique : ${myName} a choisi son sens. L'hôte peut maintenant encoder le lancer.`);
-  // On ne lance PAS ici : c'est l'hôte qui clique ensuite.
+  // Sauvegarder le sens choisi pour ce joueur
+  await gameRef.child(`sensJoueurs/${myPlayerId}`).set(sens);
+
+  const sensText = sens === 1 ? '➡️ Sens horaire' : '⬅️ Sens anti-horaire';
+  sendSystemMessage(`🎯 ${myName} choisit ${sensText}`);
+
+ const diceMode = (gameConfig?.diceMode || gameState?.diceMode || gameState?.config?.diceMode || "AUTO");
+
+if (diceMode === "PHYSIQUE") {
+  sendSystemMessage(`🎲 Dé physique : ${myName} a choisi son sens. À l’hôte d’encoder le résultat.`);
   return;
 }
 
-// Mode AUTO : on lance directement
-const players = Object.values(playersData || {});
-const currentIdx = gameState.currentPlayerIndex || 0;
-const currentPlayer = players[currentIdx];
-if (!currentPlayer) return;
-
-executerLancerDe(currentPlayer, sens);
+executerLancerDe(currentPlayer, sens, null);
 
 
-        }
+  // ✅ MODE PHYSIQUE : on ne lance PAS ici.
+  // Le joueur choisit son sens, puis l’hôte encode le résultat du dé.
+  if (diceMode === 'PHYSIQUE') {
+    sendSystemMessage(`🎲 Dé physique : ${myName} a choisi son sens. À l’hôte de lancer et encoder le résultat.`);
+    return;
+  }
+
+  // ========== LANCER DÉ ==========
+async function rollDice() {
+  try { ... } catch { ... }
+
+  const players = Object.values(playersData || {});
+  const currentIdx = gameState.currentPlayerIndex || 0;
+  const currentPlayer = players[currentIdx];
+  if (!currentPlayer) return;
+
+  const isMyTurn = currentPlayer.id === myPlayerId;
+  const diceMode = gameConfig?.diceMode || 'AUTO';
+
+  // 🎲 Autorisation selon le mode de dé
+  if (diceMode === 'PHYSIQUE') { ... } else { ... }
+
+  // Vérifier si le joueur a déjà choisi son sens...
+  let monSens = null;
+  try { ... } catch { ... }
+
+  if (monSens === null) { ... }
+
+  let forced = null;
+  if (diceMode === 'PHYSIQUE') { ... }
+
+  executerLancerDe(currentPlayer, monSens, forced);
+}
+
+
+
         
         // Animer le passage sur chaque case (avec protection contre le blocage)
         async function animatePassingCases(startPos, steps, sens) {
