@@ -4605,22 +4605,22 @@ async function choisirSensEtLancer(sens) {
   const sensText = sens === 1 ? '➡️ Sens horaire' : '⬅️ Sens anti-horaire';
   sendSystemMessage(`🎯 ${myName} choisit ${sensText}`);
 
- const diceMode = (gameConfig?.diceMode || gameState?.diceMode || gameState?.config?.diceMode || "AUTO");
+const diceMode =
+  gameConfig?.diceMode ||
+  gameState?.diceMode ||
+  gameState?.config?.diceMode ||
+  "AUTO";
 
+// ✅ MODE PHYSIQUE : le joueur choisit le sens, POINT FINAL
 if (diceMode === "PHYSIQUE") {
-  sendSystemMessage(`🎲 Dé physique : ${myName} a choisi son sens. À l’hôte d’encoder le résultat.`);
-  return;
+  sendSystemMessage(
+    `🎲 Dé physique : ${myName} a choisi son sens. ⏳ À l’hôte d’encoder le résultat du dé.`
+  );
+  return; // ⛔ on ne lance PAS ici
 }
 
+// ✅ MODE AUTO : on lance directement
 executerLancerDe(currentPlayer, sens, null);
-
-
-  // ✅ MODE PHYSIQUE : on ne lance PAS ici.
-  // Le joueur choisit son sens, puis l’hôte encode le résultat du dé.
-  if (diceMode === 'PHYSIQUE') {
-    sendSystemMessage(`🎲 Dé physique : ${myName} a choisi son sens. À l’hôte de lancer et encoder le résultat.`);
-    return;
-  }
 
   // ========== LANCER DÉ ==========
 async function rollDice() {
