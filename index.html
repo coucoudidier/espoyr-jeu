@@ -4096,20 +4096,41 @@ async function choisirSensEtLancer(sens) {
 
   const diceMode = (gameConfig?.diceMode || gameState?.diceMode || gameState?.config?.diceMode || 'AUTO');
 
-  // MODE PHYSIQUE : le joueur choisit son sens, puis l'hôte encode le dé
-  if (diceMode === 'PHYSIQUE') {
-    sendSystemMessage(`🎲 Dé physique : ${myName} a choisi son sens. ⏳ L'hôte peut maintenant encoder le résultat.`);
+ // =========================
+// DROITS + SENS + LANCER
+// =========================
+if (diceMode === 'PHYSIQUE') {
+
+  // --- Joueur actif (non hôte) : il peut seulement choisir le sens ---
+  if (!isHost) {
+    if (!isMyTurn) return;              // pas ton tour -> rien
+    if (monSens === null) {             // ton tour et sens pas choisi -> demander
+      showSensChoiceModal();
+      return;
+    }
+    // sens déjà choisi -> attendre l'hôte
+    sendSystemMessage(`⏳ Attente : l'hôte doit encoder le résultat du dé physique.`);
     return;
   }
 
-  // MODE AUTO : on lance direct
-  const players = Object.values(playersData || {});
-  const currentIdx = (gameState.currentPlayerIndex ?? 0);
-  const currentPlayer = players[currentIdx];
-  if (!currentPlayer) return;
+  // --- Hôte : il encode le dé seulement si le joueur actif a choisi son sens ---
+  if (monSens === null) {
+    sendSystemMessage(`⏳ Attente : ${currentPlayer.name} doit d'abord choisir son sens (premier lancer).`);
+    return;
+  }
 
-  executerLancerDe(currentPlayer, sens, null);
+  const forced = await askPhysicalDiceValue();
+  if (forced == null) return;
+  executerLancerDe(currentPlayer, monSens, forced);
+  return;
 }
+
+// --- MODE AUTO ---
+if (!isMyTurn) return;
+if (monSens === null) { showSensChoiceModal(); return; }
+executerLancerDe(currentPlayer, monSens, null);
+return;
+
 
 
         
@@ -4555,20 +4576,13 @@ async function rollDice() {
     monSens = (gameState?.sensDeplacent || sensDeplacementGlobal || 1);
   }
 
-  // =========================
-  // MODE PHYSIQUE
-  // =========================
-  if (diceMode === 'PHYSIQUE') {
 
-    // --- Joueur (non hôte) ---
-    if (!isHost) {
-      if (!isMyTurn) return; // pas ton tour => rien
 
-      // Ton tour et sens pas choisi => tu choisis ton sens
-      if (monSens === null) {
-        showSensChoiceModal();
-        return;
-      }
+
+
+
+
+        
 
       // Ton tour mais sens déjà choisi => tu attends l'hôte
       sendSystemMessage(`⏳ Attente : l'hôte doit encoder le résultat du dé physique.`);
