@@ -11692,26 +11692,7 @@ function mettreAJourIndicateurSens() {
     }
 }
 
-// ============================================================
-// INITIALISATION : à appeler après subscribeToGame()
-// ============================================================
 
-function initSystemeDe() {
-    const modeDe = gameConfig.diceMode || 'AUTO';
-
-    if (modeDe === 'PHYSIQUE') {
-        // Hôte : écouter les demandes de dé des autres joueurs
-        if (isHost) {
-            ecouterDemandesDe();
-        }
-        // Tous les joueurs : écouter les réponses de l'hôte
-        ecouterReponsesDe();
-
-        console.log('🎲 Mode DÉ PHYSIQUE activé');
-    } else {
-        console.log('🎲 Mode DÉ AUTOMATIQUE activé');
-    }
-}
 
 
 
