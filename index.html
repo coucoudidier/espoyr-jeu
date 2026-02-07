@@ -4516,9 +4516,7 @@ const currentPlayer = players[currentIdx];
 if (!currentPlayer) return;
 
 const isMyTurn = currentPlayer.id === myPlayerId;
-const diceMode = (gameConfig?.diceMode || gameState?.diceMode || 'AUTO');
-
-       
+const diceMode = (gameConfig?.diceMode || gameState?.diceMode || gameState?.config?.diceMode || 'AUTO');     
 
 
 
@@ -4589,75 +4587,7 @@ return;
 
             
             // Lancer le dé avec le sens choisi
-           let forced = null;
 
-if (diceMode === 'PHYSIQUE') {
-  // seul l'hôte encode le résultat du dé
-  if (!isHost) return;
-  forced = await askPhysicalDiceValue();
-  if (forced == null) return; // annulation
-}
-
-executerLancerDe(currentPlayer, monSens, forced);
-
-        }
-        
-        // Modal de choix du sens pour le joueur
-        function showSensChoiceModal() {
-            showModal(`
-                <h3>🎯 Choisis ton sens de déplacement</h3>
-                <p style="font-size: 0.9rem; color: var(--gray); margin-bottom: 15px;">
-                    Pour ce premier lancer, dans quel sens veux-tu te déplacer ?
-                </p>
-                
-                <div style="display: flex; gap: 15px; justify-content: center;">
-                    <div onclick="choisirSensEtLancer(1)" style="cursor: pointer; background: #dcfce7; padding: 20px; border-radius: 12px; text-align: center; flex: 1; border: 2px solid transparent; transition: all 0.2s;" onmouseover="this.style.borderColor='#059669'" onmouseout="this.style.borderColor='transparent'">
-                        <p style="font-size: 2rem; margin: 0;">➡️</p>
-                        <p style="margin: 10px 0 0 0; font-weight: bold; color: #059669;">Sens horaire</p>
-                        <p style="margin: 4px 0 0 0; font-size: 0.8rem; color: #6b7280;">1 → 2 → 3 → ...</p>
-                    </div>
-                    
-                    <div onclick="choisirSensEtLancer(-1)" style="cursor: pointer; background: #dbeafe; padding: 20px; border-radius: 12px; text-align: center; flex: 1; border: 2px solid transparent; transition: all 0.2s;" onmouseover="this.style.borderColor='#2563eb'" onmouseout="this.style.borderColor='transparent'">
-                        <p style="font-size: 2rem; margin: 0;">⬅️</p>
-                        <p style="margin: 10px 0 0 0; font-weight: bold; color: #2563eb;">Sens anti-horaire</p>
-                        <p style="margin: 4px 0 0 0; font-size: 0.8rem; color: #6b7280;">... → 3 → 2 → 1</p>
-                    </div>
-                </div>
-                
-                <p style="font-size: 0.8rem; color: #6b7280; margin-top: 15px; text-align: center;">
-                    💡 Tu pourras changer de sens à tout moment via le bouton ⚙️ Config
-                </p>
-            `, ``);
-        }
-        
-        async function choisirSensEtLancer(sens) {
-            closeModal();
-            
-            // Sauvegarder le sens choisi pour ce joueur
-            await gameRef.child(`sensJoueurs/${myPlayerId}`).set(sens);
-            
-            const sensText = sens === 1 ? '➡️ Sens horaire' : '⬅️ Sens anti-horaire';
-            sendSystemMessage(`🎯 ${myName} choisit ${sensText}`);
-            
-           // En mode PHYSIQUE : le joueur choisit le sens, mais NE lance PAS.
-// C'est l'hôte qui cliquera ensuite "Lancer" et encodera 1..6.
-const diceMode = (gameConfig?.diceMode || gameState?.diceMode || 'AUTO');
-
-
-if (diceMode === 'PHYSIQUE') {
-  sendSystemMessage(`🎲 Dé physique : ${myName} a choisi son sens. L'hôte peut maintenant lancer et encoder le résultat.`);
-  return;
-}
-
-// Mode AUTO : on peut lancer tout de suite
-const players = Object.values(playersData || {});
-const currentIdx = gameState.currentPlayerIndex || 0;
-const currentPlayer = players[currentIdx];
-if (!currentPlayer) return;
-
-executerLancerDe(currentPlayer, sens, null);
-
-        }
         
         // Animer le passage sur chaque case (avec protection contre le blocage)
         async function animatePassingCases(startPos, steps, sens) {
@@ -4702,7 +4632,12 @@ executerLancerDe(currentPlayer, sens, null);
                     clearInterval(rollInterval);
                     
                     // Utiliser le RNG seedé pour reproductibilité
-                    const result = (forced != null) ? forced : rollDiceValue();
+                const result = (forced != null) ? Number(forced) : rollDiceValue();
+                        if (!Number.isInteger(result) || result < 1 || result > 6) {
+                  console.warn('Résultat dé invalide:', result, 'forced=', forced);
+                          return;
+                        }
+                    
                     diceEl.textContent = faces[result - 1];
                     diceEl.classList.remove('rolling');
                     
