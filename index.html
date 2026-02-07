@@ -4543,7 +4543,7 @@ function getSensJoueur(idJoueur) {
 
 // ─── Emojis faces du dé ────────────────────────────────────
 
-
+const FACES_DE = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 
 function emojiDe(val) {
     return FACES_DE[val] || '🎲';
@@ -11545,6 +11545,9 @@ function demanderValeurDePhysique(nomJoueur) {
 // L'hôte écoute `state/demandeDe` : quand un joueur non-hôte
 // clique sur "Lancer", une demande est créée dans Firebase.
 // L'hôte reçoit alors un modal pour encoder la valeur.
+
+
+        
 
 function ecouterDemandesDe() {
     if (!isHost || !gameRef) return;
