@@ -5083,12 +5083,21 @@ function mettreAJourIndicateurSens() {
 // ============================================================
 
 function initSystemeDe() {
+    if (!isHost && !gameRef) {
+        setTimeout(initSystemeDe, 2000);
+        return;
+    }
     if (isHost) {
         ecouterDemandesDe();
     }
     ecouterReponsesDe();
-    console.log('🎲 Système de dé initialisé (mode: ' + (gameConfig.diceMode || 'AUTO') + ')');
+    console.log('🎲 Système de dé initialisé (isHost: ' + isHost + ', mode: ' + (gameConfig.diceMode || 'AUTO') + ')');
 }
+```
+
+Recharge, crée une partie en mode physique, et vérifie que la console affiche :
+```
+🎲 Système de dé initialisé (isHost: true, mode: PHYSIQUE)
       
         
         
