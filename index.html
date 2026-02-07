@@ -3909,7 +3909,13 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                     loadComptabiliteFromFirebase();
                     showScreen('gameScreen');
                 }
-                updateGameUI();
+              updateGameUI();
+                if (!window._diceListenersInit) {
+                    window._diceListenersInit = true;
+                    ecouterDemandesDe();
+                    ecouterReponsesDe();
+                    console.log('🎲 Écouteurs de dé activés');
+                }
             });
             
             // Joueurs
