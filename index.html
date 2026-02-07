@@ -4550,7 +4550,7 @@ return;
             }).join('');
         }
         
-// ========== LANCER DÉ ==========
+/// ========== LANCER DÉ ==========
 async function rollDice() {
   // Garde-fous
   if (!gameRef) { alert("gameRef manquant"); return; }
@@ -4563,10 +4563,10 @@ async function rollDice() {
 
   const isMyTurn = (currentPlayer.id === myPlayerId);
 
-  // IMPORTANT : diceMode peut venir de plusieurs endroits selon tes versions
+  // diceMode: 'AUTO' ou 'PHYSIQUE'
   const diceMode = (gameConfig?.diceMode || gameState?.diceMode || gameState?.config?.diceMode || 'AUTO');
 
-  // Lire le sens du JOUEUR ACTIF
+  // Lire le sens du JOUEUR ACTIF (celui dont c'est le tour)
   let monSens = null;
   try {
     const sensSnap = await gameRef.child(`sensJoueurs/${currentPlayer.id}`).once('value');
@@ -4576,29 +4576,33 @@ async function rollDice() {
     monSens = (gameState?.sensDeplacent || sensDeplacementGlobal || 1);
   }
 
-
-
-
-
-
-
-        
-
-      // Ton tour mais sens déjà choisi => tu attends l'hôte
-      sendSystemMessage(`⏳ Attente : l'hôte doit encoder le résultat du dé physique.`);
+  // -------------------------------------------------------
+  // 1) SENS : toujours demandé au JOUEUR ACTIF en premier
+  // -------------------------------------------------------
+  if (monSens === null) {
+    if (!isMyTurn) {
+      sendSystemMessage(`⏳ Attente : ${currentPlayer.name || 'le joueur'} doit choisir son sens.`);
       return;
     }
+    showSensChoiceModal(); // le joueur choisit horaire/anti-horaire
+    return;
+  }
 
-    // --- Hôte ---
-    // L'hôte ne peut encoder que si le joueur actif a choisi son sens
-    if (monSens === null) {
-      sendSystemMessage(`⏳ Attente : ${currentPlayer.name || 'le joueur'} doit d'abord choisir son sens (premier lancer).`);
+  // -------------------------------------------------------
+  // 2) Ensuite, on lance selon le mode
+  // -------------------------------------------------------
+
+  // ===== MODE PHYSIQUE : l'hôte encode 1..6 =====
+  if (diceMode === 'PHYSIQUE') {
+    // Si je ne suis pas l'hôte, j'attends
+    if (!isHost) {
+      sendSystemMessage(`⏳ Attente : l'hôte doit encoder le résultat du dé physique.`);
       return;
     }
 
     // L'hôte encode 1..6
     let forced = await askPhysicalDiceValue();
-    if (forced == null) return;
+    if (forced == null) return; // annulation
 
     forced = Number(forced);
     if (!Number.isInteger(forced) || forced < 1 || forced > 6) {
@@ -4610,125 +4614,11 @@ async function rollDice() {
     return;
   }
 
-  // =========================
-  // MODE AUTO
-  // =========================
+  // ===== MODE AUTO : seul le joueur actif lance =====
   if (!isMyTurn) return;
-
-  if (monSens === null) {
-    showSensChoiceModal();
-    return;
-  }
-
   executerLancerDe(currentPlayer, monSens, null);
 }
-       
-            // Lancer le dé avec le sens choisi
 
-        
-        // Animer le passage sur chaque case (avec protection contre le blocage)
-        async function animatePassingCases(startPos, steps, sens) {
-            try {
-                const casesCount = CASES.length;
-                for (let i = 1; i <= steps; i++) {
-                    let passPos;
-                    if (sens === 1) {
-                        passPos = (startPos + i) % casesCount;
-                    } else {
-                        passPos = (startPos - i + casesCount) % casesCount;
-                    }
-                    
-                    // Trouver l'élément de la case
-                    const caseEl = document.querySelector(`[data-case-id="${passPos}"]`);
-                    if (caseEl) {
-                        caseEl.classList.add('passing');
-                        // Retirer la classe après l'animation
-                        setTimeout(() => caseEl.classList.remove('passing'), 150);
-                    }
-                    
-                    // Attendre entre chaque case
-                    await new Promise(resolve => setTimeout(resolve, 120));
-                }
-            } catch (e) {
-                console.error('Erreur animation passage:', e);
-            }
-        }
-        
-        async function executerLancerDe(currentPlayer, sens, forced = null) {
-            const diceEl = document.getElementById('dice');
-            const diceBtn = document.getElementById('rollDiceBtn');
-            diceBtn.disabled = true;
-            diceEl.classList.add('rolling');
-            
-            const faces = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
-            let rolls = 0;
-            const rollInterval = setInterval(async () => {
-                diceEl.textContent = faces[Math.floor(Math.random() * 6)];
-                rolls++;
-                if (rolls > 15) {
-                    clearInterval(rollInterval);
-                    
-                    // Utiliser le RNG seedé pour reproductibilité
-                const result = (forced != null) ? Number(forced) : rollDiceValue();
-                        if (!Number.isInteger(result) || result < 1 || result > 6) {
-                  console.warn('Résultat dé invalide:', result, 'forced=', forced);
-                          return;
-                        }
-                    
-                    diceEl.textContent = faces[result - 1];
-                    diceEl.classList.remove('rolling');
-                    
-                    // Calculer la nouvelle position selon le sens du joueur
-                    let newPosition;
-                    let passedStart = false;
-                    
-                    if (sens === 1) {
-                        // Sens horaire : 0 → 1 → 2 → ... → 23 → 0
-                        newPosition = (currentPlayer.position + result) % CASES.length;
-                        passedStart = (currentPlayer.position + result) >= CASES.length;
-                    } else {
-                        // Sens anti-horaire : 0 → 23 → 22 → ... → 1 → 0
-                        newPosition = (currentPlayer.position - result + CASES.length) % CASES.length;
-                        // Passage par départ si on passe en dessous de 0 (position initiale)
-                        passedStart = (currentPlayer.position - result) < 0;
-                    }
-                    
-                    // *** ANIMATION : Passer sur chaque case ***
-                    await animatePassingCases(currentPlayer.position, result, sens);
-                    
-                    // LOG EVENT: ROLL_DICE
-                    const ledgerIds = [];
-                    
-                    // *** BONUS AAA : Si membre, création de 50# dans le Pot AAA ***
-                    const isMembre = COMPTABILITE.potAAA.membres?.includes(myPlayerId);
-                    if (isMembre) {
-                        const ecriture = await comptaBonusAAALancer(myPlayerId);
-                        if (ecriture?.ledgerEntryId) ledgerIds.push(ecriture.ledgerEntryId);
-                        sendSystemMessage(`💚 +50# créés dans le Pot AAA (bonus membre)`);
-                    }
-                    
-                    logEvent('ROLL_DICE', myPlayerId, {
-                        diceValue: result,
-                        fromPosition: currentPlayer.position,
-                        toPosition: newPosition,
-                        passedStart,
-                        sens,
-                        bonusAAA: isMembre ? 50 : 0
-                    }, ledgerIds);
-                    
-                    await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/position`).set(newPosition);
-                    
-                    const sensIcon = sens === 1 ? '➡️' : '⬅️';
-                    sendSystemMessage(`🎲 ${myName} fait ${result} ${sensIcon} ${CASES[newPosition].name}`);
-                    
-                    if (passedStart) {
-                        await handleSalary(currentPlayer, result);
-                    }
-                    
-                    setTimeout(() => handleLanding(newPosition), 300);
-                }
-            }, 80);
-        }
         
         // Bonus AAA : 50# créés dans le Pot à chaque lancer d'un membre
         async function comptaBonusAAALancer(joueurId) {
