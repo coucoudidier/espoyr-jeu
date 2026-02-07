@@ -11552,7 +11552,7 @@ function demanderValeurDePhysique(nomJoueur) {
         
 
 function ecouterDemandesDe() {
-    if (!isHost || !gameRef) return;
+    if (!gameRef) return;
 
     gameRef.child('state/demandeDe').on('value', async (snap) => {
         if (!snap.exists()) return;
