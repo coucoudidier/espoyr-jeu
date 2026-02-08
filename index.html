@@ -4887,13 +4887,7 @@ async function effectuerDeplacement(joueur, valeurDe, sens) {
 
     // ── Traiter la case d'arrivée ──
     // Appeler handleCaseAction si elle existe dans le code principal
-    if (typeof handleCaseAction === 'function') {
-        await handleCaseAction(joueur.id, posArrivee, valeurDe);
-    } else {
-        console.log(`📍 ${joueur.name} arrive sur la case ${posArrivee} (${infoCase?.type})`);
-        // Si handleCaseAction n'existe pas encore, décommente la ligne suivante :
-        // if (typeof nextTurn === 'function') await nextTurn();
-    }
+   setTimeout(() => handleLanding(posArrivee), 300);
 }
 
 // ============================================================
@@ -11300,104 +11294,12 @@ async function rollDice() {
     }
 }
 
-// ============================================================
-// CHOIX DU SENS (premier lancer uniquement)
-// ============================================================
 
-function choisirSens(joueur, valeurDe) {
-    return new Promise((resolve) => {
-        // Si c'est un bot, choisir aléatoirement
-        if (joueur.isBot) {
-            const sens = Math.random() > 0.5 ? 1 : -1;
-            confirmerSens(joueur, valeurDe, sens).then(resolve);
-            return;
-        }
-
-        // Si c'est le joueur local OU l'hôte qui gère un joueur absent
-        const peutChoisir = (joueur.id === myPlayerId) ||
-                            (isHost && isAbsent(joueur));
-
-        if (!peutChoisir) {
-            // Attendre que le joueur choisisse (via écouteur Firebase)
-            document.getElementById('diceMessage').textContent =
-                `⏳ ${joueur.name} choisit son sens de déplacement...`;
-
-            const ecouteur = gameRef.child(`players/${joueur.id}/sensDeplacement`)
-                .on('value', (snap) => {
-                    if (snap.val() === 1 || snap.val() === -1) {
-                        gameRef.child(`players/${joueur.id}/sensDeplacement`).off('value', ecouteur);
-                        // Le sens est choisi, continuer le déplacement
-                        effectuerDeplacement(joueur, valeurDe, snap.val()).then(resolve);
-                    }
-                });
-            return;
-        }
-
-        // Afficher le modal de choix
-        const posActuelle = joueur.position || 0;
-        const caseHoraire = calculerNouvellePosition(posActuelle, valeurDe, 1);
-        const caseAntiHoraire = calculerNouvellePosition(posActuelle, valeurDe, -1);
-        const nomHoraire = CASES[caseHoraire]?.name || `Case ${caseHoraire}`;
-        const nomAntiHoraire = CASES[caseAntiHoraire]?.name || `Case ${caseAntiHoraire}`;
-
-        showModal(`
-            <h3>🧭 Choisis ton sens de déplacement</h3>
-            <p style="color: var(--gray); font-size: 0.9rem; margin-bottom: 12px;">
-                ${joueur.avatar} <strong>${joueur.name}</strong> — Premier lancer : ${emojiDe(valeurDe)} (${valeurDe})
-            </p>
-            <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 15px;">
-                ⚠️ Ce choix est <strong>définitif</strong> pour toute la partie !
-            </p>
-
-            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-                <div onclick="window.__callbackChoixSens(1)"
-                     style="flex:1; min-width: 140px; background: #dbeafe; border: 3px solid #3b82f6;
-                            border-radius: 12px; padding: 15px; cursor: pointer; text-align: center;
-                            transition: all 0.2s;"
-                     onmouseover="this.style.transform='scale(1.03)'"
-                     onmouseout="this.style.transform='scale(1)'">
-                    <p style="font-size: 1.5rem; margin: 0;">➡️</p>
-                    <p style="font-weight: bold; margin: 6px 0 2px 0;">Horaire</p>
-                    <p style="font-size: 0.8rem; color: #6b7280;">
-                        → case ${caseHoraire} : ${CASES[caseHoraire]?.icon || ''} ${nomHoraire}
-                    </p>
-                </div>
-
-                <div onclick="window.__callbackChoixSens(-1)"
-                     style="flex:1; min-width: 140px; background: #fef3c7; border: 3px solid #f59e0b;
-                            border-radius: 12px; padding: 15px; cursor: pointer; text-align: center;
-                            transition: all 0.2s;"
-                     onmouseover="this.style.transform='scale(1.03)'"
-                     onmouseout="this.style.transform='scale(1)'">
-                    <p style="font-size: 1.5rem; margin: 0;">⬅️</p>
-                    <p style="font-weight: bold; margin: 6px 0 2px 0;">Anti-horaire</p>
-                    <p style="font-size: 0.8rem; color: #6b7280;">
-                        → case ${caseAntiHoraire} : ${CASES[caseAntiHoraire]?.icon || ''} ${nomAntiHoraire}
-                    </p>
-                </div>
-            </div>
-        `, '');
-
-        // Callback global pour le modal
-        window.__callbackChoixSens = (sens) => {
-            closeModal();
-            window.__callbackChoixSens = null;
-            confirmerSens(joueur, valeurDe, sens).then(resolve);
         };
     });
 }
 
-
-
-
-
-
-
-
-
-
-
-        
+       
         
     </script>
 </body>
