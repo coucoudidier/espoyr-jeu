@@ -4023,7 +4023,7 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
         
         // ========== UI JOUEURS ==========
         function updatePlayersUI() {
-            const playerArray = Object.values(playersData).sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+            const playerArray = getOrderedPlayers()
             
             // Lobby
             const lobbyEl = document.getElementById('lobbyPlayers');
@@ -4130,6 +4130,19 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             } catch (e) {
                 console.warn('⚠️ Erreur init capital banque:', e);
             }
+
+// Mélanger l'ordre des joueurs
+        const joueurs = Object.keys(playersData);
+        const melange = joueurs.sort(() => Math.random() - 0.5);
+        const updates = {};
+        melange.forEach((id, index) => {
+            updates[`players/${id}/playOrder`] = index;
+        });
+        await gameRef.update(updates);
+
+
+
+         
             
             // Sauvegarder la comptabilité mise à jour
             await syncComptabiliteToFirebase();
@@ -4627,7 +4640,18 @@ function aTraverseLaCase0(posDepart, posArrivee, sens) {
     }
     return false;
 }
+     // ============================================================
+// ordre des joueurs
+// ============================================================
 
+function getOrderedPlayers() {
+    return Object.values(playersData)
+        .sort((a, b) => (a.playOrder ?? a.joinedAt ?? 0) - (b.playOrder ?? b.joinedAt ?? 0));
+}
+
+
+
+ 
 // ============================================================
 // FLUX PRINCIPAL : rollDice()
 // ============================================================
@@ -4638,8 +4662,7 @@ function aTraverseLaCase0(posDepart, posArrivee, sens) {
 async function rollDice() {
     if (!gameState || !gameRef) return;
 
-    const listeJoueurs = Object.values(playersData)
-        .sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+    const listeJoueurs = getOrderedPlayers()
     const indexActuel = gameState.currentPlayerIndex || 0;
     const joueurActuel = listeJoueurs[indexActuel];
 
@@ -4981,8 +5004,7 @@ function ecouterReponsesDe() {
         if (!reponse || !reponse.playerId || !reponse.valeur) return;
 
         // C'est pertinent uniquement si c'est le tour de ce joueur
-        const listeJoueurs = Object.values(playersData)
-            .sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+        const listeJoueurs = getOrderedPlayers()
         const indexActuel = gameState?.currentPlayerIndex || 0;
         const joueurActuel = listeJoueurs[indexActuel];
 
@@ -5053,8 +5075,7 @@ function mettreAJourIndicateurSens() {
     const el = document.getElementById('sensIndicator');
     if (!el || !gameState) return;
 
-    const listeJoueurs = Object.values(playersData)
-        .sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+    const listeJoueurs = getOrderedPlayers()
     const indexActuel = gameState.currentPlayerIndex || 0;
     const joueurActuel = listeJoueurs[indexActuel];
 
