@@ -4655,6 +4655,11 @@ async function rollDice() {
     if (btnLancer) btnLancer.disabled = true;
 
     try {
+            // Choix du sens AVANT le lancer
+        if (!joueurASens(joueurActuel.id)) {
+            await choisirSens(joueurActuel, null);
+        }
+        
         // ── Déterminer la valeur du dé ──
         let valeurDe;
         const modeDe = gameConfig.diceMode || 'AUTO';
@@ -4689,11 +4694,7 @@ async function rollDice() {
         document.getElementById('diceMessage').textContent =
             `${joueurActuel.avatar} ${joueurActuel.name} : ${emojiDe(valeurDe)} (${valeurDe})`;
 
-        // ── Premier lancer ? → choix du sens ──
-        if (!joueurASens(joueurActuel.id)) {
-            await choisirSens(joueurActuel, valeurDe);
-            return;  // choisirSens gère la suite du déplacement
-        }
+      
 
         // ── Déplacement normal ──
         const sens = getSensJoueur(joueurActuel.id);
@@ -4815,8 +4816,10 @@ async function confirmerSens(joueur, valeurDe, sens) {
         position: joueur.position || 0
     });
 
-    // Enchaîner le déplacement
-    await effectuerDeplacement(joueur, valeurDe, sens);
+    // Enchaîner le déplacement seulement si on a une valeur de dé
+        if (valeurDe !== null && valeurDe !== undefined) {
+            await effectuerDeplacement(joueur, valeurDe, sens);
+        }
 }
 
 // ============================================================
