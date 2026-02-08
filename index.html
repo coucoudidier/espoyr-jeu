@@ -3512,7 +3512,7 @@ activiteId: actId
                         <button class="btn btn-warning" onclick="selectGameMode('DICE_HOST')">  🎲 Dé physique (maître du jeu)</button>
 
                     </div>
-                    <p style="font-size: 0.85rem; color: var(--gray); margin-top: 12px; text-align:center;">
+                    <p style="font-size: 0.85rem; color: var(--gray); margin-top: 12px; text-align:center;rollDiceBtn">
                         Les robots restent <strong>optionnels</strong> dans les deux modes.
                     </p>
                 `, ``);
@@ -3529,7 +3529,7 @@ activiteId: actId
   let diceMode = 'AUTO';
 
   // 🎲 Si bouton "dé physique"
-  if (mode === 'DICE_HOST') {
+  if (mode === 'DICE_HOST') {rollDiceBtn
     diceMode = 'PHYSIQUE';
   }
 
@@ -3551,7 +3551,7 @@ activiteId: actId
             return Array.from({length: 6}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
         }
         
-        // Avatar selection
+        // Avatar selectionrollDiceBtn
         document.querySelectorAll('.avatar-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 document.querySelectorAll('.avatar-btn').forEach(b => b.classList.remove('selected'));
@@ -5417,7 +5417,7 @@ function initSystemeDe() {
         
         // ========== PHASES ==========
         async function checkPhaseTransition() {
-            const players = Object.values(playersData);
+            const players = getOrderedPlayers();
             const phase = gameState.phase || 1;
             const toursComplets = gameState.toursComplets || 0;
             
@@ -6283,7 +6283,7 @@ function initSystemeDe() {
             const emprunt = caisse.emprunt || 0;
             
             // Calculer la limite d'emprunt
-            const players = Object.values(playersData);
+        const players = getOrderedPlayers();
             const nbJoueurs = players.length || 1;
             let masseMonetaire = 0;
             players.forEach(p => {
