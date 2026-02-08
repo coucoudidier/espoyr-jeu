@@ -8042,22 +8042,21 @@ function initSystemeDe() {
             const players = Object.values(playersData);
             
             // Générer les lignes joueurs
-            const playerRows = players.map(p => {
+         const playerRows = players.map(p => {
                 const bj = bilan.bilansJoueurs[p.id] || {};
-                const euro = bj.actif?.euro || 0;
-                const espoyr = bj.actif?.espoyr || 0;
-                const activites = bj.actif?.activites || 0;
-                const dette = bj.passif?.emprunt || 0;
-                const net = bj.net || 0;
+                const euro = Math.round((bj.actif?.euro || 0) * 100) / 100;
+                const espoyr = Math.round((bj.actif?.espoyr || 0) * 100) / 100;
+                const activites = Math.round((bj.actif?.activites || 0) * 100) / 100;
+                const dette = Math.round((bj.passif?.emprunt || 0) * 100) / 100;
+                const net = Math.round((bj.net || 0) * 100) / 100;
                 
                 return `
                     <tr>
-                        <td>${p.avatar} ${p.name}</td>
-                        <td class="actif">${euro}€</td>
-                        <td class="actif">${espoyr}#</td>
-                        <td class="actif">${activites}€</td>
-                        <td class="passif">${dette}€</td>
-                        <td style="font-weight:bold;">${net}€</td>
+                        <td>${Math.round(bilan.actif.caisseEuro * 100) / 100}€</td>
+                        <td>${Math.round(bilan.actif.caisseEspoyr * 100) / 100}#</td>
+                        <td>${Math.round(bilan.actif.activites * 100) / 100}€</td>
+                        <td>${Math.round(bilan.passif.emprunts * 100) / 100}€</td>
+                        <td>${Math.round((bilan.actif.total - bilan.passif.emprunts) * 100) / 100}€</td>
                     </tr>
                 `;
             }).join('');
@@ -8186,7 +8185,7 @@ function initSystemeDe() {
             
             // Vérification équilibre
             const equilibreHtml = Math.abs(bilan.equilibre) > 1 ? 
-                `<p style="color: #dc2626; font-size: 0.8rem;">⚠️ Déséquilibre: ${bilan.equilibre}€</p>` : 
+                `<p style="color: #dc2626; font-size: 0.8rem;">⚠️ Déséquilibre: ${Math.round(bilan.equilibre * 100) / 100}€</p>`
                 `<p style="color: #059669; font-size: 0.8rem;">✅ Bilan équilibré</p>`;
             
             showModal(`
