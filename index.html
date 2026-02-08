@@ -4495,7 +4495,7 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                                     const idx = players.findIndex(pl => pl.id === p.id);
                                    const playerSens = p.sensDeplacement || sensJoueurs[p.id] || 1;
                                     const arrowSymbol = playerSens === 1 ? '▶' : '◀';
-                                   return `<div class="player-marker" style="background: ${PLAYER_COLORS[idx]}; display: flex; align-items: center; justify-content: center; font-size: 12px; color: white; font-weight: bold;" title="${p.name} (${playerSens === 1 ? 'horaire' : 'anti-horaire'})">${p.avatar || arrowSymbol}${arrowSymbol}</div>`;
+                                   return `<div style="display: flex; flex-direction: column; align-items: center;"><div class="player-marker" style="background: ${PLAYER_COLORS[idx]};" title="${p.name}"></div><span style="font-size: 10px; line-height: 1;">${arrowSymbol}</span></div>`;
                                 }).join('')}
                             </div>
                         ` : ''}
