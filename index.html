@@ -1448,7 +1448,7 @@ function isAbsent(player) {
                 }
             }
             
-            return `  4400:  const currentPlayer = players[currentIdx];
+            return ` 
                 <div style="background: white; border: 2px solid #e5e7eb; border-radius: 8px; padding: 12px; margin: 10px 0;">
                     <div style="background: #f3f4f6; padding: 8px; margin: -12px -12px 10px -12px; border-radius: 6px 6px 0 0;">
                         <p style="margin: 0; font-weight: bold; text-align: center;">📄 ${titre}</p>
@@ -1553,7 +1553,7 @@ function isAbsent(player) {
             COMPTABILITE.numeroEcriture++;
             const ecriture = {
                 id: COMPTABILITE.numeroEcriture,
-                timestamp: new Date().toISOString(),  4400:  const currentPlayer = players[currentIdx];
+                timestamp: new Date().toISOString(), 
                 tour: gameState?.turn || 1,
                 phase: gameState?.phase || 1,
                 joueurId, joueurNom: playersData[joueurId]?.name || joueurId,
@@ -1572,7 +1572,7 @@ function isAbsent(player) {
             if (montantEuro > 0) {
                 const ledgerEntryEUR = {
                     ledgerEntryId: ledgerEntryId + '_EUR',
-                    ts: ecriture.timestamp,  4400:  const currentPlayer = players[currentIdx];
+                    ts: ecriture.timestamp, 
                     turn: ecriture.tour,
                     phase: ecriture.phase,
                     type: 'COMPTA',
