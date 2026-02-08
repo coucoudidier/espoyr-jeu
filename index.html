@@ -1753,7 +1753,7 @@ function isAbsent(player) {
         
         // Calculer le bilan complet de l'économie
         function calculerBilan() {
-            const players = Object.values(playersData);
+            cconst players = getOrderedPlayers();
             const tour = gameState?.turn || 1;
             const phase = gameState?.phase || 1;
             
