@@ -4317,7 +4317,7 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                 joinedAt: firebase.database.ServerValue.TIMESTAMP,
                     isConnected: true,
                     lastSeen: firebase.database.ServerValue.TIMESTAMP,
-                    secretHash: secretHash
+                  secretHash: 'bot'
             });
             
             // Si le profil est membre AAA, l'ajouter à la liste comptable
@@ -4676,7 +4676,7 @@ async function rollDice() {
 
     // ── Seul le joueur actif (ou l'hôte pour un bot) peut lancer ──
     const estMonTour = (joueurActuel.id === myPlayerId);
-    const estTourBot = !!joueurActuel.isBot;
+    c
 
     if (!estMonTour && !(isHost && estTourBot)) return;
 
