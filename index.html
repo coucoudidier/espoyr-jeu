@@ -4493,9 +4493,9 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                             <div class="players-on-case">
                                 ${playersHere.map(p => {
                                     const idx = players.findIndex(pl => pl.id === p.id);
-                                    const playerSens = sensJoueurs[p.id] || 1;
+                                   const playerSens = p.sensDeplacement || sensJoueurs[p.id] || 1;
                                     const arrowSymbol = playerSens === 1 ? '▶' : '◀';
-                                    return `<div class="player-marker" style="background: ${PLAYER_COLORS[idx]}; display: flex; align-items: center; justify-content: center; font-size: 12px; color: white; font-weight: bold;" title="${p.name} (${playerSens === 1 ? 'horaire' : 'anti-horaire'})">${arrowSymbol}</div>`;
+                                   return `<div class="player-marker" style="background: ${PLAYER_COLORS[idx]}; display: flex; align-items: center; justify-content: center; font-size: 12px; color: white; font-weight: bold;" title="${p.name} (${playerSens === 1 ? 'horaire' : 'anti-horaire'})">${p.avatar || arrowSymbol}${arrowSymbol}</div>`;
                                 }).join('')}
                             </div>
                         ` : ''}
@@ -5000,13 +5000,9 @@ function ecouterReponsesDe() {
         document.getElementById('diceMessage').textContent =
             `${joueurActuel.avatar} ${joueurActuel.name} : ${emojiDe(valeurDe)} (${valeurDe})`;
 
-        // Choix du sens si c'est le premier lancer
-        if (!joueurASens(joueurActuel.id)) {
-            await choisirSens(joueurActuel, valeurDe);
-        } else {
-            const sens = getSensJoueur(joueurActuel.id);
-            await effectuerDeplacement(joueurActuel, valeurDe, sens);
-        }
+       // Le sens a déjà été choisi avant le lancer
+        const sens = getSensJoueur(joueurActuel.id);
+        await effectuerDeplacement(joueurActuel, valeurDe, sens);
 
         // Nettoyer la réponse traitée
         try { await gameRef.child('state/reponseDe').remove(); } catch(e) {}
@@ -11110,192 +11106,7 @@ function initSystemeDe() {
             }
         }
 
-        // ============================================================
-
-const NB_CASES = CASES.length;  // 23
-
-// ─── Utilitaires ───────────────────────────────────────────
-
-/** Calcule la nouvelle position après un déplacement de `pas` cases */
-function calculerNouvellePosition(posActuelle, pas, sens) {
-    // sens = 1 (horaire, croissant) ou -1 (anti-horaire, décroissant)
-    return ((posActuelle + pas * sens) % NB_CASES + NB_CASES) % NB_CASES;
-}
-
-/** Vérifie si le joueur a déjà un sens enregistré */
-function joueurASens(idJoueur) {
-    const j = playersData[idJoueur];
-    return j && (j.sensDeplacement === 1 || j.sensDeplacement === -1);
-}
-
-/** Retourne le sens enregistré du joueur (1 ou -1), ou null */
-function getSensJoueur(idJoueur) {
-    const j = playersData[idJoueur];
-    if (!j) return null;
-    const s = j.sensDeplacement;
-    return (s === 1 || s === -1) ? s : null;
-}
-
-// ─── Emojis faces du dé ────────────────────────────────────
-
-
-
-function emojiDe(val) {
-    return FACES_DE[val] || '🎲';
-}
-   
-
-// ─── Animation dé virtuel (cosmétique) ─────────────────────
-
-function animerDe(valFinale) {
-    return new Promise(resolve => {
-        const elDe = document.getElementById('dice');
-        if (!elDe) { resolve(); return; }
-
-        elDe.classList.add('rolling');
-        let compteur = 0;
-        const maxTicks = 12;
-
-        const intervalle = setInterval(() => {
-            elDe.textContent = emojiDe(Math.floor(Math.random() * 6) + 1);
-            compteur++;
-            if (compteur >= maxTicks) {
-                clearInterval(intervalle);
-                elDe.classList.remove('rolling');
-                elDe.textContent = emojiDe(valFinale);
-                resolve();
-            }
-        }, 80);
-    });
-}
-
-// ─── Animation déplacement case par case ───────────────────
-
-function animerDeplacement(idJoueur, posDepart, posArrivee, sens) {
-    return new Promise(resolve => {
-        const etapes = [];
-        let pos = posDepart;
-
-        // Construire la liste des cases traversées
-        while (pos !== posArrivee) {
-            pos = ((pos + sens) % NB_CASES + NB_CASES) % NB_CASES;
-            etapes.push(pos);
-        }
-
-        if (etapes.length === 0) { resolve(); return; }
-
-        let i = 0;
-        const intervalle = setInterval(() => {
-            // Mettre en surbrillance la case traversée
-            const elCase = document.querySelector(`.case[data-id="${etapes[i]}"]`);
-            if (elCase) {
-                elCase.classList.add('passing');
-                setTimeout(() => elCase.classList.remove('passing'), 300);
-            }
-            i++;
-            if (i >= etapes.length) {
-                clearInterval(intervalle);
-                // Mettre en surbrillance la case d'arrivée
-                const elArrivee = document.querySelector(`.case[data-id="${posArrivee}"]`);
-                if (elArrivee) elArrivee.classList.add('current');
-                resolve();
-            }
-        }, 200);
-    });
-}
-
-// ─── Vérifier passage par la case Départ ───────────────────
-
-function aTraverseLaCase0(posDepart, posArrivee, sens) {
-    if (posDepart === posArrivee) return false;
-    let pos = posDepart;
-    while (pos !== posArrivee) {
-        pos = ((pos + sens) % NB_CASES + NB_CASES) % NB_CASES;
-        if (pos === 0 && posArrivee !== 0) return true;
-        if (pos === posArrivee) break;
-    }
-    return false;
-}
-
-// ============================================================
-// FLUX PRINCIPAL : rollDice()
-// ============================================================
-// Appelé quand le joueur clique sur "🎲 Lancer"
-// Gère les deux modes (AUTO / PHYSIQUE) et le premier lancer
-// ============================================================
-
-async function rollDice() {
-    if (!gameState || !gameRef) return;
-
-    const listeJoueurs = Object.values(playersData)
-        .sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
-    const indexActuel = gameState.currentPlayerIndex || 0;
-    const joueurActuel = listeJoueurs[indexActuel];
-
-    if (!joueurActuel) return;
-
-    // ── Seul le joueur actif (ou l'hôte pour un bot) peut lancer ──
-    const estMonTour = (joueurActuel.id === myPlayerId);
-    const estTourBot = !!joueurActuel.isBot;
-
-    if (!estMonTour && !(isHost && estTourBot)) return;
-
-    // Désactiver le bouton pendant le traitement
-    const btnLancer = document.getElementById('rollDiceBtn');
-    if (btnLancer) btnLancer.disabled = true;
-
-    try {
-        // ── Déterminer la valeur du dé ──
-        let valeurDe;
-        const modeDe = gameConfig.diceMode || 'AUTO';
-
-        if (modeDe === 'PHYSIQUE' && isHost) {
-            // MODE PHYSIQUE : l'hôte encode la valeur via modal graphique
-            valeurDe = await demanderValeurDePhysique(joueurActuel.name);
-            if (valeurDe === null) {
-                // Annulé → réactiver le bouton
-                if (btnLancer) btnLancer.disabled = false;
-                return;
-            }
-        } else if (modeDe === 'PHYSIQUE' && !isHost) {
-            // Un non-hôte ne peut pas lancer en mode physique
-            // On écrit une demande dans Firebase pour signaler à l'hôte
-            await gameRef.child('state/demandeDe').set({
-                playerId: joueurActuel.id,
-                playerName: joueurActuel.name,
-                demandeLe: firebase.database.ServerValue.TIMESTAMP
-            });
-            document.getElementById('diceMessage').textContent =
-                `⏳ En attente de l'hôte pour le dé de ${joueurActuel.name}...`;
-            if (btnLancer) btnLancer.disabled = false;
-            return;
-        } else {
-            // MODE AUTO : dé virtuel automatique
-            valeurDe = rollDiceValue();
-        }
-
-        // ── Animer le dé ──
-        await animerDe(valeurDe);
-        document.getElementById('diceMessage').textContent =
-            `${joueurActuel.avatar} ${joueurActuel.name} : ${emojiDe(valeurDe)} (${valeurDe})`;
-
-        // ── Premier lancer ? → choix du sens ──
-        if (!joueurASens(joueurActuel.id)) {
-            await choisirSens(joueurActuel, valeurDe);
-            return;  // choisirSens gère la suite du déplacement
-        }
-
-        // ── Déplacement normal ──
-        const sens = getSensJoueur(joueurActuel.id);
-        await effectuerDeplacement(joueurActuel, valeurDe, sens);
-
-    } catch (err) {
-        console.error('❌ Erreur rollDice:', err);
-        sendSystemMessage(`⚠️ Erreur lors du lancer: ${err.message}`);
-    } finally {
-        if (btnLancer) btnLancer.disabled = false;
-    }
-}
+ 
 
 
   
