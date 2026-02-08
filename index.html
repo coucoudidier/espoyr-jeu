@@ -4439,10 +4439,18 @@ if (isMyTurn) {
                     isMyTurn ? 'Lance le dé !' : `${currentPlayer.name} joue...`;
                 
                 // Robot joue avec le timing configurable (seulement si pas en mode replay)
-                if (isBot && isHost && !replayMode) {
-                    const delaiBot = (gameConfig.timingBot || 2) * 1000;
-                    setTimeout(() => playBotTurn(currentPlayer), delaiBot);
-                }
+              if (isBot && isHost && !replayMode) {
+    const delaiBot = (gameConfig.timingBot || 2) * 1000;
+    setTimeout(async () => {
+        try {
+            await playBotTurn(currentPlayer);
+        } catch(e) {
+            console.error('🤖 Bot bloqué:', e);
+            sendSystemMessage(`⚠️ ${currentPlayer.name} est bloqué, tour passé`);
+            nextTurn();
+        }
+    }, delaiBot);
+}
             }
             
             updateBoard();
