@@ -4811,7 +4811,7 @@ function choisirSens(joueur, valeurDe) {
             </p>
 
             <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-                <div onclick="window.__callbackChoixSens(1)"
+                <div onclick="if(!window.__avatarChoisi){alert('Choisis ton avatar !');return;}window.__callbackChoixSens(1)"
                     style="flex:1; min-width: 140px; background: #dbeafe; border: 3px solid #3b82f6;
                         border-radius: 12px; padding: 15px; cursor: pointer; text-align: center;
                         transition: all 0.2s;"
@@ -4824,7 +4824,7 @@ function choisirSens(joueur, valeurDe) {
                     </p>
                 </div>
 
-                <div onclick="window.__callbackChoixSens(-1)"
+                <div onclick="if(!window.__avatarChoisi){alert('Choisis ton avatar !');return;}window.__callbackChoixSens(-1)"
                     style="flex:1; min-width: 140px; background: #fef3c7; border: 3px solid #f59e0b;
                         border-radius: 12px; padding: 15px; cursor: pointer; text-align: center;
                         transition: all 0.2s;"
