@@ -4675,9 +4675,8 @@ async function rollDice() {
     if (!joueurActuel) return;
 
     // ── Seul le joueur actif (ou l'hôte pour un bot) peut lancer ──
-    const estMonTour = (joueurActuel.id === myPlayerId);
-    c
-
+   const estMonTour = (joueurActuel.id === myPlayerId);
+    const estTourBot = !!joueurActuel.isBot;
     if (!estMonTour && !(isHost && estTourBot)) return;
 
     // Désactiver le bouton pendant le traitement
@@ -5041,7 +5040,7 @@ function ecouterReponsesDe() {
         if (!reponse || !reponse.playerId || !reponse.valeur) return;
 
         // C'est pertinent uniquement si c'est le tour de ce joueur
-        const listeJoueurs = getOrderedPlayers()
+        const listeJoueurs = getOrderedPlayers();
         const indexActuel = gameState?.currentPlayerIndex || 0;
         const joueurActuel = listeJoueurs[indexActuel];
 
