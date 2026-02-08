@@ -4409,7 +4409,7 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                 const diceBtn = document.getElementById('rollDiceBtn');
                 diceBtn.disabled = !isMyTurn;
                 diceBtn.style.opacity = isMyTurn ? '1' : '0.5';
-                
+                document.title = isMyTurn ? `🎯 C'est ton tour ${myName}` : `⏳ C'est le tour de ${currentPlayer.name}`;
                 document.getElementById('diceMessage').textContent = 
                     isMyTurn ? 'Lance le dé !' : `${currentPlayer.name} joue...`;
                 
