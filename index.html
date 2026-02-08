@@ -4528,6 +4528,7 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
 // ─── Utilitaires ───────────────────────────────────────────
 
 /** Calcule la nouvelle position après un déplacement de `pas` cases */
+     const NB_CASES = CASES.length;   
 function calculerNouvellePosition(posActuelle, pas, sens) {
     // sens = 1 (horaire, croissant) ou -1 (anti-horaire, décroissant)
     return ((posActuelle + pas * sens) % NB_CASES + NB_CASES) % NB_CASES;
