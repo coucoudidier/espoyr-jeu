@@ -282,35 +282,16 @@
             <div class="error-message" id="errorMessage"></div>
             
             <div style="margin-bottom: 15px;">
-                <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 6px; font-size: 0.9rem;">Ton nom :</label>
+                <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 6px; font-size: 0.9rem;">Introduit ton Prénom :</label>
                 <input type="text" id="playerName" placeholder="Entre ton prénom..." maxlength="15">
             </div>
-            
-            <div style="margin-bottom: 15px;">
-                <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 6px; font-size: 0.9rem;">Ton avatar :</label>
-                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                    <button class="avatar-btn selected" data-avatar="🏠">🏠</button>
-                    <button class="avatar-btn" data-avatar="🚗">🚗</button>
-                    <button class="avatar-btn" data-avatar="🎸">🎸</button>
-                    <button class="avatar-btn" data-avatar="📚">📚</button>
-                    <button class="avatar-btn" data-avatar="🌿">🌿</button>
-                    <button class="avatar-btn" data-avatar="⚽">⚽</button>
-                    <button class="avatar-btn" data-avatar="🎨">🎨</button>
-                    <button class="avatar-btn" data-avatar="🔧">🔧</button>
-                </div>
-            </div>
+           
             
             <button class="btn btn-primary btn-full" onclick="createGame()" style="margin-bottom: 12px;">
                 ➕ Créer une nouvelle partie
             </button>
             
-            <!-- CHARGER UNE PARTIE SAUVEGARDÉE -->
-            <div style="margin-bottom: 12px;">
-                <input type="file" id="loadGameFile" accept=".json" style="display: none;" onchange="handleLoadGame(event)">
-                <button class="btn btn-full" style="background: #f3e8ff; color: #7c3aed;" onclick="document.getElementById('loadGameFile').click()">
-                    📂 Charger une partie sauvegardée
-                </button>
-            </div>
+           
             
             <div class="divider"><span>ou rejoindre</span></div>
             
@@ -677,7 +658,7 @@
         // ========== ÉTAT LOCAL ==========
         let myPlayerId = null;
         let myName = '';
-        let myAvatar = '🏠';
+        let myAvatar = '⬜';
         let currentGameCode = null;
         let isHost = false;
         let gameRef = null;
@@ -4771,24 +4752,47 @@ function choisirSens(joueur, valeurDe) {
         const caseAntiHoraire = calculerNouvellePosition(posActuelle, valeurDe, -1);
         const nomHoraire = CASES[caseHoraire]?.name || `Case ${caseHoraire}`;
         const nomAntiHoraire = CASES[caseAntiHoraire]?.name || `Case ${caseAntiHoraire}`;
+// Avatars disponibles (retirer ceux déjà pris)
+        const tousAvatars = ['🏠','🚗','⚡','🐢','🌿','👽','😺','🔧'];
+        const avatarsPris = Object.values(playersData)
+            .filter(p => p.id !== joueur.id && p.avatar)
+            .map(p => p.avatar);
+        const avatarsDispos = tousAvatars.filter(a => !avatarsPris.includes(a));
+        
+        let avatarChoisi = joueur.avatar || avatarsDispos[0];
 
         showModal(`
-            <h3>🧭 Choisis ton sens de déplacement</h3>
-            <p style="color: var(--gray); font-size: 0.9rem; margin-bottom: 12px;">
-                ${joueur.avatar} <strong>${joueur.name}</strong> — Premier lancer : ${emojiDe(valeurDe)} (${valeurDe})
+            <h3>🧭 Choisis ton avatar et ton sens</h3>
+            <p style="color: var(--gray); font-size: 0.9rem; margin-bottom: 8px;">
+                <strong>${joueur.name}</strong> — Premier lancer
             </p>
+
+            <div style="margin-bottom: 12px;">
+                <p style="font-weight: bold; margin-bottom: 6px;">Ton avatar :</p>
+                <div id="avatarGrid" style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
+                    ${avatarsDispos.map(a => `
+                        <div onclick="document.querySelectorAll('#avatarGrid .av-btn').forEach(b=>b.style.border='2px solid #ccc'); this.style.border='3px solid #3b82f6'; window.__avatarChoisi='${a}';"
+                            class="av-btn"
+                            style="font-size: 1.8rem; cursor: pointer; padding: 6px 10px; border-radius: 8px;
+                            border: ${a === avatarChoisi ? '3px solid #3b82f6' : '2px solid #ccc'}; background: white;">
+                            ${a}
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
             <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 15px;">
                 ⚠️ Ce choix est <strong>définitif</strong> pour toute la partie !
             </p>
 
             <div style="display: flex; gap: 12px; flex-wrap: wrap;">
                 <div onclick="window.__callbackChoixSens(1)"
-                     style="flex:1; min-width: 140px; background: #dbeafe; border: 3px solid #3b82f6;
-                            border-radius: 12px; padding: 15px; cursor: pointer; text-align: center;
-                            transition: all 0.2s;"
-                     onmouseover="this.style.transform='scale(1.03)'"
-                     onmouseout="this.style.transform='scale(1)'">
-                    <p style="font-size: 1.5rem; margin: 0;">➡️</p>
+                    style="flex:1; min-width: 140px; background: #dbeafe; border: 3px solid #3b82f6;
+                        border-radius: 12px; padding: 15px; cursor: pointer; text-align: center;
+                        transition: all 0.2s;"
+                    onmouseover="this.style.transform='scale(1.03)'"
+                    onmouseout="this.style.transform='scale(1)'">
+                    <p style="font-size: 1.5rem; margin: 0;">⬅️</p>
                     <p style="font-weight: bold; margin: 6px 0 2px 0;">Horaire</p>
                     <p style="font-size: 0.8rem; color: #6b7280;">
                         → case ${caseHoraire} : ${CASES[caseHoraire]?.icon || ''} ${nomHoraire}
@@ -4796,12 +4800,12 @@ function choisirSens(joueur, valeurDe) {
                 </div>
 
                 <div onclick="window.__callbackChoixSens(-1)"
-                     style="flex:1; min-width: 140px; background: #fef3c7; border: 3px solid #f59e0b;
-                            border-radius: 12px; padding: 15px; cursor: pointer; text-align: center;
-                            transition: all 0.2s;"
-                     onmouseover="this.style.transform='scale(1.03)'"
-                     onmouseout="this.style.transform='scale(1)'">
-                    <p style="font-size: 1.5rem; margin: 0;">⬅️</p>
+                    style="flex:1; min-width: 140px; background: #fef3c7; border: 3px solid #f59e0b;
+                        border-radius: 12px; padding: 15px; cursor: pointer; text-align: center;
+                        transition: all 0.2s;"
+                    onmouseover="this.style.transform='scale(1.03)'"
+                    onmouseout="this.style.transform='scale(1)'">
+                    <p style="font-size: 1.5rem; margin: 0;">➡️</p>
                     <p style="font-weight: bold; margin: 6px 0 2px 0;">Anti-horaire</p>
                     <p style="font-size: 0.8rem; color: #6b7280;">
                         → case ${caseAntiHoraire} : ${CASES[caseAntiHoraire]?.icon || ''} ${nomAntiHoraire}
@@ -4810,19 +4814,27 @@ function choisirSens(joueur, valeurDe) {
             </div>
         `, '');
 
+        window.__avatarChoisi = avatarChoisi;
         // Callback global pour le modal
-        window.__callbackChoixSens = (sens) => {
+       window.__callbackChoixSens = (sens) => {
             closeModal();
             window.__callbackChoixSens = null;
-            confirmerSens(joueur, valeurDe, sens).then(resolve);
+            const avatar = window.__avatarChoisi || joueur.avatar;
+            myAvatar = avatar;
+            confirmerSens(joueur, valeurDe, sens, avatar).then(resolve);
         };
     });
 }
 
 /** Sauvegarde le sens dans Firebase et enchaîne le déplacement */
-async function confirmerSens(joueur, valeurDe, sens) {
+async function confirmerSens(joueur, valeurDe, sens, avatar) {
     // Sauvegarder dans Firebase (permanent, ne changera plus)
     await gameRef.child(`players/${joueur.id}/sensDeplacement`).set(sens);
+if (avatar) {
+            await gameRef.child(`players/${joueur.id}/avatar`).set(avatar);
+            if (playersData[joueur.id]) playersData[joueur.id].avatar = avatar;
+        }
+ 
 
     // Mettre à jour le cache local
     if (playersData[joueur.id]) {
