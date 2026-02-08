@@ -7804,8 +7804,9 @@ function initSystemeDe() {
                                 if ((profil.id === 'PREDATEUR' || profil.id === 'INVESTISSEUR') && euroApresAchat >= prixEquipA) {
                                     typeEquip = 'A';
                                 }
-                                
-                                await comptaEquipementActivite(botId, position, typeEquip);
+                                // ligne pour que le robot ne bloque pas
+                                // ancienne ligne :await comptaEquipementActivite(botId, position, typeEquip);
+                               try { await comptaEquipementActivite(botId, position, typeEquip); } catch(e) { console.warn('⚠️ comptaEquipement non disponible'); }
                                 const caisseApresEquip = COMPTABILITE.caisseJoueurs[botId];
                                 await db.ref(`parties/${currentGameCode}/players/${botId}/euro`).set(caisseApresEquip.euro);
                                 
@@ -7872,8 +7873,8 @@ function initSystemeDe() {
                                 } else if (profil.id === 'PRUDENT') {
                                     typeEquip = 'B';  // Type B = moins cher
                                 }
-                                
-                                await comptaEquipementActivite(botId, position, typeEquip);
+                                // ancinne ligne qui bloc le passe à l'autrer await comptaEquipementActivite(botId, position, typeEquip);
+                                try { await comptaEquipementActivite(botId, position, typeEquip); } catch(e) { console.warn('⚠️ comptaEquipement non disponible'); }
                                 const newCaisse = COMPTABILITE.caisseJoueurs[botId];
                                 await db.ref(`parties/${currentGameCode}/players/${botId}/euro`).set(newCaisse.euro);
                                 
