@@ -1341,7 +1341,7 @@ function isAbsent(player) {
             
             switch (type) {
                 case 'frais':
-                    // Frais (Alimentaire, Médical, Ligne 2) : 100% vers État
+                    // Frais (Alimentaire, Médical, SNCB) : 100% vers État
                     // Montant affiché = TTC
                     facture.ht = Math.round((montantTTC / (1 + TVA_TAUX)) * 100) / 100;
                     facture.tva = Math.round((montantTTC - facture.ht) * 100) / 100;
@@ -4770,6 +4770,8 @@ function animerDeplacement(idJoueur, posDepart, posArrivee, sens) {
 
 function aTraverseLaCase0(posDepart, posArrivee, sens) {
     if (posDepart === posArrivee) return false;
+    // Atterrir SUR la case 0 compte aussi comme passage
+    if (posArrivee === 0 && posDepart !== 0) return true;
     let pos = posDepart;
     while (pos !== posArrivee) {
         pos = ((pos + sens) % NB_CASES + NB_CASES) % NB_CASES;
@@ -5035,17 +5037,21 @@ async function effectuerDeplacement(joueur, valeurDe, sens) {
     };
 
     if (passageDepart) {
-        const passages = (joueur.passagesDepart || 0) + 1;
-        miseAJour[`players/${joueur.id}/passagesDepart`] = passages;
-        
-        // Incrémenter le compteur global de passages Ligne 1
-        const totalPassages = (gameState.passagesLigne1Total || 0) + 1;
-        miseAJour['state/passagesLigne1Total'] = totalPassages;
+        // Si joueur humain, handleSalary gère ces mises à jour
+        // Si bot ou autre, on les fait ici
+        if (joueur.id !== myPlayerId) {
+            const passages = (joueur.passagesDepart || 0) + 1;
+            miseAJour[`players/${joueur.id}/passagesDepart`] = passages;
+            
+            // Incrémenter le compteur global de passages Ligne 1
+            const totalPassages = (gameState.passagesLigne1Total || 0) + 1;
+            miseAJour['state/passagesLigne1Total'] = totalPassages;
 
-        // Phase 2 : compter les passages depuis la phase 2
-        if ((gameState?.phase || 1) >= 2) {
-            const p2 = (joueur.passagesDepuisPhase2 || 0) + 1;
-            miseAJour[`players/${joueur.id}/passagesDepuisPhase2`] = p2;
+            // Phase 2 : compter les passages depuis la phase 2
+            if ((gameState?.phase || 1) >= 2) {
+                const p2 = (joueur.passagesDepuisPhase2 || 0) + 1;
+                miseAJour[`players/${joueur.id}/passagesDepuisPhase2`] = p2;
+            }
         }
     }
 
@@ -5085,8 +5091,13 @@ async function effectuerDeplacement(joueur, valeurDe, sens) {
     updateBoard();
 
     // ── Traiter la case d'arrivée ──
-    // Appeler handleCaseAction si elle existe dans le code principal
-   setTimeout(() => handleLanding(posArrivee), 300);
+    if (passageDepart && joueur.id === myPlayerId) {
+        // Passage Ligne 1 pour joueur humain : salaire + intérêts + remboursement + recap modal
+        const currentPlayer = playersData[joueur.id] || joueur;
+        await handleSalary(currentPlayer, valeurDe, posArrivee);
+    } else {
+        setTimeout(() => handleLanding(posArrivee), 300);
+    }
 }
 
 // ============================================================
@@ -7670,7 +7681,7 @@ function initSystemeDe() {
                 }
                 
                 const soldeBefore = COMPTABILITE.caisseJoueurs[p.id].euro;
-                const result = await comptaFrais(p.id, c.cout, 'Ligne 2');
+                const result = await comptaFrais(p.id, c.cout, 'SNCB');
                 if (result?.ledgerEntryIds) ledgerEntryIds.push(...result.ledgerEntryIds);
                 
                 const soldeAfter = COMPTABILITE.caisseJoueurs[p.id].euro;
@@ -7694,7 +7705,7 @@ function initSystemeDe() {
             // Afficher le modal avec un timer qui passe au tour suivant automatiquement
             let countdown = 3;
             showModal(`
-                <h3>🚌 Ligne 2</h3>
+                <h3>🚌 SNCB</h3>
                 <p>Tous les joueurs paient <strong>${fmt(c.cout)}€</strong></p>
                 <div style="background: #fef3c7; padding: 10px; border-radius: 8px; margin: 10px 0;">
                     ${playerEffects.map(e => `<p style="margin: 3px 0;">${playersData[e.playerId]?.avatar || '👤'} ${e.name}: ${fmt(e.before)}€ → ${fmt(e.after)}€</p>`).join('')}
