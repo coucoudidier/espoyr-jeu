@@ -8183,10 +8183,9 @@ function initSystemeDe() {
                 </tr>
             `;
             
-            // Vérification équilibre
-            const equilibreHtml = Math.abs(bilan.equilibre) > 1 ? 
-                `<p style="color: #dc2626; font-size: 0.8rem;">⚠️ Déséquilibre: ${Math.round(bilan.equilibre * 100) / 100}€</p>`
-                `<p style="color: #059669; font-size: 0.8rem;">✅ Bilan équilibré</p>`;
+         const equilibreHtml = Math.abs(bilan.equilibre) > 1 ? 
+    `<p style="color: #dc2626; font-size: 0.8rem;">⚠️ Déséquilibre: ${Math.round(bilan.equilibre * 100) / 100}€</p>` :
+    `<p style="color: #059669; font-size: 0.8rem;">✅ Bilan équilibré</p>`;
             
             showModal(`
                 <h3>📊 Bilan Économique - Tour ${bilan.tour}</h3>
