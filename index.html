@@ -454,6 +454,7 @@
             211: { nom: 'Activités (alias)', classe: 2, type: 'actif' },
             218: { nom: 'Équipements (alias)', classe: 2, type: 'actif' },
             220: { nom: 'Équipement B (classique)', classe: 2, type: 'actif' },
+            231: { nom: 'Biens personnels', classe: 2, type: 'actif' },
             260: { nom: 'Apports activités', classe: 2, type: 'actif' },
             280: { nom: 'Créances sur joueurs (Banque)', classe: 2, type: 'actif' },  // NOUVEAU
             291: { nom: 'Prêts à la clientèle', classe: 2, type: 'actif' },
@@ -478,6 +479,7 @@
             540: { nom: 'Compte Exportation', classe: 5, type: 'actif' },
             541: { nom: 'Compte État', classe: 5, type: 'actif' },
             550: { nom: 'Argents hors circuit', classe: 5, type: 'actif' },
+            570: { nom: 'Bons d\'achat # (consignes)', classe: 5, type: 'actif' },
             580: { nom: 'Caisse Pot AAA', classe: 5, type: 'actif' },
             // Classe 6 - Charges
             601: { nom: 'Achats activités', classe: 6, type: 'charge' },
@@ -580,7 +582,7 @@
         const CASES = [
             { id: 0, type: 'start', name: 'Départ', icon: '🏁' },
             { id: 1, type: 'activite', name: 'Vêtements', icon: '👔', prix: 200, facture: 40, hash: true, prixEquip: 100 },
-            { id: 2, type: 'ligne2', name: 'SNCB', icon: '🚌', cout: 50 },
+            { id: 2, type: 'ligne2', name: 'Culture', icon: '📚', cout: 50 },
             { id: 3, type: 'activite', name: 'Pharmacie', icon: '💊', prix: 220, facture: 45, hash: true, prixEquip: 110 },
             { id: 4, type: 'chance', name: 'Chance', icon: '🍀' },
             { id: 5, type: 'activite', name: 'Jardin', icon: '🌻', prix: 240, facture: 50, hash: true, prixEquip: 120 },
@@ -1358,7 +1360,7 @@ function isAbsent(player) {
             
             switch (type) {
                 case 'frais':
-                    // Frais (Alimentaire, Médical, SNCB) : 100% vers État
+                    // Frais (Alimentaire, Médical, Culture) : 100% vers État
                     // Montant affiché = TTC
                     facture.ht = Math.round((montantTTC / (1 + TVA_TAUX)) * 100) / 100;
                     facture.tva = Math.round((montantTTC - facture.ht) * 100) / 100;
@@ -5545,6 +5547,27 @@ function initSystemeDe() {
                 COMPTABILITE.potAAA.creances[myPlayerId] = 0;
                 detteAAAPayee = detteAAA;
                 await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/espoyr`).set(caisse.espoyr);
+                
+                // Écriture joueur: rembourse sa dette AAA en #
+                enregistrerEcriture({
+                    joueurId: myPlayerId,
+                    libelle: `Remboursement créance AAA (${fmt(detteAAA)}#)`,
+                    compteDebit: 44,    // Dette Coop AAA (passif -) = dette diminue
+                    compteCredit: 501,  // Caisse # (actif -) = # sortent
+                    montantEspoyr: detteAAA,
+                    contexte: 'potAAA'
+                });
+                
+                // Écriture Pot AAA: reçoit le remboursement
+                enregistrerEcriture({
+                    joueurId: 'POT_AAA',
+                    libelle: `Remboursement créance de ${playersData[myPlayerId]?.name || myPlayerId}`,
+                    compteDebit: 580,   // Caisse Pot AAA (actif +) = # entrent
+                    compteCredit: 48,   // Créances Pot AAA (actif -) = créance diminue
+                    montantEspoyr: detteAAA,
+                    contexte: 'potAAA'
+                });
+                
                 sendSystemMessage(`💚 ${myName} rembourse ${fmt(detteAAA)}# au Pot AAA`);
             }
             
@@ -5649,13 +5672,14 @@ function initSystemeDe() {
             
             // --- Dette AAA ---
             if (detteAAA > 0) {
+                const aAssez = detteAAAPayee > 0;
                 modalHtml += `
-                    <div style="background: #d1fae5; padding: 8px; border-radius: 8px; margin-bottom: 8px;">
+                    <div style="background: ${aAssez ? '#d1fae5' : '#fef3c7'}; padding: 8px; border-radius: 8px; margin-bottom: 8px;">
                         <div style="display: flex; justify-content: space-between;">
-                            <span>💚 Crédit AAA</span>
-                            <span style="font-weight: 600;">${detteAAAPayee > 0 ? '✅ Remboursé -'+fmt(detteAAAPayee)+'#' : fmt(detteAAA)+'#'}</span>
+                            <span>💚 Crédit AAA (prêt relance)</span>
+                            <span style="font-weight: 600;">${aAssez ? '✅ Remboursé -'+fmt(detteAAAPayee)+'#' : '⏳ '+fmt(detteAAA)+'# (pas assez de #)'}</span>
                         </div>
-                        <p style="margin: 2px 0 0 0; font-size: 0.8rem; color: #6b7280;">Sans intérêts</p>
+                        <p style="margin: 2px 0 0 0; font-size: 0.8rem; color: #6b7280;">Sans intérêts (0%)</p>
                     </div>`;
             }
             
@@ -6728,11 +6752,28 @@ function initSystemeDe() {
             COMPTABILITE.potAAA.solde -= pretRelance;
             COMPTABILITE.potAAA.circulationHash += pretRelance;
             
+            // Enregistrer comme créance AAA (sera remboursé au passage Ligne 1, 0%)
+            if (!COMPTABILITE.potAAA.creances) COMPTABILITE.potAAA.creances = {};
+            COMPTABILITE.potAAA.creances[joueurId] = (COMPTABILITE.potAAA.creances[joueurId] || 0) + pretRelance;
+            
+            // Écriture joueur: reçoit les # et reconnaît la dette AAA
             enregistrerEcriture({
-                joueurId, libelle: `Prêt de relance AAA`,
-                compteDebit: 501, compteCredit: 580, montantEspoyr: pretRelance,
+                joueurId, libelle: `Prêt de relance AAA (créance 0%)`,
+                compteDebit: 501,   // Caisse # (actif +) = # reçus
+                compteCredit: 44,   // Dette Coop AAA (passif +) = dette reconnue
+                montantEspoyr: pretRelance,
                 contexte: 'potAAA',
                 details: { type: 'pret_relance' }
+            });
+            
+            // Écriture Pot AAA: donne les # et reconnaît la créance
+            enregistrerEcriture({
+                joueurId: 'POT_AAA', libelle: `Prêt relance à ${playersData[joueurId]?.name || joueurId}`,
+                compteDebit: 48,    // Créances Pot AAA (actif +) = créance créée
+                compteCredit: 580,  // Caisse Pot AAA (actif -) = # sortent
+                montantEspoyr: pretRelance,
+                contexte: 'potAAA',
+                details: { type: 'pret_relance', joueurId }
             });
             
             return {
@@ -6773,7 +6814,7 @@ function initSystemeDe() {
                         </p>
                         <ul style="font-size: 0.85rem; margin: 8px 0;">
                             <li>Annulation de ta dette de ${fmt(status.emprunt)}€</li>
-                            <li>Prêt de relance de 250#</li>
+                            <li>Prêt de relance de 250# (remboursable au passage Ligne 1, 0%)</li>
                         </ul>
                     </div>
                 `, `
@@ -6830,6 +6871,9 @@ function initSystemeDe() {
                 <h3>💚 Intervention AAA réussie !</h3>
                 <p><strong>Dette annulée :</strong> ${fmt(result.detteAnnulee)}€</p>
                 <p><strong>Prêt de relance :</strong> +${fmt(result.pretRelance)}#</p>
+                <p style="font-size: 0.85rem; color: #4338ca; margin-top: 8px;">
+                    📜 Remboursement au passage Ligne 1, sans intérêts (0%)
+                </p>
                 <p style="font-size: 0.9rem; color: #059669; margin-top: 10px;">
                     Tu repars avec une nouvelle chance. Utilise-la bien !
                 </p>
@@ -7155,15 +7199,26 @@ function initSystemeDe() {
                 
                 COMPTABILITE.dettesEntreJoueurs.push(dette);
                 
-                // Écriture comptable
+                // Écriture comptable débiteur: reconnaît la dette
                 enregistrerEcriture({
                     joueurId: myPlayerId,
                     libelle: `Report paiement ${c.name} → ${ownerPlayer?.name} (${fmt(facture)}€)`,
-                    compteDebit: 401,   // Fournisseurs (dette)
-                    compteCredit: 401,  // Même compte (pas de mouvement d'argent)
+                    compteDebit: 613,   // Frais divers (charge +) = la facture est une charge
+                    compteCredit: 401,  // Fournisseurs (passif +) = dette reconnue
                     montantEuro: facture,
                     contexte: 'reportPaiement',
                     details: { type: 'report', createurId: ownerId, caseId }
+                });
+                
+                // Écriture comptable créancier: reconnaît la créance
+                enregistrerEcriture({
+                    joueurId: ownerId,
+                    libelle: `Créance report ${c.name} de ${playersData[myPlayerId]?.name} (${fmt(facture)}€)`,
+                    compteDebit: 411,   // Clients (actif +) = créance reconnue
+                    compteCredit: 700,  // Ventes/Factures (produit +) = revenu reconnu
+                    montantEuro: facture,
+                    contexte: 'reportPaiement',
+                    details: { type: 'report', debiteurId: myPlayerId, caseId }
                 });
                 
                 await syncComptabiliteToFirebase();
@@ -7221,15 +7276,26 @@ function initSystemeDe() {
                     initCaisseJoueur(dette.createurId);
                     COMPTABILITE.caisseJoueurs[dette.createurId].euro += dette.montant;
                     
-                    // Écriture comptable
+                    // Écriture comptable débiteur: paie sa dette fournisseur
                     enregistrerEcriture({
                         joueurId: joueurId,
                         libelle: `Remboursement report ${dette.caseName} → ${creancier?.name || dette.createurId}`,
-                        compteDebit: 570,   // Caisse € (-)
-                        compteCredit: 401,  // Fournisseurs (- dette)
+                        compteDebit: 401,   // Fournisseurs (passif -) = dette diminue
+                        compteCredit: 500,  // Caisse € (actif -) = cash sort
                         montantEuro: dette.montant,
                         contexte: 'remboursementReport',
                         details: { createurId: dette.createurId, caseId: dette.caseId }
+                    });
+                    
+                    // Écriture comptable créancier: reçoit le paiement
+                    enregistrerEcriture({
+                        joueurId: dette.createurId,
+                        libelle: `Reçu remboursement report ${dette.caseName} de ${playersData[joueurId]?.name || joueurId}`,
+                        compteDebit: 500,   // Caisse € (actif +) = cash entre
+                        compteCredit: 411,  // Clients (actif -) = créance diminue
+                        montantEuro: dette.montant,
+                        contexte: 'remboursementReport',
+                        details: { debiteurId: joueurId, caseId: dette.caseId }
                     });
                     
                     // MAJ Firebase créancier
@@ -7303,9 +7369,21 @@ function initSystemeDe() {
             caisse.dettesPersonnelles = caisse.dettesPersonnelles.filter(d => d.toursRestants > 0 && d.capitalRestant > 0);
             
             if (totalPaye > 0) {
+                // Écriture joueur: rembourse sa dette personnelle
                 enregistrerEcriture({
                     joueurId, libelle: `Mensualités biens personnels (${fmt(totalPaye)}€)`,
-                    compteDebit: 174, compteCredit: 570, montantEuro: totalPaye,
+                    compteDebit: 400, compteCredit: 500, montantEuro: totalPaye,
+                    contexte: 'mensualiteBien'
+                });
+                
+                // Contrepartie: l'argent va hors circuit (biens de consommation)
+                COMPTABILITE.horsCircuit = COMPTABILITE.horsCircuit || { solde: 0, recettes: 0 };
+                COMPTABILITE.horsCircuit.solde += totalPaye;
+                COMPTABILITE.horsCircuit.recettes += totalPaye;
+                
+                enregistrerEcriture({
+                    joueurId: 'HORS_CIRCUIT', libelle: `Mensualités reçues de ${playersData[joueurId]?.name || joueurId}`,
+                    compteDebit: 550, compteCredit: 758, montantEuro: totalPaye,
                     contexte: 'mensualiteBien'
                 });
             }
@@ -7331,9 +7409,21 @@ function initSystemeDe() {
                 caisse.euro -= aPayer;
                 caisse.impaye -= aPayer;
                 
+                // Écriture joueur: paie ses arriérés
                 enregistrerEcriture({
                     joueurId, libelle: `Paiement arriérés (${fmt(aPayer)}€)`,
-                    compteDebit: 401, compteCredit: 570, montantEuro: aPayer,
+                    compteDebit: 401, compteCredit: 500, montantEuro: aPayer,
+                    contexte: 'arrieres'
+                });
+                
+                // Contrepartie: l'argent des arriérés va hors circuit (créanciers divers non tracés)
+                COMPTABILITE.horsCircuit = COMPTABILITE.horsCircuit || { solde: 0, recettes: 0 };
+                COMPTABILITE.horsCircuit.solde += aPayer;
+                COMPTABILITE.horsCircuit.recettes += aPayer;
+                
+                enregistrerEcriture({
+                    joueurId: 'HORS_CIRCUIT', libelle: `Arriérés reçus de ${playersData[joueurId]?.name || joueurId}`,
+                    compteDebit: 550, compteCredit: 758, montantEuro: aPayer,
                     contexte: 'arrieres'
                 });
                 
@@ -7484,12 +7574,37 @@ function initSystemeDe() {
                     rembourse: false
                 });
                 
+                // Écriture emprunteur: reçoit le prêt, reconnaît la dette
                 enregistrerEcriture({
                     joueurId: myPlayerId,
                     libelle: `Smart Contract reçu de ${preteur?.name} (${montantEuro > 0 ? fmt(montantEuro)+'€' : ''}${montantHash > 0 ? ' '+fmt(montantHash)+'#' : ''})`,
-                    compteDebit: 570, compteCredit: 401, montantEuro,
+                    compteDebit: 500, compteCredit: 410, montantEuro,
                     contexte: 'smartContract', details: { preteurId, montantEuro, montantHash }
                 });
+                if (montantHash > 0) {
+                    enregistrerEcriture({
+                        joueurId: myPlayerId,
+                        libelle: `Smart Contract reçu # de ${preteur?.name}`,
+                        compteDebit: 501, compteCredit: 410, montantEspoyr: montantHash,
+                        contexte: 'smartContract', details: { preteurId }
+                    });
+                }
+                
+                // Écriture prêteur: donne le prêt, reconnaît la créance
+                enregistrerEcriture({
+                    joueurId: preteurId,
+                    libelle: `Smart Contract prêté à ${myName} (${montantEuro > 0 ? fmt(montantEuro)+'€' : ''}${montantHash > 0 ? ' '+fmt(montantHash)+'#' : ''})`,
+                    compteDebit: 411, compteCredit: 500, montantEuro,
+                    contexte: 'smartContract', details: { debiteurId: myPlayerId, montantEuro, montantHash }
+                });
+                if (montantHash > 0) {
+                    enregistrerEcriture({
+                        joueurId: preteurId,
+                        libelle: `Smart Contract prêté # à ${myName}`,
+                        compteDebit: 411, compteCredit: 501, montantEspoyr: montantHash,
+                        contexte: 'smartContract', details: { debiteurId: myPlayerId }
+                    });
+                }
                 
                 await db.ref(`parties/${currentGameCode}/players/${myPlayerId}`).update({ euro: maCaisse.euro, espoyr: maCaisse.espoyr || 0 });
                 await db.ref(`parties/${currentGameCode}/players/${preteurId}`).update({ euro: preteurCaisse.euro, espoyr: preteurCaisse.espoyr || 0 });
@@ -7553,6 +7668,38 @@ function initSystemeDe() {
                 sc.rembourse = true;
                 
                 if (payeEuro > 0 || payeHash > 0) {
+                    // Écritures débiteur: rembourse sa dette SC
+                    if (payeEuro > 0) {
+                        enregistrerEcriture({
+                            joueurId, libelle: `Remboursement SC → ${creancier?.name || sc.createurId} (${fmt(payeEuro)}€)`,
+                            compteDebit: 410, compteCredit: 500, montantEuro: payeEuro,
+                            contexte: 'remboursementSC', details: { createurId: sc.createurId }
+                        });
+                    }
+                    if (payeHash > 0) {
+                        enregistrerEcriture({
+                            joueurId, libelle: `Remboursement SC # → ${creancier?.name || sc.createurId} (${fmt(payeHash)}#)`,
+                            compteDebit: 410, compteCredit: 501, montantEspoyr: payeHash,
+                            contexte: 'remboursementSC', details: { createurId: sc.createurId }
+                        });
+                    }
+                    
+                    // Écritures créancier: reçoit le remboursement
+                    if (payeEuro > 0) {
+                        enregistrerEcriture({
+                            joueurId: sc.createurId, libelle: `Reçu remboursement SC de ${playersData[joueurId]?.name || joueurId} (${fmt(payeEuro)}€)`,
+                            compteDebit: 500, compteCredit: 411, montantEuro: payeEuro,
+                            contexte: 'remboursementSC', details: { debiteurId: joueurId }
+                        });
+                    }
+                    if (payeHash > 0) {
+                        enregistrerEcriture({
+                            joueurId: sc.createurId, libelle: `Reçu remboursement SC # de ${playersData[joueurId]?.name || joueurId} (${fmt(payeHash)}#)`,
+                            compteDebit: 501, compteCredit: 411, montantEspoyr: payeHash,
+                            contexte: 'remboursementSC', details: { debiteurId: joueurId }
+                        });
+                    }
+                    
                     result.rembourse.push({ creancierName: creancier?.name || '?', euro: payeEuro, hash: payeHash });
                     await db.ref(`parties/${currentGameCode}/players/${sc.createurId}`).update({ euro: creancierCaisse.euro, espoyr: creancierCaisse.espoyr || 0 });
                     sendSystemMessage(`📜 ${playersData[joueurId]?.name} rembourse ${payeEuro > 0 ? fmt(payeEuro)+'€' : ''}${payeHash > 0 ? ' '+fmt(payeHash)+'#' : ''} à ${creancier?.avatar} ${creancier?.name}`);
@@ -8200,7 +8347,7 @@ function initSystemeDe() {
                 joueurId: myPlayerId,
                 libelle: `Acquisition ${bien.icon} ${bien.nom} (dette: ${fmt(bien.total)}€)`,
                 compteDebit: 231,   // Immobilisations corporelles
-                compteCredit: 174,  // Emprunts biens personnels
+                compteCredit: 400,  // Dettes perso (passif +)
                 montantEuro: bien.total,
                 contexte: 'bienPersonnel',
                 details: { bienId: bien.id, nom: bien.nom, valeur: bien.valeur, total: bien.total }
@@ -8309,7 +8456,7 @@ function initSystemeDe() {
                 }
                 
                 const soldeBefore = COMPTABILITE.caisseJoueurs[p.id].euro;
-                const result = await comptaFrais(p.id, c.cout, 'SNCB');
+                const result = await comptaFrais(p.id, c.cout, 'Culture');
                 if (result?.ledgerEntryIds) ledgerEntryIds.push(...result.ledgerEntryIds);
                 
                 const soldeAfter = COMPTABILITE.caisseJoueurs[p.id].euro;
@@ -8328,12 +8475,12 @@ function initSystemeDe() {
                 effects: playerEffects
             }, ledgerEntryIds);
             
-            sendSystemMessage(`🚌 Transport Commun ! Tout le monde paie ${fmt(c.cout)}€`);
+            sendSystemMessage(`📚 Culture ! Tout le monde paie ${fmt(c.cout)}€`);
             
             // Afficher le modal avec un timer qui passe au tour suivant automatiquement
             let countdown = 3;
             showModal(`
-                <h3>🚌 SNCB</h3>
+                <h3>📚 Culture</h3>
                 <p>Tous les joueurs paient <strong>${fmt(c.cout)}€</strong></p>
                 <div style="background: #fef3c7; padding: 10px; border-radius: 8px; margin: 10px 0;">
                     ${playerEffects.map(e => `<p style="margin: 3px 0;">${playersData[e.playerId]?.avatar || '👤'} ${e.name}: ${fmt(e.before)}€ → ${fmt(e.after)}€</p>`).join('')}
@@ -8853,6 +9000,42 @@ function initSystemeDe() {
                     await db.ref(`parties/${currentGameCode}/players/${bot.id}/emprunt`).set(caisse.emprunt);
                 }
                 
+                // ========== REMBOURSEMENT CRÉANCES AAA (BOT) ==========
+                const detteAAABot = COMPTABILITE.potAAA?.creances?.[bot.id] || 0;
+                if (detteAAABot > 0) {
+                    const caisseBot = COMPTABILITE.caisseJoueurs[bot.id];
+                    if ((caisseBot.espoyr || 0) >= detteAAABot) {
+                        caisseBot.espoyr -= detteAAABot;
+                        COMPTABILITE.potAAA.solde += detteAAABot;
+                        COMPTABILITE.potAAA.creances[bot.id] = 0;
+                        await db.ref(`parties/${currentGameCode}/players/${bot.id}/espoyr`).set(caisseBot.espoyr);
+                        
+                        // Écriture bot: rembourse sa dette AAA en #
+                        enregistrerEcriture({
+                            joueurId: bot.id,
+                            libelle: `Remboursement créance AAA (${fmt(detteAAABot)}#)`,
+                            compteDebit: 44,    // Dette Coop AAA (passif -) = dette diminue
+                            compteCredit: 501,  // Caisse # (actif -) = # sortent
+                            montantEspoyr: detteAAABot,
+                            contexte: 'potAAA'
+                        });
+                        
+                        // Écriture Pot AAA: reçoit le remboursement
+                        enregistrerEcriture({
+                            joueurId: 'POT_AAA',
+                            libelle: `Remboursement créance de ${bot.name}`,
+                            compteDebit: 580,   // Caisse Pot AAA (actif +) = # entrent
+                            compteCredit: 48,   // Créances Pot AAA (actif -) = créance diminue
+                            montantEspoyr: detteAAABot,
+                            contexte: 'potAAA'
+                        });
+                        
+                        sendSystemMessage(`💚 ${bot.name} rembourse ${fmt(detteAAABot)}# au Pot AAA`);
+                    } else {
+                        sendSystemMessage(`⏳ ${bot.name} : créance AAA ${fmt(detteAAABot)}# en attente (pas assez de #)`);
+                    }
+                }
+                
                 // ========== REMBOURSEMENT DETTES ENTRE JOUEURS (BOT) ==========
                 const botDettes = (COMPTABILITE.dettesEntreJoueurs || []).filter(d => d.debiteurId === bot.id);
                 if (botDettes.length > 0) {
@@ -9199,7 +9382,7 @@ function initSystemeDe() {
                 enregistrerEcriture({
                     joueurId: botId,
                     libelle: `Acquisition ${bien.icon} ${bien.nom} (dette: ${fmt(bien.total)}€)`,
-                    compteDebit: 231, compteCredit: 174, montantEuro: bien.total,
+                    compteDebit: 231, compteCredit: 400, montantEuro: bien.total,
                     contexte: 'bienPersonnel',
                     details: { bienId: bien.id, nom: bien.nom }
                 });
@@ -12345,7 +12528,7 @@ function initSystemeDe() {
                 'PAY_INVOICE': '🧾',
                 'PAY_FEE': '💸',
                 'PAY_TAX': '🏛️',
-                'LINE_2_FEE': '🚌',
+                'LINE_2_FEE': '📚',
                 'CHANCE_CARD': '🍀',
                 'MALCHANCE_CARD': '👨‍👩‍👧‍👦',
                 'BANK_LOAN': '🏦',
