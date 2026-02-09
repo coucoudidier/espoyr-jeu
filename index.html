@@ -1,7 +1,7 @@
  <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">  
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title># ESPOYR Multijoueur V3 - Comptabilité Bancaire BCE</title>
     <style>
@@ -5211,8 +5211,8 @@ function initSystemeDe() {
                     } else {
                         // Sens anti-horaire : 0 → 23 → 22 → ... → 1 → 0
                         newPosition = (currentPlayer.position - result + CASES.length) % CASES.length;
-                        // Passage par départ si on passe en dessous de 0 (position initiale)
-                        passedStart = (currentPlayer.position - result) <= 0;
+                        // Passage par départ si on part d'une case > 0 et qu'on atteint ou dépasse 0
+                        passedStart = (currentPlayer.position > 0) && (currentPlayer.position - result) <= 0;
                     }
                     
                     // *** ANIMATION : Passer sur chaque case ***
@@ -5374,41 +5374,57 @@ function initSystemeDe() {
             await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/passagesDepart`).set(passages);
             
             // ========== INTÉRÊTS + REMBOURSEMENT AU PASSAGE LIGNE 1 ==========
+            // Variables pour le récapitulatif modale
+            let interetPaye = 0, interetCapitalise = 0, interetTotal = 0;
+            let remboursementEffectue = 0;
+            let detteAvant = 0, detteApres = 0;
+            
             // Vérifier emprunt dans COMPTABILITE ou dans Firebase (player)
             const empruntActuel = caisse.emprunt || player.emprunt || 0;
+            detteAvant = empruntActuel;
+            
             if (empruntActuel > 0) {
                 // Synchroniser emprunt dans la caisse si nécessaire
                 if (!caisse.emprunt && player.emprunt) {
                     caisse.emprunt = player.emprunt;
                 }
                 
+                // 1) Intérêts
                 const tauxInteret = gameConfig?.tauxInteret ?? CONFIG.tauxInteret;
-                const interet = Math.floor(empruntActuel * tauxInteret);
-                if (interet > 0) {
-                    const resInterets = await comptaInterets(myPlayerId, interet);
+                interetTotal = Math.floor(empruntActuel * tauxInteret);
+                if (interetTotal > 0) {
+                    const resInterets = await comptaInterets(myPlayerId, interetTotal);
+                    interetPaye = resInterets.montantPaye || 0;
+                    interetCapitalise = resInterets.montantImpaye || 0;
                     
                     if (resInterets.montantImpaye > 0) {
-                        sendSystemMessage(`📈 ${myName} : intérêts ${fmt(interet)}€ (payés: ${fmt(resInterets.montantPaye)}€, capitalisés: ${fmt(resInterets.montantImpaye)}€)`);
+                        sendSystemMessage(`📈 ${myName} : intérêts ${fmt(interetTotal)}€ (payés: ${fmt(resInterets.montantPaye)}€, capitalisés: ${fmt(resInterets.montantImpaye)}€)`);
                     } else {
-                        sendSystemMessage(`📉 ${myName} : intérêts payés ${fmt(interet)}€`);
+                        sendSystemMessage(`📉 ${myName} : intérêts payés ${fmt(interetTotal)}€`);
                     }
-                    
-                    // Remboursement automatique d'une partie du capital
-                    const pct = (gameConfig?.remboursementAutoCapitalPct ?? CONFIG.remboursementAutoCapitalPct ?? 0);
-                    const cible = Math.floor(caisse.emprunt * pct);
-                    if (cible > 0 && caisse.euro > 0) {
-                        const remboursement = Math.min(cible, caisse.euro, caisse.emprunt);
-                        if (remboursement > 0) {
-                            await comptaRemboursement(myPlayerId, remboursement);
-                            sendSystemMessage(`💳 ${myName} : remboursement capital ${fmt(remboursement)}€ (dette: ${fmt(caisse.emprunt)}€)`);
-                        }
-                    }
-                    
-                    // Mise à jour Firebase
-                    await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/euro`).set(caisse.euro);
-                    await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/emprunt`).set(caisse.emprunt);
                 }
+                
+                // 2) Remboursement automatique d'une partie du capital (indépendant des intérêts)
+                const pct = (gameConfig?.remboursementAutoCapitalPct ?? CONFIG.remboursementAutoCapitalPct ?? 0);
+                const cible = Math.floor(caisse.emprunt * pct);
+                if (cible > 0 && caisse.euro > 0) {
+                    const remboursement = Math.min(cible, caisse.euro, caisse.emprunt);
+                    if (remboursement > 0) {
+                        remboursementEffectue = remboursement;
+                        await comptaRemboursement(myPlayerId, remboursement);
+                        sendSystemMessage(`💳 ${myName} : remboursement capital ${fmt(remboursement)}€ (dette: ${fmt(caisse.emprunt)}€)`);
+                    }
+                }
+                
+                detteApres = caisse.emprunt || 0;
+                
+                // Mise à jour Firebase
+                await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/euro`).set(caisse.euro);
+                await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/emprunt`).set(caisse.emprunt);
             }
+            
+            // Dette AAA
+            const detteAAA = COMPTABILITE.potAAA?.creances?.[myPlayerId] || 0;
             
             await syncComptabiliteToFirebase();
             
@@ -5425,28 +5441,109 @@ function initSystemeDe() {
             // Vérifier phase
             await checkPhaseTransition();
             
-            // Modal avec info complément AAA
-            showModal(`
-                <h3>💰 Salaire ${profilIcon}</h3>
-                <p>Tu passes la case Départ :</p>
-                <p style="font-size: 1.5rem; font-weight: bold; color: var(--green);">${fmt(salaire)}€</p>
-                <p style="color: var(--gray);">
-                    ${profil === 'creatif' ? `Dé ${deSalaire} = ${Math.round(pourcentage * 100)}%` : 'Salaire fixe'}
-                </p>
-                <p style="font-size: 0.85rem; color: #6b7280;">Payé par : ${payeur}</p>
-                ${phase >= 2 ? `<p style="color: var(--orange);">⚠️ Phase ${phase} : érosion (${fmt(salaireAvantErosion)}€ → ${fmt(salaire)}€)</p>` : ''}
-                ${complementAAA > 0 ? `
-                    <div style="background: #dcfce7; padding: 10px; border-radius: 8px; margin-top: 10px;">
-                        <p style="margin: 0; font-weight: bold; color: #059669;">💚 Complément AAA : +${fmt(complementAAA)}#</p>
-                        <p style="margin: 5px 0 0 0; font-size: 0.85rem; color: #6b7280;">
-                            Solidarité membre : compensation de l'érosion
-                        </p>
+            // Soldes finaux pour le récapitulatif
+            const soldeFinalEuro = caisse.euro || 0;
+            const soldeFinalHash = caisse.espoyr || 0;
+            
+            // ========== MODALE RÉCAPITULATIF PASSAGE LIGNE 1 ==========
+            let modalHtml = `<h3>📋 Passage Ligne 1</h3>`;
+            
+            // --- Salaire ---
+            modalHtml += `
+                <div style="background: #dcfce7; padding: 10px; border-radius: 8px; margin-bottom: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>${profilIcon} <strong>Salaire</strong> (${payeur})</span>
+                        <span style="font-size: 1.2rem; font-weight: bold; color: #059669;">+${fmt(salaire)}€</span>
                     </div>
-                ` : ''}
-                ${isMembre && phase >= 2 && complementAAA === 0 ? `
-                    <p style="color: #dc2626; font-size: 0.85rem;">⚠️ Pot AAA vide - pas de complément</p>
-                ` : ''}
-            `, `<button class="btn btn-primary" onclick="closeModal()">OK</button>`);
+                    <p style="margin: 4px 0 0 0; font-size: 0.8rem; color: #6b7280;">
+                        ${profil === 'creatif' ? `Dé ${deSalaire} = ${Math.round(pourcentage * 100)}%` : 'Salaire fixe'}
+                    </p>
+                </div>`;
+            
+            // --- Érosion ---
+            if (phase >= 2) {
+                modalHtml += `
+                    <div style="background: #fef3c7; padding: 8px; border-radius: 8px; margin-bottom: 8px;">
+                        <span style="color: #b45309;">⚠️ Phase ${phase} : érosion ${fmt(salaireAvantErosion)}€ → ${fmt(salaire)}€</span>
+                    </div>`;
+            }
+            
+            // --- Dette banque : intérêts + remboursement ---
+            if (detteAvant > 0) {
+                modalHtml += `
+                    <div style="background: #fee2e2; padding: 10px; border-radius: 8px; margin-bottom: 8px;">
+                        <p style="margin: 0; font-weight: bold; color: #dc2626;">🏦 Dette Banque : ${fmt(detteAvant)}€</p>`;
+                
+                if (interetTotal > 0) {
+                    modalHtml += `
+                        <div style="display: flex; justify-content: space-between; margin-top: 6px;">
+                            <span style="font-size: 0.9rem;">📈 Intérêts</span>
+                            <span style="color: #dc2626; font-weight: 600;">-${fmt(interetPaye)}€</span>
+                        </div>`;
+                    if (interetCapitalise > 0) {
+                        modalHtml += `
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="font-size: 0.85rem; color: #b45309;">⚠️ Capitalisés (ajoutés à la dette)</span>
+                                <span style="color: #b45309; font-weight: 600;">+${fmt(interetCapitalise)}€</span>
+                            </div>`;
+                    }
+                }
+                
+                if (remboursementEffectue > 0) {
+                    modalHtml += `
+                        <div style="display: flex; justify-content: space-between; margin-top: 4px;">
+                            <span style="font-size: 0.9rem;">💳 Remboursement 10%</span>
+                            <span style="color: #dc2626; font-weight: 600;">-${fmt(remboursementEffectue)}€</span>
+                        </div>`;
+                }
+                
+                modalHtml += `
+                        <div style="display: flex; justify-content: space-between; margin-top: 6px; padding-top: 6px; border-top: 1px solid #fca5a5;">
+                            <span style="font-size: 0.9rem; font-weight: bold;">Dette restante</span>
+                            <span style="font-weight: bold;">${fmt(detteApres)}€</span>
+                        </div>
+                    </div>`;
+            }
+            
+            // --- Dette AAA ---
+            if (detteAAA > 0) {
+                modalHtml += `
+                    <div style="background: #d1fae5; padding: 8px; border-radius: 8px; margin-bottom: 8px;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>💚 Crédit AAA en cours</span>
+                            <span style="font-weight: 600;">${fmt(detteAAA)}#</span>
+                        </div>
+                        <p style="margin: 2px 0 0 0; font-size: 0.8rem; color: #6b7280;">Sans intérêts</p>
+                    </div>`;
+            }
+            
+            // --- Complément AAA ---
+            if (complementAAA > 0) {
+                modalHtml += `
+                    <div style="background: #dcfce7; padding: 8px; border-radius: 8px; margin-bottom: 8px; border: 1px solid #86efac;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="font-weight: bold; color: #059669;">💚 Complément AAA</span>
+                            <span style="font-weight: bold; color: #059669;">+${fmt(complementAAA)}#</span>
+                        </div>
+                        <p style="margin: 2px 0 0 0; font-size: 0.8rem; color: #6b7280;">Solidarité : compensation de l'érosion</p>
+                    </div>`;
+            }
+            if (isMembre && phase >= 2 && complementAAA === 0) {
+                modalHtml += `<p style="color: #dc2626; font-size: 0.85rem;">⚠️ Pot AAA vide - pas de complément</p>`;
+            }
+            
+            // --- Solde final ---
+            modalHtml += `
+                <div style="background: #f3f4f6; padding: 10px; border-radius: 8px; margin-top: 10px; border: 2px solid #d1d5db;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: bold;">💰 Solde</span>
+                        <span style="font-size: 1.1rem; font-weight: bold; color: ${soldeFinalEuro >= 0 ? '#059669' : '#dc2626'};">
+                            ${fmt(soldeFinalEuro)}€ / ${fmt(soldeFinalHash)}#
+                        </span>
+                    </div>
+                </div>`;
+            
+            showModal(modalHtml, `<button class="btn btn-primary" onclick="closeModal()">OK</button>`);
         }
         
         // ========== PHASES ==========
@@ -7632,7 +7729,7 @@ function initSystemeDe() {
                 passedStart = (bot.position + dice) >= CASES.length;
             } else {
                 newPosition = (bot.position - dice + CASES.length) % CASES.length;
-                passedStart = (bot.position - dice) < 0;
+                passedStart = (bot.position > 0) && (bot.position - dice) <= 0;
             }
             
             // *** BONUS AAA : Si le robot est membre, +50# dans le Pot AAA ***
@@ -7718,6 +7815,7 @@ function initSystemeDe() {
                         caisse.emprunt = bot.emprunt;
                     }
                     
+                    // 1) Intérêts
                     const tauxInteret = gameConfig?.tauxInteret ?? CONFIG.tauxInteret;
                     const interet = Math.floor(empruntActuel * tauxInteret);
                     if (interet > 0) {
@@ -7728,22 +7826,22 @@ function initSystemeDe() {
                         } else {
                             sendSystemMessage(`📉 ${bot.name} : intérêts payés ${fmt(interet)}€`);
                         }
-                        
-                        // Remboursement automatique d'une partie du capital
-                        const pct = (gameConfig?.remboursementAutoCapitalPct ?? CONFIG.remboursementAutoCapitalPct ?? 0);
-                        const cible = Math.floor(caisse.emprunt * pct);
-                        if (cible > 0 && caisse.euro > 0) {
-                            const remboursement = Math.min(cible, caisse.euro, caisse.emprunt);
-                            if (remboursement > 0) {
-                                await comptaRemboursement(bot.id, remboursement);
-                                sendSystemMessage(`💳 ${bot.name} : remboursement capital ${fmt(remboursement)}€ (dette: ${fmt(caisse.emprunt)}€)`);
-                            }
-                        }
-                        
-                        // Mise à jour Firebase
-                        await db.ref(`parties/${currentGameCode}/players/${bot.id}/euro`).set(caisse.euro);
-                        await db.ref(`parties/${currentGameCode}/players/${bot.id}/emprunt`).set(caisse.emprunt);
                     }
+                    
+                    // 2) Remboursement automatique d'une partie du capital (indépendant des intérêts)
+                    const pct = (gameConfig?.remboursementAutoCapitalPct ?? CONFIG.remboursementAutoCapitalPct ?? 0);
+                    const cible = Math.floor(caisse.emprunt * pct);
+                    if (cible > 0 && caisse.euro > 0) {
+                        const remboursement = Math.min(cible, caisse.euro, caisse.emprunt);
+                        if (remboursement > 0) {
+                            await comptaRemboursement(bot.id, remboursement);
+                            sendSystemMessage(`💳 ${bot.name} : remboursement capital ${fmt(remboursement)}€ (dette: ${fmt(caisse.emprunt)}€)`);
+                        }
+                    }
+                    
+                    // Mise à jour Firebase
+                    await db.ref(`parties/${currentGameCode}/players/${bot.id}/euro`).set(caisse.euro);
+                    await db.ref(`parties/${currentGameCode}/players/${bot.id}/emprunt`).set(caisse.emprunt);
                 }
                 
                 await syncComptabiliteToFirebase();
