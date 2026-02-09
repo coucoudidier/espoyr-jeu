@@ -1,7 +1,7 @@
  <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8">  
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title># ESPOYR Multijoueur V3 - Comptabilité Bancaire BCE</title>
     <style>
@@ -5212,7 +5212,7 @@ function initSystemeDe() {
                         // Sens anti-horaire : 0 → 23 → 22 → ... → 1 → 0
                         newPosition = (currentPlayer.position - result + CASES.length) % CASES.length;
                         // Passage par départ si on passe en dessous de 0 (position initiale)
-                        passedStart = (currentPlayer.position - result) < 0;
+                        passedStart = (currentPlayer.position - result) <= 0;
                     }
                     
                     // *** ANIMATION : Passer sur chaque case ***
