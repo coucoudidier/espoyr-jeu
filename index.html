@@ -5244,10 +5244,10 @@ function initSystemeDe() {
                     sendSystemMessage(`🎲 ${myName} fait ${result} ${sensIcon} ${CASES[newPosition].name}`);
                     
                     if (passedStart) {
-                        await handleSalary(currentPlayer, result);
+                        await handleSalary(currentPlayer, result, newPosition);
+                    } else {
+                        setTimeout(() => handleLanding(newPosition), 300);
                     }
-                    
-                    setTimeout(() => handleLanding(newPosition), 300);
                 }
             }, 80);
         }
@@ -5275,7 +5275,7 @@ function initSystemeDe() {
         }
         
         // ========== SALAIRE ==========
-        async function handleSalary(player, deSalaire) {
+        async function handleSalary(player, deSalaire, landingPosition) {
             const phase = gameState.phase || 1;
             const profil = player.profil || 'contributif';
             let salaire = CONFIG.salaireBase;
@@ -5543,7 +5543,7 @@ function initSystemeDe() {
                     </div>
                 </div>`;
             
-            showModal(modalHtml, `<button class="btn btn-primary" onclick="closeModal()">OK</button>`);
+            showModal(modalHtml, `<button class="btn btn-primary" onclick="closeModal(); ${landingPosition !== undefined ? 'handleLanding(' + landingPosition + ')' : ''}">✅ OK</button>`);
         }
         
         // ========== PHASES ==========
