@@ -4490,7 +4490,7 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                 // Visible uniquement pour l'hôte ET uniquement si le joueur dont c'est le tour est absent
                 let show = false;
                 try {
-                    const players = Object.values(playersData || {});
+                    const players = getOrderedPlayers();
                     const idx = gameState.currentPlayerIndex || 0;
                     const current = players[idx];
                     show = !!isHost && !!current && isAbsent(current);
@@ -4585,7 +4585,7 @@ if (isMyTurn) {
             const boardEl = document.getElementById('gameBoard');
             if (!boardEl) return;
             
-            const players = Object.values(playersData);
+            const players = getOrderedPlayers();
             const activitesSnap = await gameRef.child('activites').once('value');
             const activites = activitesSnap.val() || {};
             const equipSnap = await gameRef.child('equipements').once('value');
@@ -4688,14 +4688,15 @@ function calculerNouvellePosition(posActuelle, pas, sens) {
 /** Vérifie si le joueur a déjà un sens enregistré */
 function joueurASens(idJoueur) {
     const j = playersData[idJoueur];
-    return j && (j.sensDeplacement === 1 || j.sensDeplacement === -1);
+    const s = Number(j?.sensDeplacement);
+    return s === 1 || s === -1;
 }
 
 /** Retourne le sens enregistré du joueur (1 ou -1), ou null */
 function getSensJoueur(idJoueur) {
     const j = playersData[idJoueur];
     if (!j) return null;
-    const s = j.sensDeplacement;
+    const s = Number(j.sensDeplacement);
     return (s === 1 || s === -1) ? s : null;
 }
 
@@ -5021,6 +5022,13 @@ if (avatar) {
 // ============================================================
 
 async function effectuerDeplacement(joueur, valeurDe, sens) {
+    // Guard: sens invalide → impossible de se déplacer
+    if (sens !== 1 && sens !== -1) {
+        console.error(`❌ effectuerDeplacement: sens invalide (${sens}) pour ${joueur.name}`);
+        sendSystemMessage(`⚠️ Erreur sens pour ${joueur.name} — relancez le dé`);
+        return;
+    }
+    console.log(`🚶 DEPLACEMENT: ${joueur.name} pos=${joueur.position} dé=${valeurDe} sens=${sens}`);
     const posDepart = joueur.position || 0;
     const posArrivee = calculerNouvellePosition(posDepart, valeurDe, sens);
 
@@ -5091,8 +5099,10 @@ async function effectuerDeplacement(joueur, valeurDe, sens) {
     updateBoard();
 
     // ── Traiter la case d'arrivée ──
+    console.log(`📍 ARRIVEE: ${joueur.name} case=${posArrivee} passage=${passageDepart} isMe=${joueur.id === myPlayerId}`);
     if (passageDepart && joueur.id === myPlayerId) {
         // Passage Ligne 1 pour joueur humain : salaire + intérêts + remboursement + recap modal
+        console.log(`💰 → handleSalary pour ${joueur.name}`);
         const currentPlayer = playersData[joueur.id] || joueur;
         await handleSalary(currentPlayer, valeurDe, posArrivee);
     } else {
@@ -5215,40 +5225,7 @@ function ecouterReponsesDe() {
     });
 }
 
-// ============================================================
-// BOTS : lancer automatique
-// ============================================================
-
-async function lancerDeBot(botJoueur) {
-    if (!botJoueur || !botJoueur.isBot) return;
-    if (!isHost) return;  // Seul l'hôte gère les bots
-
-    const modeDe = gameConfig.diceMode || 'AUTO';
-
-    let valeurDe;
-    if (modeDe === 'PHYSIQUE') {
-        // En mode physique, l'hôte encode aussi pour les bots
-        valeurDe = await demanderValeurDePhysique(`🤖 ${botJoueur.name}`);
-        if (valeurDe === null) return;  // Annulé par l'hôte
-    } else {
-        // Mode auto : dé virtuel
-        valeurDe = rollDiceValue();
-    }
-
-    // Animer le dé
-    await animerDe(valeurDe);
-    document.getElementById('diceMessage').textContent =
-        `${botJoueur.avatar} ${botJoueur.name} : ${emojiDe(valeurDe)} (${valeurDe})`;
-
-    // Premier lancer → le bot choisit un sens aléatoire
-    if (!joueurASens(botJoueur.id)) {
-        const sens = Math.random() > 0.5 ? 1 : -1;
-        await confirmerSens(botJoueur, valeurDe, sens);
-    } else {
-        const sens = getSensJoueur(botJoueur.id);
-        await effectuerDeplacement(botJoueur, valeurDe, sens);
-    }
-}
+// [lancerDeBot supprimé — code mort, les bots utilisent playBotTurn]
 
 // ============================================================
 // INDICATEUR DE SENS DANS LA BARRE DE STATUT
@@ -5318,76 +5295,9 @@ function initSystemeDe() {
             }
         }
         
-        async function executerLancerDe(currentPlayer, sens) {
-            const diceEl = document.getElementById('dice');
-            const diceBtn = document.getElementById('rollDiceBtn');
-            diceBtn.disabled = true;
-            diceEl.classList.add('rolling');
-            
-            const faces = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
-            let rolls = 0;
-            const rollInterval = setInterval(async () => {
-                diceEl.textContent = faces[Math.floor(Math.random() * 6)];
-                rolls++;
-                if (rolls > 15) {
-                    clearInterval(rollInterval);
-                    
-                    // Utiliser le RNG seedé pour reproductibilité
-                    const result = rollDiceValue();
-                    diceEl.textContent = faces[result - 1];
-                    diceEl.classList.remove('rolling');
-                    
-                    // Calculer la nouvelle position selon le sens du joueur
-                    let newPosition;
-                    let passedStart = false;
-                    
-                    if (sens === 1) {
-                        // Sens horaire : 0 → 1 → 2 → ... → 23 → 0
-                        newPosition = (currentPlayer.position + result) % CASES.length;
-                        passedStart = (currentPlayer.position + result) >= CASES.length;
-                    } else {
-                        // Sens anti-horaire : 0 → 23 → 22 → ... → 1 → 0
-                        newPosition = (currentPlayer.position - result + CASES.length) % CASES.length;
-                        // Passage par départ si on part d'une case > 0 et qu'on atteint ou dépasse 0
-                        passedStart = (currentPlayer.position > 0) && (currentPlayer.position - result) <= 0;
-                    }
-                    
-                    // *** ANIMATION : Passer sur chaque case ***
-                    await animatePassingCases(currentPlayer.position, result, sens);
-                    
-                    // LOG EVENT: ROLL_DICE
-                    const ledgerIds = [];
-                    
-                    // *** BONUS AAA : Si membre, création de 50# dans le Pot AAA ***
-                    const isMembre = COMPTABILITE.potAAA.membres?.includes(myPlayerId);
-                    if (isMembre) {
-                        const ecriture = await comptaBonusAAALancer(myPlayerId);
-                        if (ecriture?.ledgerEntryId) ledgerIds.push(ecriture.ledgerEntryId);
-                        sendSystemMessage(`💚 +50# créés dans le Pot AAA (bonus membre)`);
-                    }
-                    
-                    logEvent('ROLL_DICE', myPlayerId, {
-                        diceValue: result,
-                        fromPosition: currentPlayer.position,
-                        toPosition: newPosition,
-                        passedStart,
-                        sens,
-                        bonusAAA: isMembre ? 50 : 0
-                    }, ledgerIds);
-                    
-                    await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/position`).set(newPosition);
-                    
-                    const sensIcon = sens === 1 ? '➡️' : '⬅️';
-                    sendSystemMessage(`🎲 ${myName} fait ${result} ${sensIcon} ${CASES[newPosition].name}`);
-                    
-                    if (passedStart) {
-                        await handleSalary(currentPlayer, result, newPosition);
-                    } else {
-                        setTimeout(() => handleLanding(newPosition), 300);
-                    }
-                }
-            }, 80);
-        }
+        
+        // [executerLancerDe supprimé — code mort remplacé par effectuerDeplacement]
+        
         
         // Bonus AAA : 50# créés dans le Pot à chaque lancer d'un membre
         async function comptaBonusAAALancer(joueurId) {
@@ -7746,7 +7656,7 @@ function initSystemeDe() {
             }, 10000);
             
             try {
-                const players = Object.values(playersData);
+                const players = getOrderedPlayers();
                 const currentIdx = gameState.currentPlayerIndex || 0;
                 const nextIdx = (currentIdx + 1) % players.length;
                 
