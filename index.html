@@ -636,6 +636,8 @@
         function arrondir2(n) {
             return Math.round((n || 0) * 100) / 100;
         }
+        // Formatage affichage monétaire : 2 décimales
+        function fmt(n) { return Number(n || 0).toFixed(2); }
         
         const CONFIG = {
             salaireBase: 350,  // Net payé au joueur
@@ -4014,7 +4016,7 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                         <span class="player-avatar">${p.avatar}</span>
                         <div class="player-info">
                             <div class="player-name">${p.name} ${p.isBot ? '<span class="bot-badge">ROBOT</span>' : ''}</div>
-                            <div class="player-stats">${p.isHost ? '👑 Hôte' : 'Joueur'} - 💰${p.euro || CONFIG.capitalInitial}€</div>
+                            <div class="player-stats">${p.isHost ? '👑 Hôte' : 'Joueur'} - 💰${fmt(p.euro || CONFIG.capitalInitial)}€</div>
                         </div>
                         ${p.isHost ? '<span class="player-badge badge-host">HOST</span>' : ''}
                     </div>
@@ -4041,9 +4043,9 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                         <div class="player-info">
                             <div class="player-name">${p.name} ${isMembre ? '💚' : ''} ${p.isBot ? '<span class="bot-badge">ROBOT</span>' : ''}</div>
                             <div class="player-stats">
-                                💰${euroActuel}€ 
-                                💚${espoyrActuel}# 
-                                ${empruntActuel > 0 ? `<span style="color:#ef4444">📋${empruntActuel}€</span>` : ''}
+                                💰${fmt(euroActuel)}€ 
+                                💚${fmt(espoyrActuel)}# 
+                                ${empruntActuel > 0 ? `<span style="color:#ef4444">📋${fmt(empruntActuel)}€</span>` : ''}
                             </div>
                         </div>
                         ${idx === currentIdx ? '<span class="player-badge badge-ready">🎯</span>' : ''}
@@ -4514,7 +4516,7 @@ if (isMyTurn) {
                         ${(c.hash && (gameState?.phase || 1) >= 3) ? '<span class="case-hash">#</span>' : ''}
                         <span class="case-icon">${c.icon}</span>
                         <span class="case-name">${c.name}</span>
-                        ${c.prix ? `<span class="case-price">${c.prix}€ ${equipIndicator}</span>` : ''}
+                        ${c.prix ? `<span class="case-price">${fmt(c.prix)}€ ${equipIndicator}</span>` : ''}
                         ${ownerPlayer ? `<span class="owner-indicator">${ownerPlayer.avatar}</span>` : ''}
                         ${playersHere.length > 0 ? `
                             <div class="players-on-case">
@@ -5386,9 +5388,9 @@ function initSystemeDe() {
                     const resInterets = await comptaInterets(myPlayerId, interet);
                     
                     if (resInterets.montantImpaye > 0) {
-                        sendSystemMessage(`📈 ${myName} : intérêts ${interet}€ (payés: ${resInterets.montantPaye}€, capitalisés: ${resInterets.montantImpaye}€)`);
+                        sendSystemMessage(`📈 ${myName} : intérêts ${fmt(interet)}€ (payés: ${fmt(resInterets.montantPaye)}€, capitalisés: ${fmt(resInterets.montantImpaye)}€)`);
                     } else {
-                        sendSystemMessage(`📉 ${myName} : intérêts payés ${interet}€`);
+                        sendSystemMessage(`📉 ${myName} : intérêts payés ${fmt(interet)}€`);
                     }
                     
                     // Remboursement automatique d'une partie du capital
@@ -5398,7 +5400,7 @@ function initSystemeDe() {
                         const remboursement = Math.min(cible, caisse.euro, caisse.emprunt);
                         if (remboursement > 0) {
                             await comptaRemboursement(myPlayerId, remboursement);
-                            sendSystemMessage(`💳 ${myName} : remboursement capital ${remboursement}€ (dette: ${caisse.emprunt}€)`);
+                            sendSystemMessage(`💳 ${myName} : remboursement capital ${fmt(remboursement)}€ (dette: ${fmt(caisse.emprunt)}€)`);
                         }
                     }
                     
@@ -5415,9 +5417,9 @@ function initSystemeDe() {
             
             // Message système avec complément AAA
             if (complementAAA > 0) {
-                sendSystemMessage(`💰 ${myName} ${profilIcon} reçoit ${salaire}€ + 💚${complementAAA}# (complément AAA)`);
+                sendSystemMessage(`💰 ${myName} ${profilIcon} reçoit ${fmt(salaire)}€ + 💚${fmt(complementAAA)}# (complément AAA)`);
             } else {
-                sendSystemMessage(`💰 ${myName} ${profilIcon} reçoit ${salaire}€ (${payeur})`);
+                sendSystemMessage(`💰 ${myName} ${profilIcon} reçoit ${fmt(salaire)}€ (${payeur})`);
             }
             
             // Vérifier phase
@@ -5427,15 +5429,15 @@ function initSystemeDe() {
             showModal(`
                 <h3>💰 Salaire ${profilIcon}</h3>
                 <p>Tu passes la case Départ :</p>
-                <p style="font-size: 1.5rem; font-weight: bold; color: var(--green);">${salaire}€</p>
+                <p style="font-size: 1.5rem; font-weight: bold; color: var(--green);">${fmt(salaire)}€</p>
                 <p style="color: var(--gray);">
                     ${profil === 'creatif' ? `Dé ${deSalaire} = ${Math.round(pourcentage * 100)}%` : 'Salaire fixe'}
                 </p>
                 <p style="font-size: 0.85rem; color: #6b7280;">Payé par : ${payeur}</p>
-                ${phase >= 2 ? `<p style="color: var(--orange);">⚠️ Phase ${phase} : érosion (${salaireAvantErosion}€ → ${salaire}€)</p>` : ''}
+                ${phase >= 2 ? `<p style="color: var(--orange);">⚠️ Phase ${phase} : érosion (${fmt(salaireAvantErosion)}€ → ${fmt(salaire)}€)</p>` : ''}
                 ${complementAAA > 0 ? `
                     <div style="background: #dcfce7; padding: 10px; border-radius: 8px; margin-top: 10px;">
-                        <p style="margin: 0; font-weight: bold; color: #059669;">💚 Complément AAA : +${complementAAA}#</p>
+                        <p style="margin: 0; font-weight: bold; color: #059669;">💚 Complément AAA : +${fmt(complementAAA)}#</p>
                         <p style="margin: 5px 0 0 0; font-size: 0.85rem; color: #6b7280;">
                             Solidarité membre : compensation de l'érosion
                         </p>
@@ -5541,12 +5543,12 @@ function initSystemeDe() {
                     <p style="margin: 4px 0 0 0;">🏛️ État : ${facture.destinationEtat.toFixed(2)}€ (TVA + Droits)</p>
                     <p style="margin: 2px 0 0 0;">🌍 Export : ${facture.destinationExport.toFixed(2)}€ (TVA + Droits)</p>
                     <p style="margin: 2px 0 0 0;">🛰️ Hors circuit : ${partHorsCircuit.toFixed(2)}€ (économie spéculative / importation)</p>
-                    <p style="margin: 2px 0 0 0;">✨ Bonus : +${bonusHash}# du Pot AAA</p>
+                    <p style="margin: 2px 0 0 0;">✨ Bonus : +${fmt(bonusHash)}# du Pot AAA</p>
                 </div>
                 
-                <p><strong>Facture/passage :</strong> ${c.facture}€</p>
+                <p><strong>Facture/passage :</strong> ${fmt(c.facture)}€</p>
                 <hr style="margin: 10px 0;">
-                <p>Tu as : <strong>${currentEuro}€</strong></p>
+                <p>Tu as : <strong>${fmt(currentEuro)}€</strong></p>
                 ${!canBuy ? '<p style="color: #ef4444;">❌ Pas assez</p>' : ''}
             `, `
                 ${canBuy ? `<button class="btn btn-primary" onclick="buyActivity(${c.id}, ${c.prix})">🛒 Acheter ${c.prix}€</button>` : ''}
@@ -5609,7 +5611,7 @@ function initSystemeDe() {
             await syncComptabiliteToFirebase();
             
             const bonusHash = Math.floor(prix * 0.1);
-            sendSystemMessage(`🏪 ${myName} achète ${c.icon} (-${prix}€ +${bonusHash}#) → 🛰️ hors circuit ${result.partHorsCircuit || 0}€`);
+            sendSystemMessage(`🏪 ${myName} achète ${c.icon} (-${fmt(prix)}€ +${fmt(bonusHash)}#) → 🛰️ hors circuit ${fmt(result.partHorsCircuit || 0)}€`);
             
             // Vérifier si on peut équiper immédiatement
             const currentEuro = COMPTABILITE.caisseJoueurs[myPlayerId]?.euro || 0;
@@ -5635,7 +5637,7 @@ function initSystemeDe() {
             showModal(`
                 <div id="modalTimer" style="text-align: center; margin-bottom: 10px;"></div>
                 <h3>✅ ${c.icon} ${c.name} acheté !</h3>
-                <p style="margin-bottom: 15px;">Tu as <strong>${currentEuro}€</strong> restants.</p>
+                <p style="margin-bottom: 15px;">Tu as <strong>${fmt(currentEuro)}€</strong> restants.</p>
                 
                 <div style="background: #f0fdf4; padding: 12px; border-radius: 8px; margin-bottom: 10px;">
                     <p style="margin: 0; font-weight: bold; color: #059669;">
@@ -5644,12 +5646,12 @@ function initSystemeDe() {
                 </div>
                 
                 <div style="background: #dcfce7; padding: 10px; border-radius: 8px; margin-bottom: 8px;">
-                    <p style="margin: 0;"><strong>${terms.iconA} ${terms.typeA}</strong> - ${prixA}€</p>
-                    <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: #059669;">✨ Bonus : +${bonusA}#</p>
+                    <p style="margin: 0;"><strong>${terms.iconA} ${terms.typeA}</strong> - ${fmt(prixA)}€</p>
+                    <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: #059669;">✨ Bonus : +${fmt(bonusA)}#</p>
                 </div>
                 
                 <div style="background: #fee2e2; padding: 10px; border-radius: 8px;">
-                    <p style="margin: 0;"><strong>${terms.iconB} ${terms.typeB}</strong> - ${prixB}€</p>
+                    <p style="margin: 0;"><strong>${terms.iconB} ${terms.typeB}</strong> - ${fmt(prixB)}€</p>
                     <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: #dc2626;">❌ Pas de bonus</p>
                 </div>
             `, `
@@ -5805,22 +5807,22 @@ function initSystemeDe() {
                 <div id="modalTimer" style="text-align: center; margin-bottom: 10px;"></div>
                 <h3>${c.icon} ${c.name} - Ta propriété</h3>
                 <p><strong>${terms.termPlural} :</strong> ${nbEquip}/2</p>
-                <p><strong>Facture actuelle :</strong> ${c.facture * (nbEquip === 2 ? 2 : 1)}€</p>
+                <p><strong>Facture actuelle :</strong> ${fmt(c.facture * (nbEquip === 2 ? 2 : 1))}€</p>
                 <hr style="margin: 10px 0;">
                 <p style="font-weight: bold; margin-bottom: 8px;">Choisir ${profil === 'contributif' ? 'une formation' : 'un équipement'} :</p>
                 
                 <div style="background: #dcfce7; padding: 10px; border-radius: 8px; margin-bottom: 8px;">
                     <p style="margin: 0;"><strong>${terms.iconA} ${terms.typeA}</strong></p>
-                    <p style="margin: 4px 0; font-size: 0.9rem;">Prix TTC : ${prixA}€ (+20%)</p>
+                    <p style="margin: 4px 0; font-size: 0.9rem;">Prix TTC : ${fmt(prixA)}€ (+20%)</p>
                     <p style="margin: 2px 0; font-size: 0.8rem; color: #6b7280;">
                         HT: ${factureA.ht.toFixed(2)}€ | TVA: ${factureA.tva.toFixed(2)}€ → 🏛️ État
                     </p>
-                    <p style="margin: 0; font-size: 0.85rem; color: #059669;">✨ Bonus : +${bonusA}# offerts par le Pot AAA</p>
+                    <p style="margin: 0; font-size: 0.85rem; color: #059669;">✨ Bonus : +${fmt(bonusA)}# offerts par le Pot AAA</p>
                 </div>
                 
                 <div style="background: #fee2e2; padding: 10px; border-radius: 8px;">
                     <p style="margin: 0;"><strong>${terms.iconB} ${terms.typeB}</strong></p>
-                    <p style="margin: 4px 0; font-size: 0.9rem;">Prix TTC : ${prixB}€ (-20%)</p>
+                    <p style="margin: 4px 0; font-size: 0.9rem;">Prix TTC : ${fmt(prixB)}€ (-20%)</p>
                     <p style="margin: 2px 0; font-size: 0.8rem; color: #6b7280;">
                         HT: ${factureB.ht.toFixed(2)}€ | TVA: ${factureB.tva.toFixed(2)}€ → 🏛️ État
                     </p>
@@ -5828,7 +5830,7 @@ function initSystemeDe() {
                 </div>
                 
                 <hr style="margin: 10px 0;">
-                <p>Tu as : <strong>${currentEuro}€</strong></p>
+                <p>Tu as : <strong>${fmt(currentEuro)}€</strong></p>
                 <p style="font-size: 0.85rem; color: var(--gray);">${terms.resultText}</p>
             `, `
                 ${canBuyA ? `<button class="btn" style="background: #dcfce7; color: #059669;" onclick="buyEquipementA(${c.id})">${terms.iconA} A (${prixA}€)</button>` : ''}
@@ -6058,11 +6060,11 @@ function initSystemeDe() {
             
             await syncComptabiliteToFirebase();
             
-            sendSystemMessage(`💚 ${myName} vend 1 équipement de ${c.icon} au Pot AAA (+${result.prixRachat}#)`);
+            sendSystemMessage(`💚 ${myName} vend 1 équipement de ${c.icon} au Pot AAA (+${fmt(result.prixRachat)}#)`);
             
             showModal(`
                 <h3>✅ Équipement vendu !</h3>
-                <p>Tu as reçu <strong>${result.prixRachat}#</strong> du Pot AAA.</p>
+                <p>Tu as reçu <strong>${fmt(result.prixRachat)}#</strong> du Pot AAA.</p>
             `, `<button class="btn btn-primary" onclick="closeModal()">OK</button>`);
         }
         
@@ -6110,8 +6112,8 @@ function initSystemeDe() {
             
             showModal(`
                 <h3>🏷️ Vendre ${c.icon} ${c.name}</h3>
-                <p><strong>Prix d'achat :</strong> ${prixAchat}€</p>
-                <p><strong>Prix de départ enchères :</strong> ${prixDepart}€ (50%)</p>
+                <p><strong>Prix d'achat :</strong> ${fmt(prixAchat)}€</p>
+                <p><strong>Prix de départ enchères :</strong> ${fmt(prixDepart)}€ (50%)</p>
                 <hr style="margin: 10px 0;">
                 <p style="font-size: 0.85rem; color: #6b7280;">
                     L'enchère sera ouverte à tous les joueurs.<br>
@@ -6142,7 +6144,7 @@ function initSystemeDe() {
             // Sauvegarder en Firebase pour synchroniser
             await gameRef.child('enchere').set(enchereEnCours);
             
-            sendSystemMessage(`🔨 ENCHÈRES : ${myName} vend ${c.icon} ${c.name} à partir de ${prixDepart}€ !`);
+            sendSystemMessage(`🔨 ENCHÈRES : ${myName} vend ${c.icon} ${c.name} à partir de ${fmt(prixDepart)}€ !`);
             
             // Afficher le modal d'enchères pour tous
             showEnchereModal();
@@ -6174,19 +6176,19 @@ function initSystemeDe() {
                     ${enchereEnCours.prixActuel}€
                 </p>
                 <p style="font-size: 0.85rem; color: #6b7280;">
-                    + ${droitsActuels}€ droits (6%) = <strong>${totalActuel}€</strong> total acheteur
+                    + ${fmt(droitsActuels)}€ droits (6%) = <strong>${fmt(totalActuel)}€</strong> total acheteur
                 </p>
                 ${enchereEnCours.dernierEncherisseurName ? 
                     `<p style="color: #059669;">Dernière enchère : ${enchereEnCours.dernierEncherisseurName}</p>` :
                     `<p style="color: #6b7280;">Aucune enchère encore</p>`
                 }
                 <hr style="margin: 10px 0;">
-                <p>Tu as : <strong>${monEuro}€</strong></p>
-                ${!canEncherir && !isVendeur ? `<p style="color: #ef4444;">Il faut ${totalProchaineEnchere}€ pour enchérir</p>` : ''}
+                <p>Tu as : <strong>${fmt(monEuro)}€</strong></p>
+                ${!canEncherir && !isVendeur ? `<p style="color: #ef4444;">Il faut ${fmt(totalProchaineEnchere)}€ pour enchérir</p>` : ''}
             `, `
-                ${canEncherir ? `<button class="btn btn-primary" onclick="faireEnchere(${prochaineEnchere})">📈 Enchérir ${prochaineEnchere}€ (total: ${totalProchaineEnchere}€)</button>` : ''}
+                ${canEncherir ? `<button class="btn btn-primary" onclick="faireEnchere(${prochaineEnchere})">📈 Enchérir ${fmt(prochaineEnchere)}€ (total: ${fmt(totalProchaineEnchere)}€)</button>` : ''}
                 ${isVendeur && enchereEnCours.dernierEncherisseur ? 
-                    `<button class="btn" style="background:#dcfce7;color:#059669;" onclick="accepterEnchere()">✅ Accepter ${enchereEnCours.prixActuel}€</button>` : ''
+                    `<button class="btn" style="background:#dcfce7;color:#059669;" onclick="accepterEnchere()">✅ Accepter ${fmt(enchereEnCours.prixActuel)}€</button>` : ''
                 }
                 <button class="btn btn-secondary" onclick="closeModal(); passerEnchere();">Passer</button>
             `);
@@ -6202,7 +6204,7 @@ function initSystemeDe() {
             await gameRef.child('enchere').set(enchereEnCours);
             
             const c = CASES[enchereEnCours.actId];
-            sendSystemMessage(`📈 ${myName} enchérit ${montant}€ pour ${c.icon}`);
+            sendSystemMessage(`📈 ${myName} enchérit ${fmt(montant)}€ pour ${c.icon}`);
             
             // Afficher à nouveau le modal (pour les autres joueurs via listener)
             showEnchereModal();
@@ -6290,17 +6292,17 @@ function initSystemeDe() {
             await syncComptabiliteToFirebase();
             
             const acheteurPlayer = playersData[acheteurId];
-            sendSystemMessage(`🔨 VENDU ! ${c.icon} ${c.name} à ${acheteurPlayer?.name} pour ${prixVente}€ (+${droits}€ droits → 🏛️)`);
+            sendSystemMessage(`🔨 VENDU ! ${c.icon} ${c.name} à ${acheteurPlayer?.name} pour ${fmt(prixVente)}€ (+${fmt(droits)}€ droits → 🏛️)`);
             
             enchereEnCours = null;
             
             showModal(`
                 <h3>✅ Vente conclue !</h3>
-                <p><strong>${c.icon} ${c.name}</strong> vendu pour ${prixVente}€</p>
+                <p><strong>${c.icon} ${c.name}</strong> vendu pour ${fmt(prixVente)}€</p>
                 <div style="background: #fef3c7; padding: 8px; border-radius: 6px; margin-top: 10px; font-size: 0.9rem;">
-                    <p style="margin: 0;">Acheteur paie : ${prixTotal}€ (${prixVente}€ + ${droits}€ droits)</p>
-                    <p style="margin: 4px 0 0 0;">Vendeur reçoit : ${prixVente}€</p>
-                    <p style="margin: 4px 0 0 0;">🏛️ État reçoit : ${droits}€ (droits 6%)</p>
+                    <p style="margin: 0;">Acheteur paie : ${fmt(prixTotal)}€ (${fmt(prixVente)}€ + ${fmt(droits)}€ droits)</p>
+                    <p style="margin: 4px 0 0 0;">Vendeur reçoit : ${fmt(prixVente)}€</p>
+                    <p style="margin: 4px 0 0 0;">🏛️ État reçoit : ${fmt(droits)}€ (droits 6%)</p>
                 </div>
             `, `<button class="btn btn-primary" onclick="closeModal()">OK</button>`);
         }
@@ -6430,9 +6432,9 @@ function initSystemeDe() {
                 showModal(`
                     <h3>📊 Situation financière</h3>
                     <p>Tu n'es pas en situation de faillite.</p>
-                    <p><strong>Caisse :</strong> ${status.euro}€ / ${status.espoyr}#</p>
-                    <p><strong>Dette :</strong> ${status.emprunt}€</p>
-                    <p><strong>Capacité d'emprunt :</strong> ${status.capaciteEmprunt}€</p>
+                    <p><strong>Caisse :</strong> ${fmt(status.euro)}€ / ${fmt(status.espoyr)}#</p>
+                    <p><strong>Dette :</strong> ${fmt(status.emprunt)}€</p>
+                    <p><strong>Capacité d'emprunt :</strong> ${fmt(status.capaciteEmprunt)}€</p>
                 `, `<button class="btn btn-secondary" onclick="closeModal()">OK</button>`);
                 return;
             }
@@ -6442,8 +6444,8 @@ function initSystemeDe() {
                 showModal(`
                     <h3>⚠️ Faillite - Membre AAA</h3>
                     <p style="color: #dc2626;">Tu es en situation de faillite !</p>
-                    <p><strong>Caisse :</strong> ${status.euro}€ / ${status.espoyr}#</p>
-                    <p><strong>Dette :</strong> ${status.emprunt}€</p>
+                    <p><strong>Caisse :</strong> ${fmt(status.euro)}€ / ${fmt(status.espoyr)}#</p>
+                    <p><strong>Dette :</strong> ${fmt(status.emprunt)}€</p>
                     <hr style="margin: 10px 0;">
                     <div style="background: #dcfce7; padding: 10px; border-radius: 8px;">
                         <p style="margin: 0; font-weight: bold;">💚 Intervention du Pot AAA</p>
@@ -6451,7 +6453,7 @@ function initSystemeDe() {
                             En tant que membre, tu bénéficies de :
                         </p>
                         <ul style="font-size: 0.85rem; margin: 8px 0;">
-                            <li>Annulation de ta dette de ${status.emprunt}€</li>
+                            <li>Annulation de ta dette de ${fmt(status.emprunt)}€</li>
                             <li>Prêt de relance de 250#</li>
                         </ul>
                     </div>
@@ -6463,8 +6465,8 @@ function initSystemeDe() {
                 showModal(`
                     <h3>⚠️ Faillite</h3>
                     <p style="color: #dc2626;">Tu es en situation de faillite !</p>
-                    <p><strong>Caisse :</strong> ${status.euro}€ / ${status.espoyr}#</p>
-                    <p><strong>Dette :</strong> ${status.emprunt}€</p>
+                    <p><strong>Caisse :</strong> ${fmt(status.euro)}€ / ${fmt(status.espoyr)}#</p>
+                    <p><strong>Dette :</strong> ${fmt(status.emprunt)}€</p>
                     <hr style="margin: 10px 0;">
                     <div style="background: #fee2e2; padding: 10px; border-radius: 8px;">
                         <p style="margin: 0; font-weight: bold;">❌ Non membre du Pot AAA</p>
@@ -6503,12 +6505,12 @@ function initSystemeDe() {
             });
             await syncComptabiliteToFirebase();
             
-            sendSystemMessage(`💚 ${myName} a été sauvé par le Pot AAA ! Dette annulée: ${result.detteAnnulee}€, Prêt: +${result.pretRelance}#`);
+            sendSystemMessage(`💚 ${myName} a été sauvé par le Pot AAA ! Dette annulée: ${fmt(result.detteAnnulee)}€, Prêt: +${fmt(result.pretRelance)}#`);
             
             showModal(`
                 <h3>💚 Intervention AAA réussie !</h3>
-                <p><strong>Dette annulée :</strong> ${result.detteAnnulee}€</p>
-                <p><strong>Prêt de relance :</strong> +${result.pretRelance}#</p>
+                <p><strong>Dette annulée :</strong> ${fmt(result.detteAnnulee)}€</p>
+                <p><strong>Prêt de relance :</strong> +${fmt(result.pretRelance)}#</p>
                 <p style="font-size: 0.9rem; color: #059669; margin-top: 10px;">
                     Tu repars avec une nouvelle chance. Utilise-la bien !
                 </p>
@@ -6631,13 +6633,13 @@ function initSystemeDe() {
                 <p>Propriétaire : <strong>${ownerPlayer?.avatar} ${ownerPlayer?.name}</strong></p>
                 
                 <div style="background: #f3f4f6; padding: 10px; border-radius: 8px; margin: 10px 0;">
-                    <p style="margin: 0;"><strong>Facture :</strong> <span style="font-size: 1.2rem; color: #dc2626;">${facture}€</span></p>
-                    ${prixPerso !== null ? `<p style="margin: 4px 0 0 0; font-size: 0.8rem; color: #6b7280;">(Prix ajusté, base: ${factureBase}€)</p>` : ''}
+                    <p style="margin: 0;"><strong>Facture :</strong> <span style="font-size: 1.2rem; color: #dc2626;">${fmt(facture)}€</span></p>
+                    ${prixPerso !== null ? `<p style="margin: 4px 0 0 0; font-size: 0.8rem; color: #6b7280;">(Prix ajusté, base: ${fmt(factureBase)}€)</p>` : ''}
                     ${equipStr ? `<p style="margin: 4px 0 0 0; font-size: 0.8rem;">Équipements: <strong>${equipStr}</strong> (×${factureMultiplier})</p>` : ''}
                 </div>
                 
                 <div style="background: #dbeafe; padding: 10px; border-radius: 8px; margin: 10px 0;">
-                    <p style="margin: 0;"><strong>Ton solde :</strong> ${currentEuro}€ / ${myEspoyr}#</p>
+                    <p style="margin: 0;"><strong>Ton solde :</strong> ${fmt(currentEuro)}€ / ${fmt(myEspoyr)}#</p>
                 </div>
                 
                 ${cannotPayAtAll ? '<p style="color: #dc2626; font-weight: bold; text-align: center;">💀 Tu ne peux pas payer cette facture !</p>' : ''}
@@ -6690,15 +6692,15 @@ function initSystemeDe() {
             
             showModal(`
                 <h3>📋 Paiement Différé</h3>
-                <p>${c.icon} ${c.name} - Facture : ${facture}€</p>
+                <p>${c.icon} ${c.name} - Facture : ${fmt(facture)}€</p>
                 <p>Propriétaire : ${ownerPlayer?.avatar} ${ownerPlayer?.name}</p>
                 <hr style="margin: 10px 0;">
-                <p>Tu as : <strong>${myEuro}€</strong></p>
-                <p>Il te manque : <strong style="color: #dc2626;">${manque}€</strong></p>
+                <p>Tu as : <strong>${fmt(myEuro)}€</strong></p>
+                <p>Il te manque : <strong style="color: #dc2626;">${fmt(manque)}€</strong></p>
                 
                 <div style="background: #fef3c7; padding: 10px; border-radius: 8px; margin: 10px 0;">
-                    <p style="margin: 0; font-weight: bold;">💰 Emprunter ${manque}€ à la banque ?</p>
-                    <p style="margin: 4px 0 0 0; font-size: 0.85rem;">Capacité d'emprunt: ${status.capaciteEmprunt}€</p>
+                    <p style="margin: 0; font-weight: bold;">💰 Emprunter ${fmt(manque)}€ à la banque ?</p>
+                    <p style="margin: 4px 0 0 0; font-size: 0.85rem;">Capacité d'emprunt: ${fmt(status.capaciteEmprunt)}€</p>
                     <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: #dc2626;">⚠️ Intérêts: 10% par tour</p>
                 </div>
                 
@@ -6791,10 +6793,10 @@ function initSystemeDe() {
             showModal(`
                 <h3>🤝 Paiement Mixte</h3>
                 <p>${c.icon} ${c.name} - Propriétaire: ${ownerPlayer?.avatar} ${ownerPlayer?.name}</p>
-                <p style="font-size: 1.1rem;"><strong>Facture :</strong> <span style="color: #dc2626;">${facture}€</span></p>
+                <p style="font-size: 1.1rem;"><strong>Facture :</strong> <span style="color: #dc2626;">${fmt(facture)}€</span></p>
                 
                 <div style="background: #dbeafe; padding: 10px; border-radius: 8px; margin: 10px 0;">
-                    <p style="margin: 0;"><strong>Ton solde :</strong> ${myEuro}€ / ${myEspoyr}#</p>
+                    <p style="margin: 0;"><strong>Ton solde :</strong> ${fmt(myEuro)}€ / ${fmt(myEspoyr)}#</p>
                 </div>
                 
                 <div style="display: flex; gap: 15px; margin: 15px 0;">
@@ -6896,13 +6898,13 @@ function initSystemeDe() {
                     createdAt: firebase.database.ServerValue.TIMESTAMP
                 });
                 
-                sendSystemMessage(`🤝 ${myName} propose ${euroOffer}€+${hashOffer}# (${total}/${facture}) à ${playersData[ownerId]?.name}`);
+                sendSystemMessage(`🤝 ${myName} propose ${fmt(euroOffer)}€+${fmt(hashOffer)}# (${fmt(total)}/${fmt(facture)}) à ${playersData[ownerId]?.name}`);
                 
                 // Attendre la réponse du propriétaire
                 showModal(`
                     <h3>⏳ En attente...</h3>
                     <p>Proposition envoyée à ${playersData[ownerId]?.name}</p>
-                    <p><strong>${euroOffer}€ + ${hashOffer}# = ${total}</strong> (facture: ${facture})</p>
+                    <p><strong>${fmt(euroOffer)}€ + ${fmt(hashOffer)}# = ${fmt(total)}</strong> (facture: ${fmt(facture)})</p>
                     <p style="color: #6b7280;">Le propriétaire doit accepter ou refuser.</p>
                 `, ``);
                 
@@ -6943,7 +6945,7 @@ function initSystemeDe() {
                 
                 <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin: 15px 0; text-align: center;">
                     <p style="margin: 0; font-size: 1.3rem;">
-                        <strong>${nego.euroOffer}€ + ${nego.hashOffer}#</strong>
+                        <strong>${fmt(nego.euroOffer)}€ + ${fmt(nego.hashOffer)}#</strong>
                     </p>
                     <p style="margin: 5px 0 0 0; font-size: 0.9rem;">
                         Total: ${nego.total} / Facture: ${nego.facture}
@@ -6988,8 +6990,8 @@ function initSystemeDe() {
                 <hr style="margin: 10px 0;">
                 <p>En échange :</p>
                 <ul style="padding-left: 20px; margin: 10px 0;">
-                    <li>Tu gagnes <strong style="color: #059669;">${gainHash}#</strong></li>
-                    <li>Le propriétaire gagne <strong style="color: #059669;">${gainHash}#</strong></li>
+                    <li>Tu gagnes <strong style="color: #059669;">${fmt(gainHash)}#</strong></li>
+                    <li>Le propriétaire gagne <strong style="color: #059669;">${fmt(gainHash)}#</strong></li>
                     <li>Pas de facture à payer</li>
                 </ul>
             `, `
@@ -7027,7 +7029,7 @@ function initSystemeDe() {
                 ownerEspoyr: ownerCaisse.espoyr
             }, ecriture?.ledgerEntryId ? [ecriture.ledgerEntryId] : []);
             
-            sendSystemMessage(`👷 ${myName} travaille chez ${ownerPlayer?.name} (${c.icon}) : +${gainHash}# chacun !`);
+            sendSystemMessage(`👷 ${myName} travaille chez ${ownerPlayer?.name} (${c.icon}) : +${fmt(gainHash)}# chacun !`);
             
             nextTurn();
         }
@@ -7061,7 +7063,7 @@ function initSystemeDe() {
                 newDebt: maCaisse.emprunt
             }, ecritureEmprunt?.ledgerEntryIds || []);
             
-            sendSystemMessage(`📋 ${myName} s'endette de ${amount}€ (banque)`);
+            sendSystemMessage(`📋 ${myName} s'endette de ${fmt(amount)}€ (banque)`);
             
             nextTurn();
         }
@@ -7161,12 +7163,12 @@ function initSystemeDe() {
                 soldeAfter: caisse.euro
             }, result.ledgerEntryIds || []);
             
-            sendSystemMessage(`${caseIcon} ${myName} paie ${cout}€ (${caseName}) → 🏛️ État`);
+            sendSystemMessage(`${caseIcon} ${myName} paie ${fmt(cout)}€ (${caseName}) → 🏛️ État`);
             
             // Confirmation rapide
             showModal(`
                 <h3>✅ Paiement effectué</h3>
-                <p><strong>${cout}€</strong> versés à l'État</p>
+                <p><strong>${fmt(cout)}€</strong> versés à l'État</p>
                 <p style="font-size: 0.85rem; color: #6b7280;">
                     HT: ${result.facture.ht.toFixed(2)}€ | TVA: ${result.facture.tva.toFixed(2)}€
                 </p>
@@ -7193,9 +7195,9 @@ function initSystemeDe() {
                 soldeAfter: newCaisse.euro
             }, ecriture?.ledgerEntryId ? [ecriture.ledgerEntryId] : []);
             
-            sendSystemMessage(`🏛️ ${myName} paie ${taxe}€ de taxe (10%)`);
+            sendSystemMessage(`🏛️ ${myName} paie ${fmt(taxe)}€ de taxe (10%)`);
             
-            showModal(`<h3>🏛️ Taxe</h3><p>10% du capital : <strong>${taxe}€</strong></p>`,
+            showModal(`<h3>🏛️ Taxe</h3><p>10% du capital : <strong>${fmt(taxe)}€</strong></p>`,
                 `<button class="btn btn-primary" onclick="safeNextTurn();">OK</button>`);
         }
         
@@ -7236,15 +7238,15 @@ function initSystemeDe() {
                 effects: playerEffects
             }, ledgerEntryIds);
             
-            sendSystemMessage(`🚌 Transport Commun ! Tout le monde paie ${c.cout}€`);
+            sendSystemMessage(`🚌 Transport Commun ! Tout le monde paie ${fmt(c.cout)}€`);
             
             // Afficher le modal avec un timer qui passe au tour suivant automatiquement
             let countdown = 3;
             showModal(`
                 <h3>🚌 Ligne 2</h3>
-                <p>Tous les joueurs paient <strong>${c.cout}€</strong></p>
+                <p>Tous les joueurs paient <strong>${fmt(c.cout)}€</strong></p>
                 <div style="background: #fef3c7; padding: 10px; border-radius: 8px; margin: 10px 0;">
-                    ${playerEffects.map(e => `<p style="margin: 3px 0;">${playersData[e.playerId]?.avatar || '👤'} ${e.name}: ${e.before}€ → ${e.after}€</p>`).join('')}
+                    ${playerEffects.map(e => `<p style="margin: 3px 0;">${playersData[e.playerId]?.avatar || '👤'} ${e.name}: ${fmt(e.before)}€ → ${fmt(e.after)}€</p>`).join('')}
                 </div>
                 <p id="ligne2Countdown" style="text-align: center; color: #6b7280; font-size: 0.9rem;">Tour suivant dans ${countdown}s...</p>
             `, `
@@ -7381,7 +7383,7 @@ function initSystemeDe() {
                     contexte: 'exportation'
                 });
                 
-                sendSystemMessage(`🏛️ L'État comble le découvert Export: ${decouvert}€`);
+                sendSystemMessage(`🏛️ L'État comble le découvert Export: ${fmt(decouvert)}€`);
                 
                 // Journal État
                 COMPTABILITE.etat.journalEtat.push({
@@ -7423,7 +7425,7 @@ function initSystemeDe() {
                     contexte: 'etat'
                 });
                 
-                sendSystemMessage(`🏛️💰 L'État emprunte ${deficit}€ à la banque (dette: ${COMPTABILITE.etat.dette.capital}€)`);
+                sendSystemMessage(`🏛️💰 L'État emprunte ${fmt(deficit)}€ à la banque (dette: ${fmt(COMPTABILITE.etat.dette.capital)}€)`);
                 
                 // Journal État
                 COMPTABILITE.etat.journalEtat.push({
@@ -7469,7 +7471,7 @@ function initSystemeDe() {
                             contexte: 'etat'
                         });
                         
-                        sendSystemMessage(`⚠️ L'État emprunte ${manque}€ pour payer ses intérêts !`);
+                        sendSystemMessage(`⚠️ L'État emprunte ${fmt(manque)}€ pour payer ses intérêts !`);
                     }
                     
                     // Paiement des intérêts - côté État
@@ -7493,7 +7495,7 @@ function initSystemeDe() {
                         contexte: 'etat'
                     });
                     
-                    sendSystemMessage(`🏛️📈 L'État paie ${interets}€ d'intérêts (dette: ${dette}€, cumul: ${COMPTABILITE.etat.dette.interetsCumules}€)`);
+                    sendSystemMessage(`🏛️📈 L'État paie ${fmt(interets)}€ d'intérêts (dette: ${fmt(dette)}€, cumul: ${fmt(COMPTABILITE.etat.dette.interetsCumules)}€)`);
                     
                     // Journal État - utiliser toursComplets au lieu de turn
                     COMPTABILITE.etat.journalEtat.push({
@@ -7558,9 +7560,9 @@ function initSystemeDe() {
                     
                     <div style="background: #fef3c7; padding: 12px; border-radius: 8px; margin: 10px 0;">
                         <p style="margin: 0 0 8px 0;"><strong>📊 Situation financière :</strong></p>
-                        <p style="margin: 4px 0;">• Dette totale : <strong>${dette}€</strong></p>
-                        <p style="margin: 4px 0;">• Intérêts prévus : <strong>${interetsPrevus}€</strong>/tour</p>
-                        <p style="margin: 4px 0;">• Recettes moyennes : <strong>${recettesMoyennes}€</strong>/tour</p>
+                        <p style="margin: 4px 0;">• Dette totale : <strong>${fmt(dette)}€</strong></p>
+                        <p style="margin: 4px 0;">• Intérêts prévus : <strong>${fmt(interetsPrevus)}€</strong>/tour</p>
+                        <p style="margin: 4px 0;">• Recettes moyennes : <strong>${fmt(recettesMoyennes)}€</strong>/tour</p>
                     </div>
                     
                     <div style="background: #f0fdf4; padding: 12px; border-radius: 8px; margin: 10px 0;">
@@ -7722,9 +7724,9 @@ function initSystemeDe() {
                         const resInterets = await comptaInterets(bot.id, interet);
                         
                         if (resInterets.montantImpaye > 0) {
-                            sendSystemMessage(`📈 ${bot.name} : intérêts ${interet}€ (payés: ${resInterets.montantPaye}€, capitalisés: ${resInterets.montantImpaye}€)`);
+                            sendSystemMessage(`📈 ${bot.name} : intérêts ${fmt(interet)}€ (payés: ${fmt(resInterets.montantPaye)}€, capitalisés: ${fmt(resInterets.montantImpaye)}€)`);
                         } else {
-                            sendSystemMessage(`📉 ${bot.name} : intérêts payés ${interet}€`);
+                            sendSystemMessage(`📉 ${bot.name} : intérêts payés ${fmt(interet)}€`);
                         }
                         
                         // Remboursement automatique d'une partie du capital
@@ -7734,7 +7736,7 @@ function initSystemeDe() {
                             const remboursement = Math.min(cible, caisse.euro, caisse.emprunt);
                             if (remboursement > 0) {
                                 await comptaRemboursement(bot.id, remboursement);
-                                sendSystemMessage(`💳 ${bot.name} : remboursement capital ${remboursement}€ (dette: ${caisse.emprunt}€)`);
+                                sendSystemMessage(`💳 ${bot.name} : remboursement capital ${fmt(remboursement)}€ (dette: ${fmt(caisse.emprunt)}€)`);
                             }
                         }
                         
@@ -7747,9 +7749,9 @@ function initSystemeDe() {
                 await syncComptabiliteToFirebase();
                 
                 if (complementAAA > 0) {
-                    sendSystemMessage(`💰 ${bot.name} reçoit ${salaire}€ + 💚${complementAAA}# (complément AAA)`);
+                    sendSystemMessage(`💰 ${bot.name} reçoit ${fmt(salaire)}€ + 💚${fmt(complementAAA)}# (complément AAA)`);
                 } else {
-                    sendSystemMessage(`💰 ${bot.name} reçoit ${salaire}€${phase >= 2 ? ' (érosion)' : ''}`);
+                    sendSystemMessage(`💰 ${bot.name} reçoit ${fmt(salaire)}€${phase >= 2 ? ' (érosion)' : ''}`);
                 }
             }
             
@@ -7853,7 +7855,7 @@ function initSystemeDe() {
                         const peutEquiper = (caisse.euro || 0) >= c.prixEquip;
                         
                         if (!peutEquiper) {
-                            sendSystemMessage(`🤖 ${bot.name} sur ${c.icon} - pas assez pour équiper (${caisse.euro}€ < ${c.prixEquip}€)`);
+                            sendSystemMessage(`🤖 ${bot.name} sur ${c.icon} - pas assez pour équiper (${fmt(caisse.euro)}€ < ${fmt(c.prixEquip)}€)`);
                         } else {
                             // Décision équipement selon profil
                             let shouldEquip = false;
@@ -7932,13 +7934,13 @@ function initSystemeDe() {
                         if (peutEmprunter) {
                             await comptaEmprunt(botId, manque);
                             await comptaPaiementFacture(botId, owner, position, facture, 0);
-                            sendSystemMessage(`🤖 ${bot.name} emprunte ${manque}€ et paie ${facture}€`);
+                            sendSystemMessage(`🤖 ${bot.name} emprunte ${fmt(manque)}€ et paie ${fmt(facture)}€`);
                         } else if (profil.id === 'PRUDENT') {
                             // Le prudent paie ce qu'il peut et ne fait pas faillite
                             const paiementPartiel = Math.min(caisse.euro || 0, facture);
                             if (paiementPartiel > 0) {
                                 await comptaPaiementFacture(botId, owner, position, paiementPartiel, 0);
-                                sendSystemMessage(`🤖 ${bot.name} (🐢 Prudent) paie partiellement ${paiementPartiel}€/${facture}€`);
+                                sendSystemMessage(`🤖 ${bot.name} (🐢 Prudent) paie partiellement ${fmt(paiementPartiel)}€/${fmt(facture)}€`);
                             } else {
                                 sendSystemMessage(`🤖 ${bot.name} (🐢 Prudent) ne peut pas payer`);
                             }
@@ -8015,7 +8017,7 @@ function initSystemeDe() {
                     <strong>${e.joueurNom}</strong>: ${e.libelle}<br>
                     <span style="color:#ef4444;">D:${e.debit.compte} ${e.debit.nom}</span> |
                     <span style="color:#10b981;">C:${e.credit.compte} ${e.credit.nom}</span>
-                    <span style="float:right;">${e.debit.euro}€ ${e.debit.espoyr}#</span>
+                    <span style="float:right;">${fmt(e.debit.euro)}€ ${fmt(e.debit.espoyr)}#</span>
                 </div>
             `).join('');
             
@@ -8052,11 +8054,11 @@ function initSystemeDe() {
                 
                 return `
                     <tr>
-                        <td>${Math.round(bilan.actif.caisseEuro * 100) / 100}€</td>
-                        <td>${Math.round(bilan.actif.caisseEspoyr * 100) / 100}#</td>
-                        <td>${Math.round(bilan.actif.activites * 100) / 100}€</td>
-                        <td>${Math.round(bilan.passif.emprunts * 100) / 100}€</td>
-                        <td>${Math.round((bilan.actif.total - bilan.passif.emprunts) * 100) / 100}€</td>
+                        <td>${fmt(bilan.actif.caisseEuro)}€</td>
+                        <td>${fmt(bilan.actif.caisseEspoyr)}#</td>
+                        <td>${fmt(bilan.actif.activites)}€</td>
+                        <td>${fmt(bilan.passif.emprunts)}€</td>
+                        <td>${fmt(bilan.actif.total - bilan.passif.emprunts)}€</td>
                     </tr>
                 `;
             }).join('');
@@ -8091,16 +8093,16 @@ function initSystemeDe() {
                 </tr>
                 <tr>
                     <td>Créances</td>
-                    <td class="actif" colspan="2">${bilan.bilanBanque.actif.creancesJoueurs}€</td>
+                    <td class="actif" colspan="2">${fmt(bilan.bilanBanque.actif.creancesJoueurs)}€</td>
                     <td>Masse €</td>
-                    <td class="passif" colspan="2">${bilan.bilanBanque.passif.masseMonetaire}€</td>
+                    <td class="passif" colspan="2">${fmt(bilan.bilanBanque.passif.masseMonetaire)}€</td>
                 </tr>
                 ${bilan.bilanBanque.reductionValeur > 0 ? `
                 <tr>
                     <td style="font-size: 0.8rem; color: #dc2626;">RDV (pertes)</td>
-                    <td class="passif" colspan="2" style="font-size: 0.8rem;">-${bilan.bilanBanque.reductionValeur}€</td>
+                    <td class="passif" colspan="2" style="font-size: 0.8rem;">-${fmt(bilan.bilanBanque.reductionValeur)}€</td>
                     <td style="font-size: 0.8rem;">Créances nettes</td>
-                    <td colspan="2" style="font-size: 0.8rem;">${bilan.bilanBanque.actif.creancesNettes}€</td>
+                    <td colspan="2" style="font-size: 0.8rem;">${fmt(bilan.bilanBanque.actif.creancesNettes)}€</td>
                 </tr>
                 ` : ''}
             `;
@@ -8111,9 +8113,9 @@ function initSystemeDe() {
                 </tr>
                 <tr>
                     <td>Solde</td>
-                    <td class="actif" colspan="2">${bilan.bilanAAA.passif.solde}#</td>
+                    <td class="actif" colspan="2">${fmt(bilan.bilanAAA.passif.solde)}#</td>
                     <td># en circulation</td>
-                    <td colspan="2">${bilan.bilanAAA.circulationHash}#</td>
+                    <td colspan="2">${fmt(bilan.bilanAAA.circulationHash)}#</td>
                 </tr>
             `;
             
@@ -8123,9 +8125,9 @@ function initSystemeDe() {
                 </tr>
                 <tr>
                     <td>Trésor</td>
-                    <td class="actif" colspan="2">${bilan.bilanEtat.actif.tresor}€</td>
+                    <td class="actif" colspan="2">${fmt(bilan.bilanEtat.actif.tresor)}€</td>
                     <td>Dette</td>
-                    <td class="passif" colspan="2">${COMPTABILITE.etat.dette?.capital || 0}€</td>
+                    <td class="passif" colspan="2">${fmt(COMPTABILITE.etat.dette?.capital || 0)}€</td>
                 </tr>
                 <tr style="font-size: 0.8rem;">
                     <td colspan="3" style="background:#dcfce7;">
@@ -8160,11 +8162,11 @@ function initSystemeDe() {
                         ${bilan.bilanExportation?.solde || 0}€
                     </td>
                     <td>Recettes</td>
-                    <td colspan="2">${bilan.bilanExportation?.recettes || 0}€</td>
+                    <td colspan="2">${fmt(bilan.bilanExportation?.recettes || 0)}€</td>
                 </tr>
                 <tr>
                     <td style="font-size: 0.8rem;">Salaires versés</td>
-                    <td colspan="5" style="font-size: 0.8rem;">${bilan.bilanExportation?.salairesVerses || 0}€</td>
+                    <td colspan="5" style="font-size: 0.8rem;">${fmt(bilan.bilanExportation?.salairesVerses || 0)}€</td>
                 </tr>
             `;
             
@@ -8174,18 +8176,19 @@ function initSystemeDe() {
                 </tr>
                 <tr>
                     <td>Solde</td>
-                    <td class="actif" colspan="2">${bilan.bilanHorsCircuit?.solde || 0}€</td>
+                    <td class="actif" colspan="2">${fmt(bilan.bilanHorsCircuit?.solde || 0)}€</td>
                     <td>Recettes</td>
-                    <td colspan="2">${bilan.bilanHorsCircuit?.recettes || 0}€</td>
+                    <td colspan="2">${fmt(bilan.bilanHorsCircuit?.recettes || 0)}€</td>
                 </tr>
                 <tr>
                     <td colspan="6" style="font-size:0.8rem;">💬 Économie spéculative / importation (captation du HT des achats)</td>
                 </tr>
             `;
             
-         const equilibreHtml = Math.abs(bilan.equilibre) > 1 ? 
-    `<p style="color: #dc2626; font-size: 0.8rem;">⚠️ Déséquilibre: ${Math.round(bilan.equilibre * 100) / 100}€</p>` :
-    `<p style="color: #059669; font-size: 0.8rem;">✅ Bilan équilibré</p>`;
+            // Vérification équilibre
+            const equilibreHtml = Math.abs(bilan.equilibre) > 1 ? 
+                `<p style="color: #dc2626; font-size: 0.8rem;">⚠️ Déséquilibre: ${fmt(bilan.equilibre)}€</p>` :
+                `<p style="color: #059669; font-size: 0.8rem;">✅ Bilan équilibré</p>`;
             
             showModal(`
                 <h3>📊 Bilan Économique - Tour ${bilan.tour}</h3>
@@ -8205,11 +8208,11 @@ function initSystemeDe() {
                         ${playerRows}
                         <tr class="total">
                             <td>TOTAL</td>
-                            <td>${bilan.actif.caisseEuro}€</td>
-                            <td>${bilan.actif.caisseEspoyr}#</td>
-                            <td>${bilan.actif.activites}€</td>
-                            <td>${bilan.passif.emprunts}€</td>
-                            <td>${bilan.actif.total - bilan.passif.emprunts}€</td>
+                            <td>${fmt(bilan.actif.caisseEuro)}€</td>
+                            <td>${fmt(bilan.actif.caisseEspoyr)}#</td>
+                            <td>${fmt(bilan.actif.activites)}€</td>
+                            <td>${fmt(bilan.passif.emprunts)}€</td>
+                            <td>${fmt(bilan.actif.total - bilan.passif.emprunts)}€</td>
                         </tr>
                         ${bilanBanque}
                         ${bilanAAA}
@@ -8455,7 +8458,7 @@ function initSystemeDe() {
                 <!-- CAPACITÉ D'EMPRUNT                                    -->
                 <!-- ══════════════════════════════════════════════════════ -->
                 <div style="background:#fef3c7; padding:8px 12px; border-radius:8px; margin-bottom:10px; text-align:center;">
-                    🏦 <strong>Capacité emprunt:</strong> ${capaciteEmprunt}€ disponible sur ${limiteEmprunt}€ max
+                    🏦 <strong>Capacité emprunt:</strong> ${fmt(capaciteEmprunt)}€ disponible sur ${fmt(limiteEmprunt)}€ max
                 </div>
                 
                 <!-- ══════════════════════════════════════════════════════ -->
@@ -8671,7 +8674,7 @@ function initSystemeDe() {
                     <tr style="font-size:0.75rem;">
                         <td>T${e.tour || '?'}</td>
                         <td>${e.type}</td>
-                        <td style="text-align:right;">${e.montant || 0}€</td>
+                        <td style="text-align:right;">${fmt(e.montant || 0)}€</td>
                     </tr>
                 `).join('') :
                 '<tr><td colspan="3" style="font-size:0.75rem; color:#9ca3af;">Aucun événement</td></tr>';
@@ -8893,7 +8896,7 @@ function initSystemeDe() {
                     <tr style="font-size:0.75rem;">
                         <td>#${e.id || '?'}</td>
                         <td>${e.libelle || ''}</td>
-                        <td style="text-align:right;">${e.debit?.montantEuro || e.credit?.montantEuro || 0}€</td>
+                        <td style="text-align:right;">${fmt(e.debit?.montantEuro || e.credit?.montantEuro || 0)}€</td>
                     </tr>
                 `).join('') :
                 '<tr><td colspan="3" style="font-size:0.75rem; color:#9ca3af;">Aucune écriture</td></tr>';
@@ -8962,7 +8965,7 @@ function initSystemeDe() {
                     ${solde < 0 ? `
                     <div style="background:#fee2e2; padding:8px; border-radius:6px; margin-top:8px;">
                         <p style="margin:0; font-size:0.85rem; color:#dc2626;">
-                            ⚠️ <strong>Découvert de ${Math.abs(solde)}€</strong><br>
+                            ⚠️ <strong>Découvert de ${fmt(Math.abs(solde))}€</strong><br>
                             L'État comblera ce déficit en fin de tour.
                         </p>
                     </div>
@@ -9012,7 +9015,7 @@ function initSystemeDe() {
                     <tr style="font-size:0.75rem;">
                         <td>#${e.id || '?'}<\/td>
                         <td>${e.libelle || ''}<\/td>
-                        <td style="text-align:right;">${e.debit?.montantEuro || e.credit?.montantEuro || 0}€<\/td>
+                        <td style="text-align:right;">${fmt(e.debit?.montantEuro || e.credit?.montantEuro || 0)}€<\/td>
                     <\/tr>
                 `).join('') :
                 '<tr><td colspan="3" style="font-size:0.75rem; color:#9ca3af;">Aucune écriture<\/td><\/tr>';
@@ -9105,7 +9108,7 @@ function initSystemeDe() {
                     <tr style="font-size:0.75rem;">
                         <td>#${e.id || '?'}</td>
                         <td>${e.libelle || ''}</td>
-                        <td style="text-align:right;">${e.montant || 0}€</td>
+                        <td style="text-align:right;">${fmt(e.montant || 0)}€</td>
                     </tr>
                 `).join('') :
                 '<tr><td colspan="3" style="font-size:0.75rem; color:#9ca3af;">Aucune écriture</td></tr>';
@@ -9198,7 +9201,7 @@ function initSystemeDe() {
             // Journal du Pot AAA (5 dernières écritures)
             const journalAAA = (potAAA.journal || []).slice(-5).reverse();
             const journalHtml = journalAAA.length > 0 ? 
-                journalAAA.map(e => `<tr><td style="font-size:0.7rem;">#${e.id}</td><td style="font-size:0.7rem;">${e.libelle}</td><td style="font-size:0.7rem;">${e.debit?.montantEspoyr || e.credit?.montantEspoyr || 0}#</td></tr>`).join('') :
+                journalAAA.map(e => `<tr><td style="font-size:0.7rem;">#${e.id}</td><td style="font-size:0.7rem;">${e.libelle}</td><td style="font-size:0.7rem;">${fmt(e.debit?.montantEspoyr || e.credit?.montantEspoyr || 0)}#</td></tr>`).join('') :
                 '<tr><td colspan="3" style="font-size:0.7rem; color:#9ca3af;">Aucune écriture</td></tr>';
             
             // Liste des créances
@@ -9216,15 +9219,15 @@ function initSystemeDe() {
                             <td><strong>PASSIF</strong></td>
                         </tr>
                         <tr>
-                            <td>48 - Créances : ${totalCreances}#</td>
-                            <td>135 - Fonds : ${potAAA.solde || 0}#</td>
+                            <td>48 - Créances : ${fmt(totalCreances)}#</td>
+                            <td>135 - Fonds : ${fmt(potAAA.solde || 0)}#</td>
                         </tr>
                         <tr>
-                            <td>580 - Caisse : ${potAAA.solde || 0}#</td>
+                            <td>580 - Caisse : ${fmt(potAAA.solde || 0)}#</td>
                             <td></td>
                         </tr>
                         <tr style="border-top:1px solid #ccc;">
-                            <td colspan="2"># en circulation : ${potAAA.circulationHash || 0}#</td>
+                            <td colspan="2"># en circulation : ${fmt(potAAA.circulationHash || 0)}#</td>
                         </tr>
                         <tr>
                             <td colspan="2">Membres : ${potAAA.membres?.length || 0}</td>
@@ -9250,8 +9253,8 @@ function initSystemeDe() {
                     </ul>
                 ` : `
                     <p>✅ <strong>Tu es membre</strong></p>
-                    <p>Ton solde # : <strong>${myEspoyr}#</strong></p>
-                    ${maCreance > 0 ? `<p style="color:var(--orange);">Crédit en cours : ${maCreance}#</p>` : ''}
+                    <p>Ton solde # : <strong>${fmt(myEspoyr)}#</strong></p>
+                    ${maCreance > 0 ? `<p style="color:var(--orange);">Crédit en cours : ${fmt(maCreance)}#</p>` : ''}
                     <div style="display: flex; gap: 10px; margin: 10px 0;">
                         <input type="number" id="aaaAmount" min="1" max="100" value="10" placeholder="Montant #">
                     </div>
@@ -9294,7 +9297,7 @@ function initSystemeDe() {
             await syncComptabiliteToFirebase();
             
             closeModal();
-            sendSystemMessage(`💚 ${myName} cotise ${amount}# au Pot AAA`);
+            sendSystemMessage(`💚 ${myName} cotise ${fmt(amount)}# au Pot AAA`);
             showAAAModal();
         }
         
@@ -9314,7 +9317,7 @@ function initSystemeDe() {
             await syncComptabiliteToFirebase();
             
             closeModal();
-            sendSystemMessage(`💚 ${myName} emprunte ${amount}# au Pot AAA`);
+            sendSystemMessage(`💚 ${myName} emprunte ${fmt(amount)}# au Pot AAA`);
             showAAAModal();
         }
         
@@ -9355,7 +9358,7 @@ function initSystemeDe() {
                     <td style="font-size:0.65rem; color:#6b7280;">${e.event_type}</td>
                     <td style="font-size:0.65rem;">D:${e.debit_account ?? '?'}</td>
                     <td style="font-size:0.65rem;">C:${e.credit_account ?? '?'}</td>
-                    <td style="font-size:0.65rem; text-align:right; font-weight:bold;">${arrondir2(e.amount ?? 0)}€</td>
+                    <td style="font-size:0.65rem; text-align:right; font-weight:bold;">${fmt(e.amount ?? 0)}€</td>
                 </tr>`).join('') :
                 '<tr><td colspan="4" style="font-size:0.7rem; color:#9ca3af;">Aucune écriture</td></tr>';
             
@@ -9365,7 +9368,7 @@ function initSystemeDe() {
                 journalBanque.map(e => `<tr>
                     <td style="font-size:0.7rem;">#${e.id}</td>
                     <td style="font-size:0.7rem;">${e.libelle}</td>
-                    <td style="font-size:0.7rem; text-align:right;">${e.debit?.euro || 0}€</td>
+                    <td style="font-size:0.7rem; text-align:right;">${fmt(e.debit?.euro || 0)}€</td>
                 </tr>`).join('') :
                 '<tr><td colspan="3" style="font-size:0.7rem; color:#9ca3af;">Aucune écriture</td></tr>';
             
@@ -9465,10 +9468,10 @@ function initSystemeDe() {
                 
                 <hr style="margin: 10px 0;">
                 <p style="font-weight:bold;">💳 Ton compte</p>
-                <p><strong>Ta dette :</strong> ${dette}€</p>
-                <p><strong>Limite d'emprunt :</strong> ${limiteCalculee}€</p>
-                <p style="font-size: 0.8rem; color: var(--gray);">= max(${CONFIG.limiteEmpruntMin}€, ${masseMonetaire}€ ÷ ${players.length})</p>
-                <p><strong style="color: ${disponible > 0 ? 'var(--green)' : 'var(--red)'};">Disponible : ${disponible}€</strong></p>
+                <p><strong>Ta dette :</strong> ${fmt(dette)}€</p>
+                <p><strong>Limite d'emprunt :</strong> ${fmt(limiteCalculee)}€</p>
+                <p style="font-size: 0.8rem; color: var(--gray);">= max(${CONFIG.limiteEmpruntMin}€, ${fmt(masseMonetaire)}€ ÷ ${players.length})</p>
+                <p><strong style="color: ${disponible > 0 ? 'var(--green)' : 'var(--red)'};">Disponible : ${fmt(disponible)}€</strong></p>
                 ${disponible > 0 ? `
                     <label>Montant à emprunter :</label>
                     <input type="number" id="bankLoanAmount" min="10" max="${disponible}" value="${Math.min(100, disponible)}" step="10">
@@ -9516,7 +9519,7 @@ function initSystemeDe() {
             await syncComptabiliteToFirebase();
             
             closeModal();
-            sendSystemMessage(`🏦 ${myName} emprunte ${amount}€`);
+            sendSystemMessage(`🏦 ${myName} emprunte ${fmt(amount)}€`);
         }
         
         async function repayBankLoan() {
@@ -9532,7 +9535,7 @@ function initSystemeDe() {
             await syncComptabiliteToFirebase();
             
             closeModal();
-            sendSystemMessage(`💸 ${myName} rembourse ${amount}€`);
+            sendSystemMessage(`💸 ${myName} rembourse ${fmt(amount)}€`);
         }
         
         // ========== INFO CASE ==========
@@ -9604,10 +9607,10 @@ function initSystemeDe() {
                     <!-- Infos générales -->
                     <div style="background: #f3f4f6; padding: 10px; border-radius: 8px;">
                         <p style="font-weight: bold; margin: 0 0 8px 0;">📊 Informations</p>
-                        <p style="margin: 4px 0;"><strong>Prix achat :</strong> ${c.prix}€</p>
-                        <p style="margin: 4px 0;"><strong>Facture base :</strong> ${c.facture}€</p>
+                        <p style="margin: 4px 0;"><strong>Prix achat :</strong> ${fmt(c.prix)}€</p>
+                        <p style="margin: 4px 0;"><strong>Facture base :</strong> ${fmt(c.facture)}€</p>
                         <p style="margin: 4px 0;"><strong>Équipements :</strong> ${equipDisplay} ${nbEquip > 0 ? `(×${factureMultiplier})` : ''}</p>
-                        <p style="margin: 4px 0; font-size: 1.1rem;"><strong>Facture actuelle :</strong> <span style="color: #059669;">${factureActuelle}€</span></p>
+                        <p style="margin: 4px 0; font-size: 1.1rem;"><strong>Facture actuelle :</strong> <span style="color: #059669;">${fmt(factureActuelle)}€</span></p>
                     </div>
                     
                     <!-- Bilan en format horizontal -->
@@ -9619,16 +9622,16 @@ function initSystemeDe() {
                                 <p style="margin: 0 0 6px 0; font-weight: bold; text-align: center; color: #1e40af;">ACTIF</p>
                                 <div style="font-size: 0.8rem;">
                                     <div style="display: flex; justify-content: space-between; padding: 2px 0;">
-                                        <span>Immobilisation</span><span>${bilan.actif.immobilisation}€</span>
+                                        <span>Immobilisation</span><span>${fmt(bilan.actif.immobilisation)}€</span>
                                     </div>
                                     <div style="display: flex; justify-content: space-between; padding: 2px 0;">
-                                        <span>Équipements</span><span>${Math.floor(bilan.actif.equipements)}€</span>
+                                        <span>Équipements</span><span>${fmt(bilan.actif.equipements)}€</span>
                                     </div>
                                     <div style="display: flex; justify-content: space-between; padding: 2px 0;">
-                                        <span>Trésorerie</span><span style="color: ${bilan.actif.tresorerie >= 0 ? '#059669' : '#dc2626'};">${bilan.actif.tresorerie}€</span>
+                                        <span>Trésorerie</span><span style="color: ${bilan.actif.tresorerie >= 0 ? '#059669' : '#dc2626'};">${fmt(bilan.actif.tresorerie)}€</span>
                                     </div>
                                     <div style="display: flex; justify-content: space-between; padding: 4px 0; margin-top: 4px; border-top: 2px solid #3b82f6; font-weight: bold;">
-                                        <span>TOTAL</span><span>${Math.floor(bilan.actif.total)}€</span>
+                                        <span>TOTAL</span><span>${fmt(bilan.actif.total)}€</span>
                                     </div>
                                 </div>
                             </div>
@@ -9637,18 +9640,18 @@ function initSystemeDe() {
                                 <p style="margin: 0 0 6px 0; font-weight: bold; text-align: center; color: #991b1b;">PASSIF</p>
                                 <div style="font-size: 0.8rem;">
                                     <div style="display: flex; justify-content: space-between; padding: 2px 0;">
-                                        <span>Capital initial</span><span>${bilan.passif.capitalInitial}€</span>
+                                        <span>Capital initial</span><span>${fmt(bilan.passif.capitalInitial)}€</span>
                                     </div>
                                     ${bilan.passif.apportsEquipements > 0 ? `
                                     <div style="display: flex; justify-content: space-between; padding: 2px 0;">
-                                        <span>Apports équip.</span><span>${Math.floor(bilan.passif.apportsEquipements)}€</span>
+                                        <span>Apports équip.</span><span>${fmt(bilan.passif.apportsEquipements)}€</span>
                                     </div>
                                     ` : `<div style="padding: 2px 0;">&nbsp;</div>`}
                                     <div style="display: flex; justify-content: space-between; padding: 2px 0;">
-                                        <span>Résultat</span><span style="color: ${bilan.passif.resultat >= 0 ? '#059669' : '#dc2626'};">${bilan.passif.resultat}€</span>
+                                        <span>Résultat</span><span style="color: ${bilan.passif.resultat >= 0 ? '#059669' : '#dc2626'};">${fmt(bilan.passif.resultat)}€</span>
                                     </div>
                                     <div style="display: flex; justify-content: space-between; padding: 4px 0; margin-top: 4px; border-top: 2px solid #ef4444; font-weight: bold;">
-                                        <span>TOTAL</span><span>${Math.floor(bilan.passif.total)}€</span>
+                                        <span>TOTAL</span><span>${fmt(bilan.passif.total)}€</span>
                                     </div>
                                 </div>
                             </div>
@@ -9673,7 +9676,7 @@ function initSystemeDe() {
                                 <div style="padding: 3px 0; border-bottom: 1px solid #fef08a;">
                                     <span style="color: #6b7280;">#${e.id}</span>
                                     ${e.libelle} 
-                                    <span style="float: right;">D:${e.debit?.compte || '?'} C:${e.credit?.compte || '?'} | ${e.debit?.euro || 0}€${e.debit?.espoyr > 0 ? '+' + e.debit.espoyr + '#' : ''}</span>
+                                    <span style="float: right;">D:${e.debit?.compte || '?'} C:${e.credit?.compte || '?'} | ${fmt(e.debit?.euro || 0)}€${e.debit?.espoyr > 0 ? '+' + e.debit.espoyr + '#' : ''}</span>
                                 </div>
                             `).join('')}
                         </div>
@@ -9818,7 +9821,7 @@ function initSystemeDe() {
                                     <td style="padding: 2px 3px;">${e.libelle || '-'}</td>
                                     <td style="padding: 2px 3px; font-family: monospace;">${e.debit?.compte || '-'}</td>
                                     <td style="padding: 2px 3px; font-family: monospace;">${e.credit?.compte || '-'}</td>
-                                    <td style="padding: 2px 3px; text-align: right;">${e.debit?.euro || 0}€${e.debit?.espoyr > 0 ? '+' + e.debit.espoyr + '#' : ''}</td>
+                                    <td style="padding: 2px 3px; text-align: right;">${fmt(e.debit?.euro || 0)}€${e.debit?.espoyr > 0 ? '+' + e.debit.espoyr + '#' : ''}</td>
                                 </tr>
                             `).join('')}
                         </table>
@@ -9850,11 +9853,11 @@ function initSystemeDe() {
             showModal(`
                 <h3>💰 Ajuster le prix de passage</h3>
                 <p><strong>${c.icon} ${c.name}</strong></p>
-                <p>Prix de base : ${prixBase}€</p>
+                <p>Prix de base : ${fmt(prixBase)}€</p>
                 
                 <div style="display: flex; align-items: center; justify-content: center; gap: 15px; margin: 20px 0;">
                     <button class="btn" style="font-size: 1.5rem; padding: 10px 20px;" onclick="ajusterPrix(${caseId}, -10)">➖</button>
-                    <div style="font-size: 2rem; font-weight: bold; min-width: 100px; text-align: center;" id="prixAjuste">${prixActuel}€</div>
+                    <div style="font-size: 2rem; font-weight: bold; min-width: 100px; text-align: center;" id="prixAjuste">${fmt(prixActuel)}€</div>
                     <button class="btn" style="font-size: 1.5rem; padding: 10px 20px;" onclick="ajusterPrix(${caseId}, +10)">➕</button>
                 </div>
                 
@@ -9881,7 +9884,7 @@ function initSystemeDe() {
         async function validerPrixAjuste(caseId) {
             await gameRef.child(`prixPersonnalises/${caseId}`).set(window.prixAjusteTemp);
             closeModal();
-            sendSystemMessage(`💰 ${myName} a ajusté le prix de ${CASES[caseId].name} à ${window.prixAjusteTemp}€`);
+            sendSystemMessage(`💰 ${myName} a ajusté le prix de ${CASES[caseId].name} à ${fmt(window.prixAjusteTemp)}€`);
         }
         
         async function resetPrix(caseId) {
@@ -10200,13 +10203,13 @@ function initSystemeDe() {
             showModal(`
                 <h3>💶 Emprunter</h3>
                 <p style="background: #f3f4f6; padding: 8px; border-radius: 6px; margin-bottom: 10px;">
-                    💰 Ton solde actuel : <strong>${currentEuro}€</strong>
+                    💰 Ton solde actuel : <strong>${fmt(currentEuro)}€</strong>
                 </p>
                 
                 <div style="background: #fee2e2; padding: 10px; border-radius: 8px; margin-bottom: 10px;">
                     <p style="margin: 0; font-weight: bold;">🏦 Banque (en €)</p>
-                    <p style="margin: 4px 0 0 0;">Limite : ${limiteEmprunt}€ | Dette actuelle : <strong>${empruntActuel}€</strong></p>
-                    <p style="margin: 4px 0 0 0; color: #059669;">Capacité disponible : <strong>${capacite}€</strong></p>
+                    <p style="margin: 4px 0 0 0;">Limite : ${fmt(limiteEmprunt)}€ | Dette actuelle : <strong>${fmt(empruntActuel)}€</strong></p>
+                    <p style="margin: 4px 0 0 0; color: #059669;">Capacité disponible : <strong>${fmt(capacite)}€</strong></p>
                     <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: #92400e; font-style: italic;">💡 L'argent coûte de l'argent</p>
                     
                     <div style="background: #fef2f2; padding: 6px; border-radius: 4px; margin-top: 8px;">
@@ -10215,7 +10218,7 @@ function initSystemeDe() {
                         </p>
                         ${empruntActuel > 0 ? `
                             <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: #dc2626;">
-                                → Tu paies actuellement <strong>${interetParTour}€/tour</strong> d'intérêts
+                                → Tu paies actuellement <strong>${fmt(interetParTour)}€/tour</strong> d'intérêts
                             </p>
                         ` : ''}
                     </div>
@@ -10239,7 +10242,7 @@ function initSystemeDe() {
                 ${isMembre ? `
                 <div style="background: #dcfce7; padding: 10px; border-radius: 8px;">
                     <p style="margin: 0; font-weight: bold;">💚 Pot AAA (en #)</p>
-                    <p style="margin: 4px 0 0 0;">Solde du Pot : ${potSolde}# | Ta dette AAA : ${detteAAA}#</p>
+                    <p style="margin: 4px 0 0 0;">Solde du Pot : ${fmt(potSolde)}# | Ta dette AAA : ${fmt(detteAAA)}#</p>
                     <p style="margin: 4px 0 0 0; color: #059669; font-weight: bold;">✨ Sans intérêts !</p>
                     ${potSolde > 0 ? `
                         <input type="number" id="empruntHashMontant" value="${Math.min(100, potSolde)}" min="10" max="${potSolde}" step="10" style="width: 100%; padding: 8px; margin-top: 8px;">
@@ -10299,7 +10302,7 @@ function initSystemeDe() {
             
             const tauxInteret = gameConfig.tauxInteret || CONFIG.tauxInteret;
             const interetParTour = Math.floor(caisse.emprunt * tauxInteret);
-            sendSystemMessage(`🏦 ${myName} emprunte ${montant}€ (dette: ${caisse.emprunt}€, intérêts: ${interetParTour}€/tour)`);
+            sendSystemMessage(`🏦 ${myName} emprunte ${fmt(montant)}€ (dette: ${fmt(caisse.emprunt)}€, intérêts: ${fmt(interetParTour)}€/tour)`);
         }
         
         async function executeEmprunterHash() {
@@ -10323,7 +10326,7 @@ function initSystemeDe() {
                 nouvelleDetteAAA: COMPTABILITE.potAAA.creances?.[myPlayerId] || 0
             }, ecriture?.ledgerEntryId ? [ecriture.ledgerEntryId] : []);
             
-            sendSystemMessage(`💚 ${myName} emprunte ${montant}# au Pot AAA (sans intérêts)`);
+            sendSystemMessage(`💚 ${myName} emprunte ${fmt(montant)}# au Pot AAA (sans intérêts)`);
         }
         
         // Action rapide : Équiper
@@ -10402,7 +10405,7 @@ function initSystemeDe() {
                 const c = CASES[actId];
                 html += `<div style="background: #fef3c7; padding: 10px; border-radius: 6px; margin: 6px 0;">
                     <p style="margin: 0; font-weight: bold;">${c.icon} ${c.name}</p>
-                    <p style="margin: 4px 0 0 0; font-size: 0.85rem;">Valeur : ${c.prix}€</p>
+                    <p style="margin: 4px 0 0 0; font-size: 0.85rem;">Valeur : ${fmt(c.prix)}€</p>
                     <button class="btn" style="width:100%; margin-top:8px; background:#f59e0b; color:white;" onclick="lancerEnchere(${actId})">🔨 Mettre aux enchères</button>
                 </div>`;
             }
@@ -10426,11 +10429,11 @@ function initSystemeDe() {
             
             showModal(`
                 <h3>💳 Rembourser</h3>
-                <p>Tu as : <strong>${currentEuro}€</strong> et <strong>${currentHash}#</strong></p>
+                <p>Tu as : <strong>${fmt(currentEuro)}€</strong> et <strong>${fmt(currentHash)}#</strong></p>
                 
                 ${dette > 0 ? `
                 <div style="background: #fee2e2; padding: 10px; border-radius: 8px; margin-bottom: 10px;">
-                    <p style="margin: 0; font-weight: bold;">🏦 Dette Banque : ${dette}€</p>
+                    <p style="margin: 0; font-weight: bold;">🏦 Dette Banque : ${fmt(dette)}€</p>
                     <input type="number" id="remboursEuroMontant" value="${Math.min(dette, currentEuro)}" min="0" max="${Math.min(dette, currentEuro)}" step="10" style="width: 100%; padding: 6px; margin-top: 8px;">
                     <button class="btn" style="background: #fee2e2; color: #dc2626; width: 100%; margin-top: 6px;" onclick="executeRemboursEuro()">Rembourser €</button>
                 </div>
@@ -10438,7 +10441,7 @@ function initSystemeDe() {
                 
                 ${detteAAA > 0 ? `
                 <div style="background: #dcfce7; padding: 10px; border-radius: 8px;">
-                    <p style="margin: 0; font-weight: bold;">💚 Dette AAA : ${detteAAA}#</p>
+                    <p style="margin: 0; font-weight: bold;">💚 Dette AAA : ${fmt(detteAAA)}#</p>
                     <input type="number" id="remboursHashMontant" value="${Math.min(detteAAA, currentHash)}" min="0" max="${Math.min(detteAAA, currentHash)}" step="10" style="width: 100%; padding: 6px; margin-top: 8px;">
                     <button class="btn" style="background: #dcfce7; color: #059669; width: 100%; margin-top: 6px;" onclick="executeRemboursHash()">Rembourser #</button>
                 </div>
@@ -10464,7 +10467,7 @@ function initSystemeDe() {
                 detteRestante: caisse.emprunt
             }, ecriture?.ledgerEntryId ? [ecriture.ledgerEntryId] : []);
             
-            sendSystemMessage(`💳 ${myName} rembourse ${montant}€ à la banque`);
+            sendSystemMessage(`💳 ${myName} rembourse ${fmt(montant)}€ à la banque`);
         }
         
         async function executeRemboursHash() {
@@ -10483,7 +10486,7 @@ function initSystemeDe() {
                 detteRestante: COMPTABILITE.potAAA.creances?.[myPlayerId] || 0
             }, ecriture?.ledgerEntryId ? [ecriture.ledgerEntryId] : []);
             
-            sendSystemMessage(`💚 ${myName} rembourse ${montant}# au Pot AAA`);
+            sendSystemMessage(`💚 ${myName} rembourse ${fmt(montant)}# au Pot AAA`);
         }
         
         // Afficher le modal d'analyse de sauvegarde
