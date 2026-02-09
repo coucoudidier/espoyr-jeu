@@ -625,6 +625,128 @@
             { id: 22, type: 'activite', name: 'Ferme', icon: '🐄', prix: 350, facture: 70, hash: true, prixEquip: 175 }
         ];
         
+        // ========== HELPERS PRIX ÉQUIPEMENTS ==========
+        // A (🌿 Écolo) = 70% du prix activité
+        // B (❄️ Classique) = 50% du prix activité
+        function getPrixA(caseId) { return Math.floor((CASES[caseId]?.prix || 0) * 0.70); }
+        function getPrixB(caseId) { return Math.floor((CASES[caseId]?.prix || 0) * 0.50); }
+        function getDifferenceAB(caseId) { return getPrixA(caseId) - getPrixB(caseId); }
+        
+        // Coût d'un équipement selon le type et la situation
+        // - 1er A : 70% du prix (getPrixA)
+        // - A supplémentaire (2e/3e) : 50% du prix (getPrixB) → compensé 100% en #
+        // - B : 50% du prix (getPrixB)
+        // - Conversion B→A : différence (20% du prix) → compensé 50% en #
+        function getCoutEquipement(caseId, type, nbAActuel) {
+            if (type === 'A') {
+                return nbAActuel === 0 ? getPrixA(caseId) : getPrixB(caseId);
+            }
+            if (type === 'B') return getPrixB(caseId);
+            if (type === 'B_TO_A') return getDifferenceAB(caseId);
+            return 0;
+        }
+        
+        // Bonus # reçu du pot AAA
+        function getBonusHash(caseId, type) {
+            if (type === 'A_FIRST') return getDifferenceAB(caseId);        // 100% de la diff
+            if (type === 'A_ADDITIONAL') return getPrixB(caseId);          // 100% du coût (=prixB)
+            if (type === 'B_TO_A') return Math.floor(getDifferenceAB(caseId) * 0.50); // 50% de la diff
+            return 0;
+        }
+        
+        // Calcul facture = 5% du total investi (activité + tous équipements)
+        function calculerFactureActivite(caseId, equipList) {
+            const c = CASES[caseId];
+            if (!c || c.type !== 'activite') return 0;
+            
+            const nbA = (equipList || []).filter(e => e === 'A').length;
+            const nbB = (equipList || []).filter(e => e === 'B').length;
+            
+            let totalInvesti = c.prix;
+            if (nbA > 0) totalInvesti += getPrixA(caseId);           // 1er A à 70%
+            if (nbA > 1) totalInvesti += getPrixB(caseId) * (nbA - 1); // A suivants à 50%
+            totalInvesti += getPrixB(caseId) * nbB;                    // tous les B à 50%
+            
+            return Math.floor(totalInvesti * 0.05);
+        }
+        
+        // Combinaisons valides : nbA >= nbB, max 3 total
+        function isEquipConfigValide(nbA, nbB) {
+            return nbA >= nbB && (nbA + nbB) <= 3;
+        }
+        
+        // Peut-on acheter un A ?
+        function peutAcheterA(caseId, equipList, joueurId) {
+            const phase = gameState?.phase || 1;
+            if (phase < 2) return { ok: false, raison: 'Phase 1 — A disponible en Phase 2' };
+            
+            const nbA = (equipList || []).filter(e => e === 'A').length;
+            const nbB = (equipList || []).filter(e => e === 'B').length;
+            const total = nbA + nbB;
+            
+            if (total >= 3) return { ok: false, raison: 'Maximum 3 équipements atteint' };
+            if (nbA >= 3) return { ok: false, raison: 'Maximum 3 A atteint' };
+            
+            // Vérifier membre AAA
+            const isMembre = playersData[joueurId]?.membreAAA === true;
+            if (!isMembre) return { ok: false, raison: 'Il faut être membre du Pot AAA' };
+            
+            // Vérifier pot AAA
+            const bonus = nbA === 0 ? getBonusHash(caseId, 'A_FIRST') : getBonusHash(caseId, 'A_ADDITIONAL');
+            const potSolde = COMPTABILITE.potAAA?.solde || 0;
+            if (potSolde < bonus) return { ok: false, raison: `Pot AAA insuffisant (${fmt(potSolde)}# < ${fmt(bonus)}#)` };
+            
+            // Vérifier cash
+            const cout = getCoutEquipement(caseId, 'A', nbA);
+            const cash = COMPTABILITE.caisseJoueurs[joueurId]?.euro || 0;
+            if (cash < cout) return { ok: false, raison: `Cash insuffisant (${fmt(cash)}€ < ${fmt(cout)}€)` };
+            
+            return { ok: true, cout, bonus, raison: '' };
+        }
+        
+        // Peut-on convertir B→A ?
+        function peutConvertirBtoA(caseId, equipList, joueurId) {
+            const phase = gameState?.phase || 1;
+            if (phase < 2) return { ok: false, raison: 'Phase 1 — disponible en Phase 2' };
+            
+            const nbB = (equipList || []).filter(e => e === 'B').length;
+            if (nbB === 0) return { ok: false, raison: 'Aucun B à convertir' };
+            
+            const isMembre = playersData[joueurId]?.membreAAA === true;
+            if (!isMembre) return { ok: false, raison: 'Il faut être membre du Pot AAA' };
+            
+            const bonus = getBonusHash(caseId, 'B_TO_A');
+            const potSolde = COMPTABILITE.potAAA?.solde || 0;
+            if (potSolde < bonus) return { ok: false, raison: `Pot AAA insuffisant (${fmt(potSolde)}# < ${fmt(bonus)}#)` };
+            
+            const cout = getCoutEquipement(caseId, 'B_TO_A', 0);
+            const cash = COMPTABILITE.caisseJoueurs[joueurId]?.euro || 0;
+            if (cash < cout) return { ok: false, raison: `Cash insuffisant (${fmt(cash)}€ < ${fmt(cout)}€)` };
+            
+            return { ok: true, cout, bonus, raison: '' };
+        }
+        
+        // Peut-on acheter un B ?
+        function peutAcheterB(caseId, equipList, joueurId) {
+            const phase = gameState?.phase || 1;
+            const nbA = (equipList || []).filter(e => e === 'A').length;
+            const nbB = (equipList || []).filter(e => e === 'B').length;
+            const total = nbA + nbB;
+            
+            // Phase 2+: interdit si ça violerait nbA >= nbB
+            if (phase >= 2 && !isEquipConfigValide(nbA, nbB + 1)) {
+                return { ok: false, raison: 'Il faut au moins autant de A que de B' };
+            }
+            // Phase 1: max 2B
+            if (phase < 2 && nbB >= 2) return { ok: false, raison: 'Maximum 2 B en Phase 1' };
+            if (total >= 3) return { ok: false, raison: 'Maximum 3 équipements atteint' };
+            
+            const cout = getPrixB(caseId);
+            const cash = COMPTABILITE.caisseJoueurs[joueurId]?.euro || 0;
+            if (cash < cout) return { ok: false, raison: `Cash insuffisant (${fmt(cash)}€ < ${fmt(cout)}€)` };
+            
+            return { ok: true, cout, bonus: 0, raison: '' };
+        }
         const CHANCE_CARDS = [
             { text: "🎉 Fête du village ! Tous reçoivent 60€", amount: 60, all: true },
             { text: "🌱 Bonus écologique collectif +45€", amount: 45, all: true },
@@ -1856,9 +1978,14 @@ function isAbsent(player) {
                 };
             });
             
-            // Calcul équipements
-            Object.values(COMPTABILITE.caisseActivites).forEach(act => {
-                totalEquipements += (act.equipements || 0) * 100; // Estimation valeur équipements
+            // Calcul équipements (avec nouveaux prix)
+            Object.entries(COMPTABILITE.caisseActivites).forEach(([actId, act]) => {
+                const nbA = act.equipementA || 0;
+                const nbB = act.equipementB || 0;
+                const id = parseInt(actId);
+                if (nbA > 0) totalEquipements += getPrixA(id);
+                if (nbA > 1) totalEquipements += getPrixB(id) * (nbA - 1);
+                totalEquipements += getPrixB(id) * nbB;
             });
             
             // Bilan global
@@ -2419,141 +2546,155 @@ function isAbsent(player) {
         }
         
         // Achat équipement (D:218 C:500)
-        // Achat équipement A - DURABLE (D:210 C:500 + bonus # compte 74)
-        // Prix = prixEquip × 1.2, Bonus # = prixEquip × 0.10
+        // Achat équipement A - DURABLE (D:210 C:500 + bonus # du pot AAA)
+        // 1er A: coût=70% prix, bonus=100% de diff (A-B)
+        // A supplémentaire: coût=50% prix, bonus=100% du coût
         async function comptaAchatEquipementA(joueurId, actId) {
             initCaisseJoueur(joueurId);
             initCaisseActivite(actId);
             
             const c = CASES[actId];
-            const prixBase = c?.prixEquip || 100;
-            const prixA = Math.floor(prixBase * 1.2);  // +20%
-            const bonusHash = Math.floor(prixBase * 0.10);  // 10% du prix de base
+            const act = COMPTABILITE.caisseActivites[actId];
+            const nbAActuel = act.equipementA || 0;
+            const cout = getCoutEquipement(actId, 'A', nbAActuel);
+            const bonusHash = nbAActuel === 0 ? getBonusHash(actId, 'A_FIRST') : getBonusHash(actId, 'A_ADDITIONAL');
             const ledgerEntryIds = [];
             
-            // ========== ÉTAPE 4 : Calcul TVA équipement ==========
-            const facture = calculerFacture('equipement', prixA);
+            COMPTABILITE.caisseJoueurs[joueurId].euro -= cout;
+            act.equipements = (act.equipements || 0) + 1;
+            act.equipementA = (act.equipementA || 0) + 1;
             
-            COMPTABILITE.caisseJoueurs[joueurId].euro -= prixA;
-            COMPTABILITE.caisseActivites[actId].equipements++;
-            COMPTABILITE.caisseActivites[actId].equipementA = (COMPTABILITE.caisseActivites[actId].equipementA || 0) + 1;
+            // État reçoit le paiement
+            COMPTABILITE.etat.tresor += cout;
+            COMPTABILITE.etat.recettes.total = (COMPTABILITE.etat.recettes.total || 0) + cout;
             
-            // Écriture 1: Joueur - Équipement HT
+            // Écriture 1: Joueur - Équipement
             let e = enregistrerEcriture({
-                joueurId, libelle: `Équipement A (durable) ${c?.name || actId} HT`,
-                compteDebit: 210, compteCredit: 500, montantEuro: facture.ht, activiteId: actId,
-                details: { type: 'equipementA', prixBase, prixTTC: prixA }
+                joueurId, libelle: `🌿 Équipement A ${c?.name || actId} (${fmt(cout)}€)`,
+                compteDebit: 210, compteCredit: 500, montantEuro: cout, activiteId: actId,
+                details: { type: 'equipementA', cout, bonusHash }
             });
             if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
             
-            // Écriture 2: Joueur - TVA (charge)
+            // Écriture 2: État - Recette
             e = enregistrerEcriture({
-                joueurId, libelle: `TVA Équipement A ${c?.name || actId}`,
-                compteDebit: 635, compteCredit: 500, montantEuro: facture.tva, activiteId: actId
-            });
-            if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
-            
-            // État reçoit la TVA
-            COMPTABILITE.etat.tresor += facture.tva;
-            COMPTABILITE.etat.recettes.tva += facture.tva;
-            COMPTABILITE.etat.recettes.total += facture.tva;
-            COMPTABILITE.etat.grandLivre[500] += facture.tva;
-            COMPTABILITE.etat.grandLivre[704] += facture.tva;
-            
-            // Écriture 3: État - Recette TVA
-            e = enregistrerEcriture({
-                joueurId: 'ETAT', 
-                libelle: `Recette TVA Équipement A ${c?.name || actId}`,
-                compteDebit: 500, compteCredit: 704, montantEuro: facture.tva,
+                joueurId: 'ETAT', libelle: `Recette équipement A ${c?.name || actId}`,
+                compteDebit: 541, compteCredit: 703, montantEuro: cout,
                 contexte: 'etat', activiteId: actId
             });
             if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
             
-            // Bonus # (subvention du Pot AAA)
-            if (bonusHash > 0) {
-                COMPTABILITE.caisseJoueurs[joueurId].espoyr += bonusHash;
+            // Bonus # (du Pot AAA)
+            if (bonusHash > 0 && (COMPTABILITE.potAAA?.solde || 0) >= bonusHash) {
+                COMPTABILITE.caisseJoueurs[joueurId].espoyr = (COMPTABILITE.caisseJoueurs[joueurId].espoyr || 0) + bonusHash;
                 COMPTABILITE.potAAA.solde -= bonusHash;
-                COMPTABILITE.potAAA.circulationHash += bonusHash;
+                COMPTABILITE.potAAA.circulationHash = (COMPTABILITE.potAAA.circulationHash || 0) + bonusHash;
                 
                 e = enregistrerEcriture({
-                    joueurId, libelle: `Bonus # équipement A`,
+                    joueurId, libelle: `Compensation # équipement A (+${fmt(bonusHash)}#)`,
                     compteDebit: 501, compteCredit: 468, montantEspoyr: bonusHash, activiteId: actId,
                     contexte: 'potAAA'
                 });
                 if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
             }
             
-            return { prixA, bonusHash, facture, ledgerEntryIds };
+            return { cout, bonusHash, ledgerEntryIds };
         }
         
         // Achat équipement B - CLASSIQUE (D:220 C:500, pas de bonus)
-        // Prix = prixEquip × 0.8, Bonus # = 0
+        // Coût = 50% du prix activité
         async function comptaAchatEquipementB(joueurId, actId) {
             initCaisseJoueur(joueurId);
             initCaisseActivite(actId);
             
             const c = CASES[actId];
-            const prixBase = c?.prixEquip || 100;
-            const prixB = Math.floor(prixBase * 0.8);  // -20%
+            const cout = getPrixB(actId);
             const ledgerEntryIds = [];
             
-            // ========== ÉTAPE 4 : Calcul TVA équipement ==========
-            const facture = calculerFacture('equipement', prixB);
-            
-            COMPTABILITE.caisseJoueurs[joueurId].euro -= prixB;
-            COMPTABILITE.caisseActivites[actId].equipements++;
+            COMPTABILITE.caisseJoueurs[joueurId].euro -= cout;
+            COMPTABILITE.caisseActivites[actId].equipements = (COMPTABILITE.caisseActivites[actId].equipements || 0) + 1;
             COMPTABILITE.caisseActivites[actId].equipementB = (COMPTABILITE.caisseActivites[actId].equipementB || 0) + 1;
             
-            // Écriture 1: Joueur - Équipement HT
+            // État reçoit
+            COMPTABILITE.etat.tresor += cout;
+            COMPTABILITE.etat.recettes.total = (COMPTABILITE.etat.recettes.total || 0) + cout;
+            
+            // Écriture 1: Joueur
             let e = enregistrerEcriture({
-                joueurId, libelle: `Équipement B (classique) ${c?.name || actId} HT`,
-                compteDebit: 220, compteCredit: 500, montantEuro: facture.ht, activiteId: actId,
-                details: { type: 'equipementB', prixBase, prixTTC: prixB }
+                joueurId, libelle: `❄️ Équipement B ${c?.name || actId} (${fmt(cout)}€)`,
+                compteDebit: 220, compteCredit: 500, montantEuro: cout, activiteId: actId,
+                details: { type: 'equipementB', cout }
             });
             if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
             
-            // Écriture 2: Joueur - TVA (charge)
+            // Écriture 2: État
             e = enregistrerEcriture({
-                joueurId, libelle: `TVA Équipement B ${c?.name || actId}`,
-                compteDebit: 635, compteCredit: 500, montantEuro: facture.tva, activiteId: actId
-            });
-            if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
-            
-            // État reçoit la TVA
-            COMPTABILITE.etat.tresor += facture.tva;
-            COMPTABILITE.etat.recettes.tva += facture.tva;
-            COMPTABILITE.etat.recettes.total += facture.tva;
-            COMPTABILITE.etat.grandLivre[500] += facture.tva;
-            COMPTABILITE.etat.grandLivre[704] += facture.tva;
-            
-            // Écriture 3: État - Recette TVA
-            e = enregistrerEcriture({
-                joueurId: 'ETAT', 
-                libelle: `Recette TVA Équipement B ${c?.name || actId}`,
-                compteDebit: 500, compteCredit: 704, montantEuro: facture.tva,
+                joueurId: 'ETAT', libelle: `Recette équipement B ${c?.name || actId}`,
+                compteDebit: 541, compteCredit: 703, montantEuro: cout,
                 contexte: 'etat', activiteId: actId
             });
             if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
             
-            return { prixB, facture, ledgerEntryIds };
+            return { cout, ledgerEntryIds };
         }
         
-        // Fonction legacy pour compatibilité (redirige vers A par défaut)
-        async function comptaAchatEquipement(joueurId, actId, prix) {
+        // Conversion B→A : paie la différence, reçoit 50% en #
+        async function comptaConversionBtoA(joueurId, actId) {
             initCaisseJoueur(joueurId);
             initCaisseActivite(actId);
             
-            COMPTABILITE.caisseJoueurs[joueurId].euro -= prix;
-            COMPTABILITE.caisseActivites[actId].equipements++;
+            const c = CASES[actId];
+            const cout = getDifferenceAB(actId);
+            const bonusHash = getBonusHash(actId, 'B_TO_A');
+            const ledgerEntryIds = [];
             
-            // Bonus # (legacy)
-            const bonusHash = Math.floor(prix * 0.1);
-            if (bonusHash > 0) {
-                COMPTABILITE.caisseJoueurs[joueurId].espoyr += bonusHash;
+            COMPTABILITE.caisseJoueurs[joueurId].euro -= cout;
+            COMPTABILITE.caisseActivites[actId].equipementB = Math.max(0, (COMPTABILITE.caisseActivites[actId].equipementB || 0) - 1);
+            COMPTABILITE.caisseActivites[actId].equipementA = (COMPTABILITE.caisseActivites[actId].equipementA || 0) + 1;
+            
+            // État reçoit la différence
+            COMPTABILITE.etat.tresor += cout;
+            COMPTABILITE.etat.recettes.total = (COMPTABILITE.etat.recettes.total || 0) + cout;
+            
+            // Écriture 1: Joueur - Conversion
+            let e = enregistrerEcriture({
+                joueurId, libelle: `🔄 Conversion B→A ${c?.name || actId} (${fmt(cout)}€)`,
+                compteDebit: 210, compteCredit: 500, montantEuro: cout, activiteId: actId,
+                details: { type: 'conversionBtoA', cout, bonusHash }
+            });
+            if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
+            
+            // Écriture 2: État
+            e = enregistrerEcriture({
+                joueurId: 'ETAT', libelle: `Recette conversion B→A ${c?.name || actId}`,
+                compteDebit: 541, compteCredit: 703, montantEuro: cout,
+                contexte: 'etat', activiteId: actId
+            });
+            if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
+            
+            // Bonus # (50% de la différence)
+            if (bonusHash > 0 && (COMPTABILITE.potAAA?.solde || 0) >= bonusHash) {
+                COMPTABILITE.caisseJoueurs[joueurId].espoyr = (COMPTABILITE.caisseJoueurs[joueurId].espoyr || 0) + bonusHash;
                 COMPTABILITE.potAAA.solde -= bonusHash;
-                COMPTABILITE.potAAA.circulationHash += bonusHash;
+                COMPTABILITE.potAAA.circulationHash = (COMPTABILITE.potAAA.circulationHash || 0) + bonusHash;
+                
+                e = enregistrerEcriture({
+                    joueurId, libelle: `Compensation # conversion B→A (50% diff: +${fmt(bonusHash)}#)`,
+                    compteDebit: 501, compteCredit: 468, montantEspoyr: bonusHash, activiteId: actId,
+                    contexte: 'potAAA'
+                });
+                if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
             }
             
+            return { cout, bonusHash, ledgerEntryIds };
+        }
+        
+        // Fonction legacy pour compatibilité
+        async function comptaAchatEquipement(joueurId, actId, prix) {
+            initCaisseJoueur(joueurId);
+            initCaisseActivite(actId);
+            COMPTABILITE.caisseJoueurs[joueurId].euro -= prix;
+            COMPTABILITE.caisseActivites[actId].equipements++;
             return enregistrerEcriture({
                 joueurId, libelle: `Équipement ${CASES[actId]?.name || actId}`,
                 compteDebit: 218, compteCredit: 500, montantEuro: prix, activiteId: actId
@@ -3426,7 +3567,12 @@ activiteId: actId
                 if (act.proprietaireId === joueurId) {
                     const c = CASES[actId];
                     totalActivites += act.capital || c?.prix || 0;
-                    totalEquipements += (act.equipements || 0) * 100;
+                    // Valeur équipements: 1er A=70%, A suivants=50%, B=50%
+                    const nbA = act.equipementA || 0;
+                    const nbB = act.equipementB || 0;
+                    if (nbA > 0) totalEquipements += getPrixA(parseInt(actId));
+                    if (nbA > 1) totalEquipements += getPrixB(parseInt(actId)) * (nbA - 1);
+                    totalEquipements += getPrixB(parseInt(actId)) * nbB;
                 }
             });
             
@@ -5967,11 +6113,15 @@ function initSystemeDe() {
                     showPayOrNegotiateModal(c, owner, currentEuro);
                 } else {
                     // Ma propriété - équipement ?
-                    const equipSnap = await gameRef.child(`equipements/${position}`).once('value');
-                    const nbEquip = equipSnap.val() || 0;
+                    const act = COMPTABILITE.caisseActivites?.[position] || {};
+                    const nbA = act.equipementA || 0;
+                    const nbB = act.equipementB || 0;
+                    const totalEquip = nbA + nbB;
+                    const eqList = [...Array(nbA).fill('A'), ...Array(nbB).fill('B')];
+                    const minCout = getPrixB(position);
                     
-                    if (nbEquip < 2 && currentEuro >= c.prixEquip) {
-                        showEquipModal(c, nbEquip, currentEuro);
+                    if (totalEquip < 3 && currentEuro >= minCout) {
+                        showEquipModal(c, totalEquip, currentEuro);
                     } else {
                         sendSystemMessage(`${myName} est sur son ${c.icon}`);
                         nextTurn();
@@ -6022,7 +6172,7 @@ function initSystemeDe() {
                     <p style="margin: 2px 0 0 0;">✨ Bonus : +${fmt(bonusHash)}# du Pot AAA</p>
                 </div>
                 
-                <p><strong>Facture/passage :</strong> ${fmt(c.facture)}€</p>
+                <p><strong>Facture/passage :</strong> ${fmt(calculerFactureActivite(c.id, []))}€ <span style="font-size:0.8rem; color:#6b7280;">(5% de ${fmt(c.prix)}€)</span></p>
                 <hr style="margin: 10px 0;">
                 <p>Tu as : <strong>${fmt(currentEuro)}€</strong></p>
                 ${!canBuy ? '<p style="color: #ef4444;">❌ Pas assez</p>' : ''}
@@ -6091,7 +6241,7 @@ function initSystemeDe() {
             
             // Vérifier si on peut équiper immédiatement
             const currentEuro = COMPTABILITE.caisseJoueurs[myPlayerId]?.euro || 0;
-            if (currentEuro >= c.prixEquip) {
+            if (currentEuro >= getPrixB(caseId)) {
                 // Proposer d'équiper immédiatement
                 showEquipAfterBuyModal(c, currentEuro, profil);
             } else {
@@ -6102,13 +6252,15 @@ function initSystemeDe() {
         
         // Modal pour équiper immédiatement après achat
         function showEquipAfterBuyModal(c, currentEuro, profil) {
-            const terms = getEquipmentTerms(profil);
-            const prixA = Math.floor(c.prixEquip * 1.2);
-            const prixB = Math.floor(c.prixEquip * 0.8);
-            const bonusA = Math.floor(c.prixEquip * 0.10);
+            const phase = gameState?.phase || 1;
+            const equipList = []; // Vient d'être acheté, 0 équipements
             
-            const canBuyA = currentEuro >= prixA;
-            const canBuyB = currentEuro >= prixB;
+            const checkA = peutAcheterA(c.id, equipList, myPlayerId);
+            const checkB = peutAcheterB(c.id, equipList, myPlayerId);
+            
+            const coutA = checkA.ok ? checkA.cout : getPrixA(c.id);
+            const bonusA = getBonusHash(c.id, 'A_FIRST');
+            const coutB = getPrixB(c.id);
             
             showModal(`
                 <div id="modalTimer" style="text-align: center; margin-bottom: 10px;"></div>
@@ -6121,23 +6273,22 @@ function initSystemeDe() {
                     </p>
                 </div>
                 
-                <div style="background: #dcfce7; padding: 10px; border-radius: 8px; margin-bottom: 8px;">
-                    <p style="margin: 0;"><strong>${terms.iconA} ${terms.typeA}</strong> - ${fmt(prixA)}€</p>
-                    <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: #059669;">✨ Bonus : +${fmt(bonusA)}#</p>
-                </div>
+                ${phase >= 2 ? `<div style="background: ${checkA.ok ? '#dcfce7' : '#f3f4f6'}; padding: 10px; border-radius: 8px; margin-bottom: 8px; opacity:${checkA.ok ? 1 : 0.6};">
+                    <p style="margin: 0;"><strong>🌿 A Écolo</strong> — ${fmt(coutA)}€</p>
+                    <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: ${checkA.ok ? '#059669' : '#dc2626'};">${checkA.ok ? `✨ +${fmt(bonusA)}# du pot AAA` : `❌ ${checkA.raison}`}</p>
+                </div>` : ''}
                 
-                <div style="background: #fee2e2; padding: 10px; border-radius: 8px;">
-                    <p style="margin: 0;"><strong>${terms.iconB} ${terms.typeB}</strong> - ${fmt(prixB)}€</p>
-                    <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: #dc2626;">❌ Pas de bonus</p>
+                <div style="background: ${checkB.ok ? '#fee2e2' : '#f3f4f6'}; padding: 10px; border-radius: 8px; opacity:${checkB.ok ? 1 : 0.6};">
+                    <p style="margin: 0;"><strong>❄️ B Classique</strong> — ${fmt(coutB)}€</p>
+                    <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: ${checkB.ok ? '#6b7280' : '#dc2626'};">${checkB.ok ? 'Pas de bonus #' : `❌ ${checkB.raison}`}</p>
                 </div>
             `, `
-                ${canBuyA ? `<button class="btn" style="background: #dcfce7; color: #059669;" onclick="buyEquipementA(${c.id})">${terms.iconA} A (${prixA}€)</button>` : ''}
-                ${canBuyB ? `<button class="btn" style="background: #fee2e2; color: #dc2626;" onclick="buyEquipementB(${c.id})">${terms.iconB} B (${prixB}€)</button>` : ''}
+                ${checkA.ok ? `<button class="btn" style="background: #dcfce7; color: #059669;" onclick="buyEquipementA(${c.id})">🌿 A (${fmt(coutA)}€)</button>` : ''}
+                ${checkB.ok ? `<button class="btn" style="background: #fee2e2; color: #dc2626;" onclick="buyEquipementB(${c.id})">❄️ B (${fmt(coutB)}€)</button>` : ''}
                 <button class="btn" style="background:#fef3c7;color:#b45309;" onclick="closeModal(); showQuickEmprunter();">💰 Emprunter</button>
                 <button class="btn btn-primary" onclick="safeNextTurn();">Suivant ➡️</button>
             `);
             
-            // Timer de décision
             startDecisionTimer(gameConfig.timingDecision, () => {
                 sendSystemMessage(`⏱️ Temps écoulé - ${myName} passe automatiquement`);
                 safeNextTurn();
@@ -6251,6 +6402,7 @@ function initSystemeDe() {
         function showEquipModal(c, nbEquip, currentEuro) {
             const profil = playersData[myPlayerId]?.profil || 'contributif';
             const terms = getEquipmentTerms(profil);
+            const phase = gameState?.phase || 1;
             
             // Vérifier si on a déjà équipé cette case ce tour complet
             const tourActuel = gameState?.toursComplets || 0;
@@ -6261,56 +6413,75 @@ function initSystemeDe() {
                 showModal(`
                     <h3>${c.icon} ${c.name}</h3>
                     <p>⚠️ Tu as déjà équipé cette activité ce tour.</p>
-                    <p style="font-size: 0.9rem; color: #6b7280;">
-                        Tu pourras ajouter un autre équipement au prochain tour complet.
-                    </p>
                 `, `<button class="btn btn-primary" onclick="passerTour()">Continuer ➡️</button>`);
                 return;
             }
             
-            const prixA = Math.floor(c.prixEquip * 1.2);  // +20%
-            const prixB = Math.floor(c.prixEquip * 0.8);  // -20%
-            const bonusA = Math.floor(c.prixEquip * 0.10);  // 10% bonus #
+            // Récupérer les types d'équipements
+            const act = COMPTABILITE.caisseActivites?.[c.id] || {};
+            const nbA = act.equipementA || 0;
+            const nbB = act.equipementB || 0;
+            const equipList = [...Array(nbA).fill('A'), ...Array(nbB).fill('B')];
+            const total = nbA + nbB;
+            const factureActuelle = calculerFactureActivite(c.id, equipList);
             
-            // ========== ÉTAPE 4 : Calcul factures avec TVA ==========
-            const factureA = calculerFacture('equipement', prixA);
-            const factureB = calculerFacture('equipement', prixB);
+            // Vérifications
+            const checkA = peutAcheterA(c.id, equipList, myPlayerId);
+            const checkB = peutAcheterB(c.id, equipList, myPlayerId);
+            const checkConv = peutConvertirBtoA(c.id, equipList, myPlayerId);
             
-            const canBuyA = currentEuro >= prixA;
-            const canBuyB = currentEuro >= prixB;
+            // Afficher l'état actuel
+            const equipDisplay = total === 0 ? 'Aucun' : equipList.join('');
+            
+            let optionsHtml = '';
+            
+            // Option A (Phase 2+)
+            if (phase >= 2) {
+                const coutA = checkA.ok ? checkA.cout : getCoutEquipement(c.id, 'A', nbA);
+                const bonusA = nbA === 0 ? getBonusHash(c.id, 'A_FIRST') : getBonusHash(c.id, 'A_ADDITIONAL');
+                optionsHtml += `<div style="background: ${checkA.ok ? '#dcfce7' : '#f3f4f6'}; padding: 10px; border-radius: 8px; margin-bottom: 6px; opacity: ${checkA.ok ? 1 : 0.6};">
+                    <p style="margin: 0;"><strong>🌿 Acheter A</strong> — ${fmt(coutA)}€ → État | +${fmt(bonusA)}# du pot AAA</p>
+                    <p style="margin: 2px 0 0 0; font-size: 0.8rem; color: ${checkA.ok ? '#059669' : '#dc2626'};">
+                        ${checkA.ok ? `✅ Disponible` : `❌ ${checkA.raison}`}
+                    </p>
+                </div>`;
+                
+                // Option conversion B→A
+                if (nbB > 0) {
+                    const coutConv = getDifferenceAB(c.id);
+                    const bonusConv = getBonusHash(c.id, 'B_TO_A');
+                    optionsHtml += `<div style="background: ${checkConv.ok ? '#fef3c7' : '#f3f4f6'}; padding: 10px; border-radius: 8px; margin-bottom: 6px; opacity: ${checkConv.ok ? 1 : 0.6};">
+                        <p style="margin: 0;"><strong>🔄 Convertir B→A</strong> — ${fmt(coutConv)}€ → État | +${fmt(bonusConv)}# (50%)</p>
+                        <p style="margin: 2px 0 0 0; font-size: 0.8rem; color: ${checkConv.ok ? '#059669' : '#dc2626'};">
+                            ${checkConv.ok ? `✅ Disponible` : `❌ ${checkConv.raison}`}
+                        </p>
+                    </div>`;
+                }
+            }
+            
+            // Option B
+            if (phase < 2 || checkB.ok) {
+                const coutB = getPrixB(c.id);
+                optionsHtml += `<div style="background: ${checkB.ok ? '#fee2e2' : '#f3f4f6'}; padding: 10px; border-radius: 8px; margin-bottom: 6px; opacity: ${checkB.ok ? 1 : 0.6};">
+                    <p style="margin: 0;"><strong>❄️ Acheter B</strong> — ${fmt(coutB)}€ → État | Pas de bonus #</p>
+                    <p style="margin: 2px 0 0 0; font-size: 0.8rem; color: ${checkB.ok ? '#6b7280' : '#dc2626'};">
+                        ${checkB.ok ? `Augmente la facture` : `❌ ${checkB.raison}`}
+                    </p>
+                </div>`;
+            }
             
             showModal(`
                 <div id="modalTimer" style="text-align: center; margin-bottom: 10px;"></div>
                 <h3>${c.icon} ${c.name} - Ta propriété</h3>
-                <p><strong>${terms.termPlural} :</strong> ${nbEquip}/2</p>
-                <p><strong>Facture actuelle :</strong> ${fmt(c.facture * (nbEquip === 2 ? 2 : 1))}€</p>
-                <hr style="margin: 10px 0;">
-                <p style="font-weight: bold; margin-bottom: 8px;">Choisir ${profil === 'contributif' ? 'une formation' : 'un équipement'} :</p>
-                
-                <div style="background: #dcfce7; padding: 10px; border-radius: 8px; margin-bottom: 8px;">
-                    <p style="margin: 0;"><strong>${terms.iconA} ${terms.typeA}</strong></p>
-                    <p style="margin: 4px 0; font-size: 0.9rem;">Prix TTC : ${fmt(prixA)}€ (+20%)</p>
-                    <p style="margin: 2px 0; font-size: 0.8rem; color: #6b7280;">
-                        HT: ${factureA.ht.toFixed(2)}€ | TVA: ${factureA.tva.toFixed(2)}€ → 🏛️ État
-                    </p>
-                    <p style="margin: 0; font-size: 0.85rem; color: #059669;">✨ Bonus : +${fmt(bonusA)}# offerts par le Pot AAA</p>
-                </div>
-                
-                <div style="background: #fee2e2; padding: 10px; border-radius: 8px;">
-                    <p style="margin: 0;"><strong>${terms.iconB} ${terms.typeB}</strong></p>
-                    <p style="margin: 4px 0; font-size: 0.9rem;">Prix TTC : ${fmt(prixB)}€ (-20%)</p>
-                    <p style="margin: 2px 0; font-size: 0.8rem; color: #6b7280;">
-                        HT: ${factureB.ht.toFixed(2)}€ | TVA: ${factureB.tva.toFixed(2)}€ → 🏛️ État
-                    </p>
-                    <p style="margin: 0; font-size: 0.85rem; color: #dc2626;">❌ Pas de bonus #</p>
-                </div>
-                
-                <hr style="margin: 10px 0;">
+                <p><strong>Équipements :</strong> ${equipDisplay} (${total}/3 max)</p>
+                <p><strong>Facture actuelle :</strong> ${fmt(factureActuelle)}€ <span style="font-size:0.8rem; color:#6b7280;">(5% de ${fmt(Math.floor(factureActuelle / 0.05))}€ investi)</span></p>
                 <p>Tu as : <strong>${fmt(currentEuro)}€</strong></p>
-                <p style="font-size: 0.85rem; color: var(--gray);">${terms.resultText}</p>
+                <hr style="margin: 10px 0;">
+                ${optionsHtml}
             `, `
-                ${canBuyA ? `<button class="btn" style="background: #dcfce7; color: #059669;" onclick="buyEquipementA(${c.id})">${terms.iconA} A (${prixA}€)</button>` : ''}
-                ${canBuyB ? `<button class="btn" style="background: #fee2e2; color: #dc2626;" onclick="buyEquipementB(${c.id})">${terms.iconB} B (${prixB}€)</button>` : ''}
+                ${checkA.ok ? `<button class="btn" style="background:#dcfce7; color:#059669;" onclick="buyEquipementA(${c.id})">🌿 A (${fmt(checkA.cout)}€)</button>` : ''}
+                ${checkConv.ok ? `<button class="btn" style="background:#fef3c7; color:#92400e;" onclick="convertirBtoA(${c.id})">🔄 B→A (${fmt(checkConv.cout)}€)</button>` : ''}
+                ${checkB.ok ? `<button class="btn" style="background:#fee2e2; color:#dc2626;" onclick="buyEquipementB(${c.id})">❄️ B (${fmt(checkB.cout)}€)</button>` : ''}
                 <button class="btn btn-secondary" onclick="passerTour()">⏭️ Passer</button>
             `);
             
@@ -6326,22 +6497,13 @@ function initSystemeDe() {
             closeModal();
             const c = CASES[caseId];
             
-            // Enregistrer que cette case a été équipée ce tour
             const tourActuel = gameState?.toursComplets || 0;
             equipementsCeTour[caseId] = tourActuel;
             
-            // Comptabilité équipement A
             const result = await comptaAchatEquipementA(myPlayerId, caseId);
             
-            // LOG EVENT: BUY_EQUIPMENT_A
             logEvent('BUY_EQUIPMENT_A', myPlayerId, {
-                caseId,
-                actName: c.name,
-                prixA: result.prixA,
-                bonusHash: result.bonusHash,
-                factureHT: result.facture?.ht,
-                factureTVA: result.facture?.tva,
-                tvaEtat: result.facture?.destinationEtat
+                caseId, actName: c.name, cout: result.cout, bonusHash: result.bonusHash
             }, result.ledgerEntryIds || []);
             
             // Firebase
@@ -6350,24 +6512,16 @@ function initSystemeDe() {
                 euro: caisse.euro, espoyr: caisse.espoyr
             });
             
-            // Mettre à jour le compteur d'équipements
-            const equipSnap = await gameRef.child(`equipements/${caseId}`).once('value');
-            const nbEquip = (equipSnap.val() || 0) + 1;
-            await gameRef.child(`equipements/${caseId}`).set(nbEquip);
-            
-            // Enregistrer le TYPE d'équipement (A)
-            const equipTypesSnap = await gameRef.child(`equipementTypes/${caseId}`).once('value');
-            const equipTypes = equipTypesSnap.val() || [];
-            equipTypes.push('A');
+            // Mettre à jour équipements dans Firebase
+            const act = COMPTABILITE.caisseActivites[caseId] || {};
+            const nbA = act.equipementA || 0;
+            const nbB = act.equipementB || 0;
+            const equipTypes = [...Array(nbA).fill('A'), ...Array(nbB).fill('B')];
+            await gameRef.child(`equipements/${caseId}`).set(nbA + nbB);
             await gameRef.child(`equipementTypes/${caseId}`).set(equipTypes);
-            
             await syncComptabiliteToFirebase();
             
-            const profil = playersData[myPlayerId]?.profil || 'contributif';
-            const actionText = profil === 'contributif' ? 'forme' : 'équipe';
-            const typeText = profil === 'contributif' ? 'Formation durabilité' : 'A durable';
-            sendSystemMessage(`📗 ${myName} ${actionText} ${c.icon} (${typeText}) +${result.bonusHash}# | TVA ${result.facture?.tva?.toFixed(2) || 0}€ → 🏛️`);
-            
+            sendSystemMessage(`🌿 ${myName} achète équipement A sur ${c.icon} ${c.name} (${fmt(result.cout)}€) +${fmt(result.bonusHash)}#`);
             nextTurn();
         }
         
@@ -6376,21 +6530,13 @@ function initSystemeDe() {
             closeModal();
             const c = CASES[caseId];
             
-            // Enregistrer que cette case a été équipée ce tour
             const tourActuel = gameState?.toursComplets || 0;
             equipementsCeTour[caseId] = tourActuel;
             
-            // Comptabilité équipement B
             const result = await comptaAchatEquipementB(myPlayerId, caseId);
             
-            // LOG EVENT: BUY_EQUIPMENT_B
             logEvent('BUY_EQUIPMENT_B', myPlayerId, {
-                caseId,
-                actName: c.name,
-                prixB: result.prixB,
-                factureHT: result.facture?.ht,
-                factureTVA: result.facture?.tva,
-                tvaEtat: result.facture?.destinationEtat
+                caseId, actName: c.name, cout: result.cout
             }, result.ledgerEntryIds || []);
             
             // Firebase
@@ -6399,34 +6545,31 @@ function initSystemeDe() {
                 euro: caisse.euro, espoyr: caisse.espoyr
             });
             
-            // Mettre à jour le compteur d'équipements
-            const equipSnap = await gameRef.child(`equipements/${caseId}`).once('value');
-            const nbEquip = (equipSnap.val() || 0) + 1;
-            await gameRef.child(`equipements/${caseId}`).set(nbEquip);
-            
-            // Enregistrer le TYPE d'équipement (B)
-            const equipTypesSnap = await gameRef.child(`equipementTypes/${caseId}`).once('value');
-            const equipTypes = equipTypesSnap.val() || [];
-            equipTypes.push('B');
+            const act = COMPTABILITE.caisseActivites[caseId] || {};
+            const nbA = act.equipementA || 0;
+            const nbB = act.equipementB || 0;
+            const equipTypes = [...Array(nbA).fill('A'), ...Array(nbB).fill('B')];
+            await gameRef.child(`equipements/${caseId}`).set(nbA + nbB);
             await gameRef.child(`equipementTypes/${caseId}`).set(equipTypes);
-            
             await syncComptabiliteToFirebase();
             
-            const profilB = playersData[myPlayerId]?.profil || 'contributif';
-            const actionTextB = profilB === 'contributif' ? 'forme' : 'équipe';
-            const typeTextB = profilB === 'contributif' ? 'Formation basique' : 'B classique';
-            sendSystemMessage(`📘 ${myName} ${actionTextB} ${c.icon} (${typeTextB}) | TVA ${result.facture?.tva?.toFixed(2) || 0}€ → 🏛️`);
-            
+            sendSystemMessage(`❄️ ${myName} achète équipement B sur ${c.icon} ${c.name} (${fmt(result.cout)}€)`);
             nextTurn();
         }
         
-        // Legacy fonction (gardée pour compatibilité)
-        async function buyEquipement(caseId, prix) {
+        async function convertirBtoA(caseId) {
+            stopDecisionTimer();
             closeModal();
             const c = CASES[caseId];
             
-            // Comptabilité
-            await comptaAchatEquipement(myPlayerId, caseId, prix);
+            const tourActuel = gameState?.toursComplets || 0;
+            equipementsCeTour[caseId] = tourActuel;
+            
+            const result = await comptaConversionBtoA(myPlayerId, caseId);
+            
+            logEvent('CONVERT_B_TO_A', myPlayerId, {
+                caseId, actName: c.name, cout: result.cout, bonusHash: result.bonusHash
+            }, result.ledgerEntryIds || []);
             
             // Firebase
             const caisse = COMPTABILITE.caisseJoueurs[myPlayerId];
@@ -6434,13 +6577,29 @@ function initSystemeDe() {
                 euro: caisse.euro, espoyr: caisse.espoyr
             });
             
-            const equipSnap = await gameRef.child(`equipements/${caseId}`).once('value');
-            const nbEquip = (equipSnap.val() || 0) + 1;
-            await gameRef.child(`equipements/${caseId}`).set(nbEquip);
+            const act = COMPTABILITE.caisseActivites[caseId] || {};
+            const nbA = act.equipementA || 0;
+            const nbB = act.equipementB || 0;
+            const equipTypes = [...Array(nbA).fill('A'), ...Array(nbB).fill('B')];
+            await gameRef.child(`equipements/${caseId}`).set(nbA + nbB);
+            await gameRef.child(`equipementTypes/${caseId}`).set(equipTypes);
             await syncComptabiliteToFirebase();
             
-            sendSystemMessage(`⚙️ ${myName} équipe ${c.icon} (${nbEquip}/2)`);
-            
+            sendSystemMessage(`🔄 ${myName} convertit B→A sur ${c.icon} ${c.name} (${fmt(result.cout)}€) +${fmt(result.bonusHash)}#`);
+            nextTurn();
+        }
+        
+        // Legacy fonction (gardée pour compatibilité)
+        async function buyEquipement(caseId, prix) {
+            closeModal();
+            await comptaAchatEquipement(myPlayerId, caseId, prix);
+            const caisse = COMPTABILITE.caisseJoueurs[myPlayerId];
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}`).update({
+                euro: caisse.euro, espoyr: caisse.espoyr
+            });
+            const equipSnap = await gameRef.child(`equipements/${caseId}`).once('value');
+            await gameRef.child(`equipements/${caseId}`).set((equipSnap.val() || 0) + 1);
+            await syncComptabiliteToFirebase();
             nextTurn();
         }
         
@@ -6451,71 +6610,76 @@ function initSystemeDe() {
             initCaisseJoueur(joueurId);
             initCaisseActivite(actId);
             
-            const c = CASES[actId];
             const actCompta = COMPTABILITE.caisseActivites[actId];
-            
-            // Calculer le prix de rachat (75% du prix d'achat moyen)
             const nbEquipA = actCompta.equipementA || 0;
             const nbEquipB = actCompta.equipementB || 0;
-            const prixBase = c?.prixEquip || 100;
-            const prixMoyenAchat = nbEquipA > 0 ? Math.floor(prixBase * 1.2) : Math.floor(prixBase * 0.8);
-            const prixRachat = Math.floor(prixMoyenAchat * 0.75);
             
-            // Le joueur reçoit des # (pas des €)
+            // Vendre A en priorité, sinon B
+            let prixAchat;
+            let typeVendu;
+            if (nbEquipA > 0) {
+                prixAchat = nbEquipA === 1 ? getPrixA(actId) : getPrixB(actId);
+                typeVendu = 'A';
+            } else {
+                prixAchat = getPrixB(actId);
+                typeVendu = 'B';
+            }
+            const prixRachat = Math.floor(prixAchat * 0.75);
+            
             COMPTABILITE.caisseJoueurs[joueurId].espoyr += prixRachat;
             COMPTABILITE.potAAA.solde -= prixRachat;
             COMPTABILITE.potAAA.circulationHash += prixRachat;
             
-            // Réduire le nombre d'équipements
             COMPTABILITE.caisseActivites[actId].equipements = Math.max(0, (actCompta.equipements || 1) - 1);
-            if (nbEquipA > 0) {
+            if (typeVendu === 'A') {
                 COMPTABILITE.caisseActivites[actId].equipementA = nbEquipA - 1;
-            } else if (nbEquipB > 0) {
+            } else {
                 COMPTABILITE.caisseActivites[actId].equipementB = nbEquipB - 1;
             }
             
-            // Écriture comptable
             enregistrerEcriture({
-                joueurId, libelle: `Vente équipement au Pot AAA (75%)`,
+                joueurId, libelle: `Vente équipement ${typeVendu} au Pot AAA (75%)`,
                 compteDebit: 501, compteCredit: 580, montantEspoyr: prixRachat, activiteId: actId,
                 contexte: 'potAAA',
-                details: { type: 'vente_equipement', prixRachat }
+                details: { type: 'vente_equipement', typeVendu, prixRachat }
             });
             
-            return { prixRachat };
+            return { prixRachat, typeVendu };
         }
         
         // Interface vente équipement
         async function showVenteEquipementModal(actId) {
             const c = CASES[actId];
             const actCompta = COMPTABILITE.caisseActivites[actId] || {};
-            const nbEquip = actCompta.equipements || 0;
+            const nbA = actCompta.equipementA || 0;
+            const nbB = actCompta.equipementB || 0;
+            const total = nbA + nbB;
             
-            if (nbEquip === 0) {
+            if (total === 0) {
                 showModal(`<h3>❌ Pas d'équipement</h3><p>Cette activité n'a pas d'équipement à vendre.</p>`,
                     `<button class="btn btn-secondary" onclick="closeModal()">OK</button>`);
                 return;
             }
             
-            const prixBase = c?.prixEquip || 100;
-            const nbEquipA = actCompta.equipementA || 0;
-            const prixMoyen = nbEquipA > 0 ? Math.floor(prixBase * 1.2) : Math.floor(prixBase * 0.8);
-            const prixRachat = Math.floor(prixMoyen * 0.75);
+            const typeVendu = nbA > 0 ? 'A' : 'B';
+            const prixAchat = typeVendu === 'A' ? (nbA === 1 ? getPrixA(actId) : getPrixB(actId)) : getPrixB(actId);
+            const prixRachat = Math.floor(prixAchat * 0.75);
+            const equipDisplay = [...Array(nbA).fill('A'), ...Array(nbB).fill('B')].join('');
             
             showModal(`
                 <h3>💚 Vendre équipement au Pot AAA</h3>
-                <p><strong>${c.icon} ${c.name}</strong></p>
-                <p>Équipements : ${nbEquip}/2</p>
+                <p><strong>${c.icon} ${c.name}</strong> [${equipDisplay}]</p>
                 <hr style="margin: 10px 0;">
                 <p>Le Pot AAA rachète à <strong>75%</strong> du prix d'achat</p>
+                <p>Équipement vendu : <strong>${typeVendu === 'A' ? '🌿 A' : '❄️ B'}</strong></p>
                 <p style="font-size: 1.2rem; font-weight: bold; color: #059669;">
                     Tu recevras : ${prixRachat}#
                 </p>
                 <p style="font-size: 0.85rem; color: #6b7280;">
-                    (Prix achat ≈ ${prixMoyen}€ × 75% = ${prixRachat}#)
+                    (Prix achat: ${fmt(prixAchat)}€ × 75% = ${prixRachat}#)
                 </p>
             `, `
-                <button class="btn btn-primary" onclick="vendreEquipementAAA(${actId})">💚 Vendre 1 équipement</button>
+                <button class="btn btn-primary" onclick="vendreEquipementAAA(${actId})">💚 Vendre ${typeVendu}</button>
                 <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
             `);
         }
@@ -6530,16 +6694,16 @@ function initSystemeDe() {
             const caisse = COMPTABILITE.caisseJoueurs[myPlayerId];
             await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/espoyr`).set(caisse.espoyr);
             
-            const equipSnap = await gameRef.child(`equipements/${actId}`).once('value');
-            const newNbEquip = Math.max(0, (equipSnap.val() || 1) - 1);
-            await gameRef.child(`equipements/${actId}`).set(newNbEquip);
-            
+            const act = COMPTABILITE.caisseActivites[actId] || {};
+            const types = [...Array(act.equipementA || 0).fill('A'), ...Array(act.equipementB || 0).fill('B')];
+            await gameRef.child(`equipements/${actId}`).set(types.length);
+            await gameRef.child(`equipementTypes/${actId}`).set(types);
             await syncComptabiliteToFirebase();
             
-            sendSystemMessage(`💚 ${myName} vend 1 équipement de ${c.icon} au Pot AAA (+${fmt(result.prixRachat)}#)`);
+            sendSystemMessage(`💚 ${myName} vend 1 équipement ${result.typeVendu} de ${c.icon} au Pot AAA (+${fmt(result.prixRachat)}#)`);
             
             showModal(`
-                <h3>✅ Équipement vendu !</h3>
+                <h3>✅ Équipement ${result.typeVendu} vendu !</h3>
                 <p>Tu as reçu <strong>${fmt(result.prixRachat)}#</strong> du Pot AAA.</p>
             `, `<button class="btn btn-primary" onclick="closeModal()">OK</button>`);
         }
@@ -7101,15 +7265,8 @@ function initSystemeDe() {
             const prixPersoSnap = await gameRef.child(`prixPersonnalises/${c.id}`).once('value');
             const prixPerso = prixPersoSnap.val();
             
-            // Calcul facture avec types d'équipement
-            let factureMultiplier = 1;
-            const equipStr = equipTypes.join('');
-            if (equipStr === 'AB' || equipStr === 'BA') factureMultiplier = 2;
-            else if (equipStr === 'AA') factureMultiplier = 2.4;
-            else if (equipStr === 'BB') factureMultiplier = 1.6;
-            else if (nbEquip === 1) factureMultiplier = equipTypes[0] === 'A' ? 1.2 : 0.8;
-            
-            const factureBase = Math.floor(c.facture * factureMultiplier);
+            // Calcul facture = 5% du total investi (activité + tous équipements)
+            const factureBase = calculerFactureActivite(c.id, equipTypes);
             const facture = prixPerso !== null ? prixPerso : factureBase;
             
             const myEspoyr = COMPTABILITE.caisseJoueurs[myPlayerId]?.espoyr || 0;
@@ -7131,7 +7288,7 @@ function initSystemeDe() {
                 <div style="background: #f3f4f6; padding: 10px; border-radius: 8px; margin: 10px 0;">
                     <p style="margin: 0;"><strong>Facture :</strong> <span style="font-size: 1.2rem; color: #dc2626;">${fmt(facture)}€</span></p>
                     ${prixPerso !== null ? `<p style="margin: 4px 0 0 0; font-size: 0.8rem; color: #6b7280;">(Prix ajusté, base: ${fmt(factureBase)}€)</p>` : ''}
-                    ${equipStr ? `<p style="margin: 4px 0 0 0; font-size: 0.8rem;">Équipements: <strong>${equipStr}</strong> (×${factureMultiplier})</p>` : ''}
+                    ${equipTypes.length > 0 ? `<p style="margin: 4px 0 0 0; font-size: 0.8rem;">Équipements: <strong>${equipTypes.join('+')}</strong> (5% total investi)</p>` : ''}
                 </div>
                 
                 <div style="background: #dbeafe; padding: 10px; border-radius: 8px; margin: 10px 0;">
@@ -9533,128 +9690,162 @@ function initSystemeDe() {
                         
                         // ========== ÉQUIPER IMMÉDIATEMENT APRÈS ACHAT ==========
                         const euroApresAchat = newCaisse.euro || 0;
-                        const prixEquipB = Math.floor(c.prixEquip * 0.8);  // Prix minimum
+                        const prixEquipMin = getPrixB(position);
                         
-                        if (euroApresAchat >= prixEquipB) {
+                        if (euroApresAchat >= prixEquipMin) {
                             // Le robot peut équiper immédiatement
                             let shouldEquipNow = false;
                             
                             if (profil.id === 'PREDATEUR' || profil.id === 'INVESTISSEUR') {
                                 shouldEquipNow = true;
                             } else if (profil.id === 'EQUILIBRE') {
-                                shouldEquipNow = euroApresAchat >= c.prixEquip * 1.3;
+                                shouldEquipNow = euroApresAchat >= prixEquipMin * 1.3;
                             } else if (profil.id === 'COOPERATIF' || profil.id === 'SOLIDAIRE') {
-                                shouldEquipNow = Math.random() > 0.5 && euroApresAchat >= c.prixEquip * 1.5;
+                                shouldEquipNow = Math.random() > 0.5 && euroApresAchat >= prixEquipMin * 1.5;
                             }
                             // PRUDENT n'équipe pas immédiatement
                             
                             if (shouldEquipNow) {
-                                // Choix type équipement selon profil et argent disponible
-                                const prixEquipA = Math.floor(c.prixEquip * 1.2);
-                                let typeEquip = 'B';
-                                if ((profil.id === 'PREDATEUR' || profil.id === 'INVESTISSEUR') && euroApresAchat >= prixEquipA) {
-                                    typeEquip = 'A';
+                                // Choix type: A si Phase 2+ et membre AAA
+                                const checkANow = peutAcheterA(position, [], botId);
+                                const checkBNow = peutAcheterB(position, [], botId);
+                                
+                                let typeEquip = null;
+                                if (checkANow.ok && (profil.id !== 'PRUDENT')) typeEquip = 'A';
+                                else if (checkBNow.ok) typeEquip = 'B';
+                                
+                                if (typeEquip === 'A') {
+                                    try {
+                                        const resA = await comptaAchatEquipementA(botId, position);
+                                        const caisseApresEquip = COMPTABILITE.caisseJoueurs[botId];
+                                        await db.ref(`parties/${currentGameCode}/players/${botId}`).update({ euro: caisseApresEquip.euro, espoyr: caisseApresEquip.espoyr });
+                                        const actUp = COMPTABILITE.caisseActivites[position] || {};
+                                        const types = [...Array(actUp.equipementA || 0).fill('A'), ...Array(actUp.equipementB || 0).fill('B')];
+                                        await gameRef.child(`equipements/${position}`).set(types.length);
+                                        await gameRef.child(`equipementTypes/${position}`).set(types);
+                                        equipementsCeTour[position] = gameState?.toursComplets || 0;
+                                        await syncComptabiliteToFirebase();
+                                        sendSystemMessage(`🤖🌿 ${bot.name} équipe immédiatement ${c.icon} (A: ${fmt(resA.cout)}€) +${fmt(resA.bonusHash)}#`);
+                                    } catch(e) { console.warn('⚠️ comptaEquipA bot:', e); }
+                                } else if (typeEquip === 'B') {
+                                    try {
+                                        const resB = await comptaAchatEquipementB(botId, position);
+                                        const caisseApresEquip = COMPTABILITE.caisseJoueurs[botId];
+                                        await db.ref(`parties/${currentGameCode}/players/${botId}/euro`).set(caisseApresEquip.euro);
+                                        const actUp = COMPTABILITE.caisseActivites[position] || {};
+                                        const types = [...Array(actUp.equipementA || 0).fill('A'), ...Array(actUp.equipementB || 0).fill('B')];
+                                        await gameRef.child(`equipements/${position}`).set(types.length);
+                                        await gameRef.child(`equipementTypes/${position}`).set(types);
+                                        equipementsCeTour[position] = gameState?.toursComplets || 0;
+                                        await syncComptabiliteToFirebase();
+                                        sendSystemMessage(`🤖❄️ ${bot.name} équipe immédiatement ${c.icon} (B: ${fmt(resB.cout)}€)`);
+                                    } catch(e) { console.warn('⚠️ comptaEquipB bot:', e); }
                                 }
-                                // ligne pour que le robot ne bloque pas
-                                // ancienne ligne :await comptaEquipementActivite(botId, position, typeEquip);
-                               try { await comptaEquipementActivite(botId, position, typeEquip); } catch(e) { console.warn('⚠️ comptaEquipement non disponible'); }
-                                const caisseApresEquip = COMPTABILITE.caisseJoueurs[botId];
-                                await db.ref(`parties/${currentGameCode}/players/${botId}/euro`).set(caisseApresEquip.euro);
-                                
-                                await gameRef.child(`equipements/${position}`).set(1);
-                                
-                                const equipTypesSnap = await gameRef.child(`equipementTypes/${position}`).once('value');
-                                const equipTypes = equipTypesSnap.val() || [];
-                                equipTypes.push(typeEquip);
-                                await gameRef.child(`equipementTypes/${position}`).set(equipTypes);
-                                
-                                // Enregistrer limite équipement ce tour
-                                const tourActuel = gameState?.toursComplets || 0;
-                                equipementsCeTour[position] = tourActuel;
-                                
-                                await syncComptabiliteToFirebase();
-                                
-                                sendSystemMessage(`🤖 ${bot.name} équipe immédiatement ${c.icon} (${typeEquip})`);
                             }
                         }
                     }
                 } else if (owner === botId) {
                     // ========== ÉQUIPEMENT ROBOT ==========
-                    const equipSnap = await gameRef.child(`equipements/${position}`).once('value');
-                    const nbEquip = equipSnap.val() || 0;
+                    const act = COMPTABILITE.caisseActivites?.[position] || {};
+                    const nbA = act.equipementA || 0;
+                    const nbB = act.equipementB || 0;
+                    const total = nbA + nbB;
+                    const equipList = [...Array(nbA).fill('A'), ...Array(nbB).fill('B')];
                     
                     // Vérifier limite équipement par tour
                     const tourActuel = gameState?.toursComplets || 0;
                     const dernierEquipTour = equipementsCeTour[position];
                     const dejaEquipeCeTour = (dernierEquipTour === tourActuel);
-                    
-                    // Debug : afficher l'état
-                    console.log(`🤖 ${bot.name} sur sa case ${c.name}: €=${caisse.euro}, nbEquip=${nbEquip}, prixEquip=${c.prixEquip}, profil=${profil.id}, dejaEquipeCeTour=${dejaEquipeCeTour}`);
+                    const phase = gameState?.phase || 1;
                     
                     if (dejaEquipeCeTour) {
                         sendSystemMessage(`🤖 ${bot.name} sur ${c.icon} - déjà équipé ce tour`);
-                    } else if (nbEquip < 2) {
-                        const peutEquiper = (caisse.euro || 0) >= c.prixEquip;
+                    } else if (total >= 3) {
+                        sendSystemMessage(`🤖 ${bot.name} sur ${c.icon} - déjà 3 équipements`);
+                    } else {
+                        // Décision équipement selon profil
+                        let shouldEquip = false;
+                        const prixMin = getPrixB(position);
                         
-                        if (!peutEquiper) {
-                            sendSystemMessage(`🤖 ${bot.name} sur ${c.icon} - pas assez pour équiper (${fmt(caisse.euro)}€ < ${fmt(c.prixEquip)}€)`);
+                        if (profil.id === 'PREDATEUR' || profil.id === 'INVESTISSEUR') {
+                            shouldEquip = (caisse.euro || 0) >= prixMin;
+                        } else if (profil.id === 'PRUDENT') {
+                            shouldEquip = (caisse.euro || 0) >= prixMin * 2;
+                        } else if (profil.id === 'COOPERATIF' || profil.id === 'SOLIDAIRE') {
+                            shouldEquip = Math.random() > 0.5 && (caisse.euro || 0) >= prixMin * 1.5;
                         } else {
-                            // Décision équipement selon profil
-                            let shouldEquip = false;
+                            shouldEquip = (caisse.euro || 0) >= prixMin * 1.3;
+                        }
+                        
+                        if (shouldEquip) {
+                            // Choix type: préférer A si possible (Phase 2+, membre AAA, etc)
+                            const checkA = peutAcheterA(position, equipList, botId);
+                            const checkB = peutAcheterB(position, equipList, botId);
+                            const checkConv = peutConvertirBtoA(position, equipList, botId);
                             
-                            if (profil.id === 'PREDATEUR' || profil.id === 'INVESTISSEUR') {
-                                // Équipe toujours si possible
-                                shouldEquip = true;
+                            let action = null;
+                            if (profil.id === 'COOPERATIF' || profil.id === 'SOLIDAIRE' || profil.id === 'INVESTISSEUR') {
+                                // Préfèrent A et conversion
+                                if (checkConv.ok) action = 'CONV';
+                                else if (checkA.ok) action = 'A';
+                                else if (checkB.ok) action = 'B';
+                            } else if (profil.id === 'PREDATEUR') {
+                                if (checkA.ok) action = 'A';
+                                else if (checkB.ok) action = 'B';
                             } else if (profil.id === 'PRUDENT') {
-                                // Équipe seulement si beaucoup d'argent (>= 2x le prix)
-                                shouldEquip = (caisse.euro || 0) >= c.prixEquip * 2;
-                            } else if (profil.id === 'COOPERATIF' || profil.id === 'SOLIDAIRE') {
-                                // Équipe parfois (50% de chance si assez d'argent)
-                                shouldEquip = Math.random() > 0.5 && (caisse.euro || 0) >= c.prixEquip * 1.5;
+                                if (checkB.ok) action = 'B';  // Prudent préfère B (moins cher)
+                                else if (checkA.ok) action = 'A';
                             } else {
-                                // EQUILIBRE: équipe si raisonnablement possible (>= 1.3x le prix)
-                                shouldEquip = (caisse.euro || 0) >= c.prixEquip * 1.3;
+                                // EQUILIBRE: aléatoire
+                                if (checkA.ok && Math.random() > 0.4) action = 'A';
+                                else if (checkB.ok) action = 'B';
+                                else if (checkA.ok) action = 'A';
                             }
                             
-                            if (shouldEquip) {
-                                // Choix type équipement selon profil
-                                let typeEquip = Math.random() > 0.5 ? 'A' : 'B';
-                                if (profil.id === 'INVESTISSEUR' || profil.id === 'PREDATEUR') {
-                                    typeEquip = 'A';  // Type A = meilleur rendement
-                                } else if (profil.id === 'PRUDENT') {
-                                    typeEquip = 'B';  // Type B = moins cher
-                                }
-                                // ancinne ligne qui bloc le passe à l'autrer await comptaEquipementActivite(botId, position, typeEquip);
-                                try { await comptaEquipementActivite(botId, position, typeEquip); } catch(e) { console.warn('⚠️ comptaEquipement non disponible'); }
+                            if (action === 'A') {
+                                const result = await comptaAchatEquipementA(botId, position);
+                                const newCaisse = COMPTABILITE.caisseJoueurs[botId];
+                                await db.ref(`parties/${currentGameCode}/players/${botId}`).update({ euro: newCaisse.euro, espoyr: newCaisse.espoyr });
+                                const actUp = COMPTABILITE.caisseActivites[position] || {};
+                                const types = [...Array(actUp.equipementA || 0).fill('A'), ...Array(actUp.equipementB || 0).fill('B')];
+                                await gameRef.child(`equipements/${position}`).set(types.length);
+                                await gameRef.child(`equipementTypes/${position}`).set(types);
+                                equipementsCeTour[position] = tourActuel;
+                                await syncComptabiliteToFirebase();
+                                sendSystemMessage(`🤖🌿 ${bot.name} achète A sur ${c.icon} (${fmt(result.cout)}€) +${fmt(result.bonusHash)}#`);
+                            } else if (action === 'B') {
+                                const result = await comptaAchatEquipementB(botId, position);
                                 const newCaisse = COMPTABILITE.caisseJoueurs[botId];
                                 await db.ref(`parties/${currentGameCode}/players/${botId}/euro`).set(newCaisse.euro);
-                                
-                                const newNbEquip = nbEquip + 1;
-                                await gameRef.child(`equipements/${position}`).set(newNbEquip);
-                                
-                                // Stocker le type d'équipement
-                                const equipTypesSnap = await gameRef.child(`equipementTypes/${position}`).once('value');
-                                const equipTypes = equipTypesSnap.val() || [];
-                                equipTypes.push(typeEquip);
-                                await gameRef.child(`equipementTypes/${position}`).set(equipTypes);
-                                
-                                await syncComptabiliteToFirebase();
-                                
-                                // Enregistrer que cette case a été équipée ce tour
+                                const actUp = COMPTABILITE.caisseActivites[position] || {};
+                                const types = [...Array(actUp.equipementA || 0).fill('A'), ...Array(actUp.equipementB || 0).fill('B')];
+                                await gameRef.child(`equipements/${position}`).set(types.length);
+                                await gameRef.child(`equipementTypes/${position}`).set(types);
                                 equipementsCeTour[position] = tourActuel;
-                                
-                                sendSystemMessage(`🤖 ${bot.name} équipe ${c.icon} (${typeEquip}) - Total: ${newNbEquip}/2`);
+                                await syncComptabiliteToFirebase();
+                                sendSystemMessage(`🤖❄️ ${bot.name} achète B sur ${c.icon} (${fmt(result.cout)}€)`);
+                            } else if (action === 'CONV') {
+                                const result = await comptaConversionBtoA(botId, position);
+                                const newCaisse = COMPTABILITE.caisseJoueurs[botId];
+                                await db.ref(`parties/${currentGameCode}/players/${botId}`).update({ euro: newCaisse.euro, espoyr: newCaisse.espoyr });
+                                const actUp = COMPTABILITE.caisseActivites[position] || {};
+                                const types = [...Array(actUp.equipementA || 0).fill('A'), ...Array(actUp.equipementB || 0).fill('B')];
+                                await gameRef.child(`equipements/${position}`).set(types.length);
+                                await gameRef.child(`equipementTypes/${position}`).set(types);
+                                equipementsCeTour[position] = tourActuel;
+                                await syncComptabiliteToFirebase();
+                                sendSystemMessage(`🤖🔄 ${bot.name} convertit B→A sur ${c.icon} (${fmt(result.cout)}€) +${fmt(result.bonusHash)}#`);
                             } else {
-                                sendSystemMessage(`🤖 ${bot.name} sur ${c.icon} - décide de ne pas équiper`);
+                                sendSystemMessage(`🤖 ${bot.name} sur ${c.icon} - aucune option disponible`);
                             }
+                        } else {
+                            sendSystemMessage(`🤖 ${bot.name} sur ${c.icon} - décide de ne pas équiper`);
                         }
-                    } else {
-                        sendSystemMessage(`🤖 ${bot.name} sur ${c.icon} - déjà 2 équipements`);
                     }
                 } else if (owner && owner !== botId) {
-                    const equipSnap = await gameRef.child(`equipements/${position}`).once('value');
-                    const nbEquip = equipSnap.val() || 0;
-                    const facture = c.facture * (nbEquip === 2 ? 2 : 1);
+                    const equipTypesSnap = await gameRef.child(`equipementTypes/${position}`).once('value');
+                    const equipTypesList = equipTypesSnap.val() || [];
+                    const facture = calculerFactureActivite(position, equipTypesList);
                     
                     if ((caisse.euro || 0) >= facture) {
                         await comptaPaiementFacture(botId, owner, position, facture, 0);
@@ -11355,14 +11546,8 @@ function initSystemeDe() {
             const equipList = equipTypes[caseId] || [];  // ['A', 'B'] ou ['A', 'A'] etc.
             const equipDisplay = equipList.length > 0 ? equipList.join('+') : 'Aucun';
             
-            // Calcul facture avec équipements
-            let factureMultiplier = 1;
-            if (equipList.includes('A') && equipList.includes('B')) factureMultiplier = 2;
-            else if (equipList.filter(e => e === 'A').length === 2) factureMultiplier = 2.4;  // AA
-            else if (equipList.filter(e => e === 'B').length === 2) factureMultiplier = 1.6;  // BB
-            else if (nbEquip === 1) factureMultiplier = equipList[0] === 'A' ? 1.2 : 0.8;
-            
-            const factureActuelle = Math.floor(c.facture * factureMultiplier);
+            // Calcul facture = 5% du total investi
+            const factureActuelle = calculerFactureActivite(caseId, equipList);
             const caisseAct = COMPTABILITE.caisseActivites[caseId] || {};
             
             const players = Object.values(playersData);
@@ -11373,9 +11558,13 @@ function initSystemeDe() {
             const journal = caisseAct.journal || [];
             const derniers5 = journal.slice(-5).reverse();
             
-            // Calculer le bilan - ÉQUILIBRÉ
-            // Les équipements sont des apports en capital du propriétaire
-            const valeurEquipements = equipList.reduce((sum, e) => sum + (e === 'A' ? c.prixEquip * 1.2 : c.prixEquip * 0.8), 0);
+            // Calculer le bilan
+            const nbAInfo = equipList.filter(e => e === 'A').length;
+            const nbBInfo = equipList.filter(e => e === 'B').length;
+            let valeurEquipements = 0;
+            if (nbAInfo > 0) valeurEquipements += getPrixA(caseId);
+            if (nbAInfo > 1) valeurEquipements += getPrixB(caseId) * (nbAInfo - 1);
+            valeurEquipements += getPrixB(caseId) * nbBInfo;
             const resultat = (caisseAct.recettes || 0) - (caisseAct.depenses || 0);
             
             const bilan = {
@@ -11404,9 +11593,9 @@ function initSystemeDe() {
                     <div style="background: #f3f4f6; padding: 10px; border-radius: 8px;">
                         <p style="font-weight: bold; margin: 0 0 8px 0;">📊 Informations</p>
                         <p style="margin: 4px 0;"><strong>Prix achat :</strong> ${fmt(c.prix)}€</p>
-                        <p style="margin: 4px 0;"><strong>Facture base :</strong> ${fmt(c.facture)}€</p>
-                        <p style="margin: 4px 0;"><strong>Équipements :</strong> ${equipDisplay} ${nbEquip > 0 ? `(×${factureMultiplier})` : ''}</p>
-                        <p style="margin: 4px 0; font-size: 1.1rem;"><strong>Facture actuelle :</strong> <span style="color: #059669;">${fmt(factureActuelle)}€</span></p>
+                        <p style="margin: 4px 0;"><strong>Facture base :</strong> ${fmt(calculerFactureActivite(caseId, []))}€ (5% de ${fmt(c.prix)}€)</p>
+                        <p style="margin: 4px 0;"><strong>Équipements :</strong> ${equipDisplay}</p>
+                        <p style="margin: 4px 0; font-size: 1.1rem;"><strong>Facture actuelle :</strong> <span style="color: #059669;">${fmt(factureActuelle)}€</span> <span style="font-size:0.8rem;">(5% total investi)</span></p>
                     </div>
                     
                     <!-- Bilan en format horizontal -->
@@ -11639,11 +11828,13 @@ function initSystemeDe() {
             const equipSnap = await gameRef.child('equipements').once('value');
             const equipements = equipSnap.val() || {};
             const nbEquip = equipements[caseId] || 0;
+            const equipTypesSnapP = await gameRef.child(`equipementTypes/${caseId}`).once('value');
+            const equipTypesP = equipTypesSnapP.val() || [];
             
             // Prix personnalisé ou défaut
             const prixPersoSnap = await gameRef.child(`prixPersonnalises/${caseId}`).once('value');
             const prixPerso = prixPersoSnap.val();
-            const prixBase = c.facture * (nbEquip === 2 ? 2 : 1);
+            const prixBase = calculerFactureActivite(caseId, equipTypesP);
             const prixActuel = prixPerso !== null ? prixPerso : prixBase;
             
             showModal(`
@@ -12129,11 +12320,9 @@ function initSystemeDe() {
         async function showQuickEquiper() {
             const activitesSnap = await gameRef.child('activites').once('value');
             const activites = activitesSnap.val() || {};
-            const equipSnap = await gameRef.child('equipements').once('value');
-            const equipements = equipSnap.val() || {};
+            const phase = gameState?.phase || 1;
             
             const profil = playersData[myPlayerId]?.profil || 'contributif';
-            const terms = getEquipmentTerms(profil);
             
             // Trouver mes activités
             const mesActivites = Object.entries(activites)
@@ -12141,7 +12330,7 @@ function initSystemeDe() {
                 .map(([id]) => parseInt(id));
             
             if (mesActivites.length === 0) {
-                showModal(`<h3>${profil === 'contributif' ? '📚 Formation' : '🔧 Équipement'}</h3><p>Tu n'as pas encore d'activité.</p>`,
+                showModal(`<h3>🔧 Équipement</h3><p>Tu n'as pas encore d'activité.</p>`,
                     `<button class="btn btn-secondary" onclick="closeModal()">OK</button>`);
                 return;
             }
@@ -12149,28 +12338,36 @@ function initSystemeDe() {
             const caisse = COMPTABILITE.caisseJoueurs[myPlayerId] || {};
             const currentEuro = caisse.euro || 0;
             
-            let html = `<h3>${profil === 'contributif' ? '📚 Formation' : '🔧 Équipement'}</h3><p>Tu as : <strong>${currentEuro}€</strong></p>`;
+            let html = `<h3>🔧 Équipements</h3>
+                <p>Tu as : <strong>${fmt(currentEuro)}€</strong> | Phase ${phase}</p>
+                <p style="font-size:0.8rem; color:#6b7280;">💡 Investir A = compensation en # | Facture = 5% total investi</p>`;
             
             for (const actId of mesActivites) {
                 const c = CASES[actId];
-                const nbEquip = equipements[actId] || 0;
+                const act = COMPTABILITE.caisseActivites?.[actId] || {};
+                const nbA = act.equipementA || 0;
+                const nbB = act.equipementB || 0;
+                const total = nbA + nbB;
+                const equipList = [...Array(nbA).fill('A'), ...Array(nbB).fill('B')];
+                const equipDisplay = total === 0 ? '∅' : equipList.join('');
+                const factureAct = calculerFactureActivite(actId, equipList);
                 
-                if (nbEquip >= 2) {
+                if (total >= 3) {
                     html += `<div style="background: #f3f4f6; padding: 8px; border-radius: 6px; margin: 6px 0;">
-                        <p style="margin: 0;">${c.icon} ${c.name} - <span style="color: #059669;">✅ Complet (2/2)</span></p>
+                        <p style="margin: 0;">${c.icon} ${c.name} [${equipDisplay}] — ✅ Complet (3/3) — Facture: ${fmt(factureAct)}€</p>
                     </div>`;
                 } else {
-                    const prixA = Math.floor(c.prixEquip * 1.2);
-                    const prixB = Math.floor(c.prixEquip * 0.8);
-                    const canA = currentEuro >= prixA;
-                    const canB = currentEuro >= prixB;
+                    const checkA = peutAcheterA(actId, equipList, myPlayerId);
+                    const checkB = peutAcheterB(actId, equipList, myPlayerId);
+                    const checkConv = peutConvertirBtoA(actId, equipList, myPlayerId);
                     
                     html += `<div style="background: #fef3c7; padding: 10px; border-radius: 6px; margin: 6px 0;">
-                        <p style="margin: 0; font-weight: bold;">${c.icon} ${c.name} (${nbEquip}/2)</p>
-                        <div style="display: flex; gap: 6px; margin-top: 8px;">
-                            ${canA ? `<button class="btn" style="flex:1; background:#dcfce7; color:#059669; font-size:0.8rem;" onclick="buyEquipementA(${actId})">${terms.iconA} A ${prixA}€</button>` : ''}
-                            ${canB ? `<button class="btn" style="flex:1; background:#fee2e2; color:#dc2626; font-size:0.8rem;" onclick="buyEquipementB(${actId})">${terms.iconB} B ${prixB}€</button>` : ''}
-                            ${!canA && !canB ? `<p style="color:#dc2626; font-size:0.85rem;">Pas assez d'€</p>` : ''}
+                        <p style="margin: 0; font-weight: bold;">${c.icon} ${c.name} [${equipDisplay}] (${total}/3) — Facture: ${fmt(factureAct)}€</p>
+                        <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;">
+                            ${checkA.ok ? `<button class="btn" style="flex:1; background:#dcfce7; color:#059669; font-size:0.8rem;" onclick="buyEquipementA(${actId})">🌿 A ${fmt(checkA.cout)}€</button>` : ''}
+                            ${checkConv.ok ? `<button class="btn" style="flex:1; background:#fef3c7; color:#92400e; font-size:0.8rem; border:1px solid #fbbf24;" onclick="convertirBtoA(${actId})">🔄 B→A ${fmt(checkConv.cout)}€</button>` : ''}
+                            ${checkB.ok ? `<button class="btn" style="flex:1; background:#fee2e2; color:#dc2626; font-size:0.8rem;" onclick="buyEquipementB(${actId})">❄️ B ${fmt(checkB.cout)}€</button>` : ''}
+                            ${!checkA.ok && !checkB.ok && !checkConv.ok ? `<p style="color:#6b7280; font-size:0.8rem;">${phase < 2 && nbB >= 2 ? 'Max 2B en Phase 1' : 'Aucune option disponible'}</p>` : ''}
                         </div>
                     </div>`;
                 }
