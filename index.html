@@ -3434,19 +3434,23 @@ activiteId: actId
         }
         
         // Taxe Ligne 3 : 10% du patrimoine (activités + équipements) → État
-        async function comptaTaxeLigne3(joueurId) {
+        // modificateur: 1.0 = normal, 1.5 = pénalité +50%, 0.8 = réduction -20%
+        async function comptaTaxeLigne3(joueurId, modificateur = 1.0) {
             initCaisseJoueur(joueurId);
             const caisse = COMPTABILITE.caisseJoueurs[joueurId];
             
             const patrimoine = calculerPatrimoine(joueurId);
-            const taxe = Math.floor(patrimoine * 0.10);
+            const taxeBase = Math.floor(patrimoine * 0.10);
+            const taxe = Math.floor(taxeBase * modificateur);
             
-            if (taxe <= 0) return { patrimoine: 0, taxe: 0, paye: 0, impaye: 0 };
+            if (taxe <= 0) return { patrimoine: 0, taxeBase: 0, taxe: 0, modificateur, paye: 0, impaye: 0 };
             
             // Payer en cash si possible, sinon arriérés
             const disponible = Math.max(0, caisse.euro || 0);
             const paye = Math.min(disponible, taxe);
             const impaye = taxe - paye;
+            
+            const libModif = modificateur > 1 ? ' (pénalité +50%)' : modificateur < 1 ? ' (réduction -20%)' : '';
             
             if (paye > 0) {
                 caisse.euro -= paye;
@@ -3458,14 +3462,14 @@ activiteId: actId
                 
                 // Écriture joueur: paie la taxe
                 enregistrerEcriture({
-                    joueurId, libelle: `Taxe Ligne 3 (10% patrimoine ${fmt(patrimoine)}€) payée`,
+                    joueurId, libelle: `Taxe Ligne 3${libModif} (${fmt(taxe)}€ sur ${fmt(patrimoine)}€)`,
                     compteDebit: 635, compteCredit: 500, montantEuro: paye,
                     contexte: 'taxeLigne3'
                 });
                 
                 // Écriture État: reçoit la taxe
                 enregistrerEcriture({
-                    joueurId: 'ETAT', libelle: `Taxe Ligne 3 reçue de ${playersData[joueurId]?.name || joueurId}`,
+                    joueurId: 'ETAT', libelle: `Taxe Ligne 3 reçue de ${playersData[joueurId]?.name || joueurId}${libModif}`,
                     compteDebit: 541, compteCredit: 703, montantEuro: paye,
                     contexte: 'taxeLigne3'
                 });
@@ -3489,7 +3493,7 @@ activiteId: actId
                 });
             }
             
-            return { patrimoine, taxe, paye, impaye };
+            return { patrimoine, taxeBase, taxe, modificateur, paye, impaye };
         }
         
         // Frais divers (D:613 C:500)
@@ -4940,16 +4944,13 @@ function aTraverseLaLigne3(posDepart, posArrivee, sens) {
     
     let pos = posDepart;
     let prevPos;
-    while (pos !== posArrivee) {
+    let steps = 0;
+    while (pos !== posArrivee && steps < NB_CASES + 1) {
         prevPos = pos;
         pos = ((pos + sens) % NB_CASES + NB_CASES) % NB_CASES;
-        // Franchissement dans les deux sens
+        steps++;
         if ((prevPos === 13 && pos === 14) || (prevPos === 14 && pos === 13)) return true;
-        if (pos === posArrivee) {
-            // Vérifier aussi l'arrivée exacte
-            if ((prevPos === 13 && pos === 14) || (prevPos === 14 && pos === 13)) return true;
-            break;
-        }
+        if (pos === posArrivee) break;
     }
     return false;
 }
@@ -8545,13 +8546,13 @@ function initSystemeDe() {
         }
         
         async function handleTaxe() {
-            // Case 13 = message informatif seulement, pas de prélèvement
+            // Case 13 = Déclaration fiscale
             const patrimoine = calculerPatrimoine(myPlayerId);
             const caisse = COMPTABILITE.caisseJoueurs[myPlayerId] || {};
             const phase = gameState?.phase || 1;
             const taxeEstimee = Math.floor(patrimoine * 0.10);
             
-            // Détail du patrimoine : lister activités + équipements
+            // Détail du patrimoine
             let detailHtml = '';
             let totalActivites = 0;
             let totalEquipements = 0;
@@ -8575,8 +8576,21 @@ function initSystemeDe() {
                 detailHtml = '<p style="margin: 2px 0; font-size: 0.85rem; color: #6b7280;">Aucune activité possédée</p>';
             }
             
+            if (phase >= 3) {
+                // Phase 3 : pas de taxe, juste informatif
+                showModal(`
+                    <h3>🏛️ Case Taxe</h3>
+                    <div style="background: #f0fdf4; padding: 12px; border-radius: 8px; margin: 10px 0;">
+                        <p style="margin: 0; text-align: center; color: #059669;">
+                            Phase 3 : taxe Ligne 3 <strong>supprimée</strong> ✅
+                        </p>
+                    </div>
+                `, `<button class="btn btn-primary" onclick="safeNextTurn();">OK ✓</button>`);
+                return;
+            }
+            
             showModal(`
-                <h3>🏛️ Case Taxe — Information fiscale</h3>
+                <h3>🏛️ Case Taxe — Déclaration fiscale</h3>
                 <div style="background: #fef3c7; padding: 12px; border-radius: 8px; margin: 10px 0;">
                     <p style="margin: 0; font-weight: bold;">📊 Détail de ton patrimoine :</p>
                     ${detailHtml}
@@ -8586,23 +8600,63 @@ function initSystemeDe() {
                     <p style="margin: 4px 0; font-weight: bold; font-size: 1.05rem;">
                         Total patrimoine : <strong>${fmt(patrimoine)}€</strong>
                     </p>
+                    <p style="margin: 8px 0 0 0; text-align: center;">
+                        🏛️ Taxe estimée (10%) : <strong>${fmt(taxeEstimee)}€</strong>
+                    </p>
                 </div>
-                <div style="background: ${phase < 3 ? '#dbeafe' : '#f3f4f6'}; padding: 10px; border-radius: 8px; margin: 8px 0;">
-                    ${phase < 3 ? 
-                        `<p style="margin: 0; text-align: center;">
-                            🏛️ Taxe de <strong>10%</strong> au franchissement de la Ligne 3 :
-                            <strong>${fmt(taxeEstimee)}€</strong>
-                        </p>
-                        <p style="margin: 4px 0 0 0; text-align: center; font-size: 0.85rem; color: #1e40af;">
-                            💰 Cash disponible : ${fmt(caisse.euro || 0)}€
-                            ${(caisse.euro || 0) < taxeEstimee ? 
-                                `<br>⚠️ Insuffisant ! ${fmt(taxeEstimee - (caisse.euro || 0))}€ iront en arriérés` : 
-                                `<br>✅ Suffisant pour payer`}
-                        </p>` :
-                        `<p style="margin: 0; text-align: center; color: #6b7280;">
-                            Phase 3 : taxe Ligne 3 <strong>supprimée</strong> ✅
-                        </p>`}
+                <div style="background: #fef2f2; padding: 10px; border-radius: 8px; margin: 8px 0;">
+                    <p style="margin: 0; text-align: center; font-size: 0.85rem; color: #92400e;">
+                        📋 <strong>Validez votre déclaration</strong> pour payer la taxe normale.<br>
+                        Si vous ne validez pas et franchissez la Ligne 3,<br>
+                        tirage de dé : 🎲 1,3,4,6 = <strong>pénalité +50%</strong> | 🎲 2,5 = <strong>réduction -20%</strong>
+                    </p>
                 </div>
+            `, `
+                <div style="display: flex; flex-direction: column; gap: 8px; width: 100%;">
+                    <button class="btn btn-primary" style="width: 100%;" 
+                        onclick="validerDeclarationFiscale();">
+                        ✅ Valider ma déclaration
+                    </button>
+                    <button class="btn" style="width: 100%; background: #f3f4f6; color: #6b7280;" 
+                        onclick="refuserDeclarationFiscale();">
+                        ❌ Passer (je prends le risque)
+                    </button>
+                </div>
+            `);
+        }
+        
+        async function validerDeclarationFiscale() {
+            // Sauvegarder dans Firebase
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/declarationFiscale`).set(true);
+            if (playersData[myPlayerId]) playersData[myPlayerId].declarationFiscale = true;
+            
+            closeModal();
+            sendSystemMessage(`📋 ${myName} valide sa déclaration fiscale ✅`);
+            
+            showModal(`
+                <h3>✅ Déclaration validée</h3>
+                <p style="text-align: center;">Ta déclaration fiscale est enregistrée.</p>
+                <p style="text-align: center; font-size: 0.85rem; color: #059669;">
+                    Au franchissement de la Ligne 3, tu paieras la taxe normale (10%).
+                </p>
+            `, `<button class="btn btn-primary" onclick="safeNextTurn();">OK ✓</button>`);
+        }
+        
+        async function refuserDeclarationFiscale() {
+            // Marquer comme non validé
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/declarationFiscale`).set(false);
+            if (playersData[myPlayerId]) playersData[myPlayerId].declarationFiscale = false;
+            
+            closeModal();
+            sendSystemMessage(`📋 ${myName} refuse de valider sa déclaration fiscale ⚠️`);
+            
+            showModal(`
+                <h3>⚠️ Déclaration non validée</h3>
+                <p style="text-align: center;">Tu prends le risque !</p>
+                <p style="text-align: center; font-size: 0.85rem; color: #dc2626;">
+                    Au franchissement de la Ligne 3, tirage de dé :<br>
+                    🎲 1,3,4,6 = pénalité +50% | 🎲 2,5 = réduction -20%
+                </p>
             `, `<button class="btn btn-primary" onclick="safeNextTurn();">OK ✓</button>`);
         }
         
@@ -8610,23 +8664,49 @@ function initSystemeDe() {
         async function handleLigne3(joueurId) {
             const player = playersData[joueurId];
             const caisseBefore = { ...(COMPTABILITE.caisseJoueurs[joueurId] || {}) };
-            const result = await comptaTaxeLigne3(joueurId);
+            
+            // Vérifier la déclaration fiscale
+            const declarationFiscale = player?.declarationFiscale === true;
+            let modificateur = 1.0;
+            let resultatDe = null;
+            let deMessage = '';
+            
+            if (!declarationFiscale) {
+                // Pas de déclaration validée → tirage de dé
+                resultatDe = Math.floor(Math.random() * 6) + 1;
+                if ([1, 3, 4, 6].includes(resultatDe)) {
+                    modificateur = 1.5; // Pénalité +50%
+                    deMessage = `🎲 Dé = ${resultatDe} → Pénalité +50% !`;
+                } else {
+                    modificateur = 0.8; // Réduction -20%
+                    deMessage = `🎲 Dé = ${resultatDe} → Chance ! Réduction -20%`;
+                }
+            }
+            
+            const result = await comptaTaxeLigne3(joueurId, modificateur);
             
             await db.ref(`parties/${currentGameCode}/players/${joueurId}/euro`)
                 .set(COMPTABILITE.caisseJoueurs[joueurId].euro);
+            // Reset la déclaration fiscale après franchissement
+            await db.ref(`parties/${currentGameCode}/players/${joueurId}/declarationFiscale`).set(null);
+            if (player) player.declarationFiscale = null;
             await syncComptabiliteToFirebase();
             
             logEvent('LIGNE_3_TAX', joueurId, {
                 patrimoine: result.patrimoine,
+                taxeBase: result.taxeBase,
                 taxe: result.taxe,
+                modificateur,
+                declarationFiscale,
+                resultatDe,
                 paye: result.paye,
                 impaye: result.impaye
             });
             
+            // Messages système
             if (result.taxe > 0) {
-                if (result.paye > 0) {
-                    sendSystemMessage(`🏛️ ${player?.name} franchit la Ligne 3 : taxe ${fmt(result.paye)}€ (10% de ${fmt(result.patrimoine)}€)`);
-                }
+                const modLabel = modificateur > 1 ? ' (pénalité +50%)' : modificateur < 1 ? ' (réduction -20%)' : '';
+                sendSystemMessage(`🏛️ ${player?.name} franchit la Ligne 3 : taxe ${fmt(result.taxe)}€${modLabel}`);
                 if (result.impaye > 0) {
                     sendSystemMessage(`⚠️ ${player?.name} : taxe impayée ${fmt(result.impaye)}€ → arriérés`);
                 }
@@ -8634,7 +8714,7 @@ function initSystemeDe() {
                 sendSystemMessage(`🏛️ ${player?.name} franchit la Ligne 3 (patrimoine: ${fmt(0)}€, pas de taxe)`);
             }
             
-            // Modal détaillé pour le joueur humain (toujours, même patrimoine 0)
+            // Modal détaillé pour le joueur humain
             if (joueurId === myPlayerId) {
                 // Détail du patrimoine
                 let detailHtml = '';
@@ -8660,10 +8740,36 @@ function initSystemeDe() {
                     detailHtml = '<p style="margin: 2px 0; font-size: 0.85rem; color: #6b7280;">Aucune activité possédée</p>';
                 }
                 
+                // Section déclaration fiscale
+                let fiscalHtml = '';
+                if (declarationFiscale) {
+                    fiscalHtml = `<div style="background: #f0fdf4; padding: 8px; border-radius: 6px; margin: 8px 0;">
+                        <p style="margin: 0; text-align: center; color: #059669;">
+                            ✅ Déclaration fiscale validée → taxe normale
+                        </p>
+                    </div>`;
+                } else {
+                    const deColor = modificateur > 1 ? '#dc2626' : '#059669';
+                    const deLabel = modificateur > 1 ? '⚠️ Pénalité +50%' : '🍀 Réduction -20%';
+                    fiscalHtml = `<div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin: 8px 0;">
+                        <p style="margin: 0; text-align: center;">
+                            ❌ Déclaration non validée → tirage de dé
+                        </p>
+                        <p style="margin: 4px 0 0 0; text-align: center; font-size: 1.2rem; font-weight: bold; color: ${deColor};">
+                            ${deMessage}
+                        </p>
+                        <p style="margin: 2px 0 0 0; text-align: center; font-size: 0.85rem; color: ${deColor};">
+                            ${deLabel}
+                        </p>
+                    </div>`;
+                }
+                
                 return new Promise(resolve => {
                     window.__ligne3Resolve = resolve;
                     showModal(`
                         <h3>🏛️ Ligne 3 — Taxe sur le patrimoine</h3>
+                        
+                        ${fiscalHtml}
                         
                         <div style="background: #fef3c7; padding: 12px; border-radius: 8px; margin: 10px 0;">
                             <p style="margin: 0; font-weight: bold;">📊 Calcul du patrimoine :</p>
@@ -8671,13 +8777,18 @@ function initSystemeDe() {
                             <hr style="margin: 8px 0; border-color: #fbbf24;">
                             <p style="margin: 4px 0;">Activités : <strong>${fmt(totalActivites)}€</strong></p>
                             <p style="margin: 4px 0;">Équipements : <strong>${fmt(totalEquipements)}€</strong></p>
-                            <p style="margin: 4px 0; font-weight: bold; font-size: 1.05rem;">
-                                Total patrimoine : <strong>${fmt(result.patrimoine)}€</strong>
+                            <p style="margin: 4px 0; font-weight: bold;">
+                                Patrimoine : <strong>${fmt(result.patrimoine)}€</strong>
                             </p>
                         </div>
                         
                         <div style="background: ${result.taxe > 0 ? '#dbeafe' : '#f0fdf4'}; padding: 12px; border-radius: 8px; margin: 8px 0;">
-                            <p style="margin: 0; font-weight: bold;">🏛️ Taxe 10% : <strong>${fmt(result.taxe)}€</strong></p>
+                            <p style="margin: 0;">Taxe base (10%) : <strong>${fmt(result.taxeBase)}€</strong></p>
+                            ${modificateur !== 1.0 ? `
+                                <p style="margin: 4px 0; color: ${modificateur > 1 ? '#dc2626' : '#059669'};">
+                                    ${modificateur > 1 ? '⚠️ +50% pénalité' : '🍀 -20% réduction'} → <strong>${fmt(result.taxe)}€</strong>
+                                </p>
+                            ` : ''}
                             ${result.taxe > 0 ? `
                                 <hr style="margin: 8px 0; border-color: #93c5fd;">
                                 <p style="margin: 4px 0; font-size: 0.9rem;">
@@ -8685,12 +8796,12 @@ function initSystemeDe() {
                                 </p>
                                 ${result.paye > 0 ? `
                                     <p style="margin: 4px 0; color: #059669;">
-                                        ✅ Payé en cash : <strong>${fmt(result.paye)}€</strong>
+                                        ✅ Payé : <strong>${fmt(result.paye)}€</strong>
                                     </p>
                                 ` : ''}
                                 ${result.impaye > 0 ? `
                                     <p style="margin: 4px 0; color: #dc2626;">
-                                        ⚠️ Insuffisant → <strong>${fmt(result.impaye)}€</strong> en arriérés
+                                        ⚠️ Arriérés : <strong>${fmt(result.impaye)}€</strong>
                                     </p>
                                 ` : ''}
                                 <p style="margin: 4px 0; font-size: 0.9rem;">
@@ -9167,14 +9278,28 @@ function initSystemeDe() {
             // *** LIGNE 3 : Taxe 10% patrimoine au franchissement ***
             const passageLigne3Bot = aTraverseLaLigne3(bot.position, newPosition, sens);
             if (passageLigne3Bot) {
-                const resultTaxe = await comptaTaxeLigne3(bot.id);
+                // Vérifier déclaration fiscale du bot
+                const botDeclaration = bot.declarationFiscale === true;
+                let botModificateur = 1.0;
+                if (!botDeclaration) {
+                    const botDe = Math.floor(Math.random() * 6) + 1;
+                    botModificateur = [1, 3, 4, 6].includes(botDe) ? 1.5 : 0.8;
+                    const deLabel = botModificateur > 1 ? `pénalité +50% (🎲${botDe})` : `réduction -20% (🎲${botDe})`;
+                    sendSystemMessage(`📋 ${bot.name} n'avait pas validé sa déclaration → ${deLabel}`);
+                }
+                
+                const resultTaxe = await comptaTaxeLigne3(bot.id, botModificateur);
+                
+                // Reset déclaration après franchissement
+                await db.ref(`parties/${currentGameCode}/players/${bot.id}/declarationFiscale`).set(null);
+                if (playersData[bot.id]) playersData[bot.id].declarationFiscale = null;
+                
                 if (resultTaxe.taxe > 0) {
                     await db.ref(`parties/${currentGameCode}/players/${bot.id}/euro`)
                         .set(COMPTABILITE.caisseJoueurs[bot.id].euro);
                     await syncComptabiliteToFirebase();
-                    if (resultTaxe.paye > 0) {
-                        sendSystemMessage(`🏛️ ${bot.name} franchit Ligne 3 : taxe ${fmt(resultTaxe.paye)}€ (10% de ${fmt(resultTaxe.patrimoine)}€)`);
-                    }
+                    const modLabel = botModificateur !== 1.0 ? (botModificateur > 1 ? ' (pénalité)' : ' (réduit)') : '';
+                    sendSystemMessage(`🏛️ ${bot.name} franchit Ligne 3 : taxe ${fmt(resultTaxe.taxe)}€${modLabel}`);
                     if (resultTaxe.impaye > 0) {
                         sendSystemMessage(`⚠️ ${bot.name} : taxe impayée ${fmt(resultTaxe.impaye)}€ → arriérés`);
                     }
@@ -9631,9 +9756,10 @@ function initSystemeDe() {
                 }
                 await syncComptabiliteToFirebase();
             } else if (c.type === 'taxe') {
-                // Case Taxe = informatif seulement, pas de prélèvement
-                // La taxe est prélevée au franchissement de la Ligne 3
-                sendSystemMessage(`🏛️ ${bot.name} passe sur la case Taxe (information)`);
+                // Case Taxe : le bot valide automatiquement sa déclaration fiscale
+                await db.ref(`parties/${currentGameCode}/players/${botId}/declarationFiscale`).set(true);
+                if (playersData[botId]) playersData[botId].declarationFiscale = true;
+                sendSystemMessage(`📋 ${bot.name} valide sa déclaration fiscale ✅`);
             } else if (c.type === 'chance') {
                 const card = CHANCE_CARDS[Math.floor(Math.random() * CHANCE_CARDS.length)];
                 if (!card.all) {
