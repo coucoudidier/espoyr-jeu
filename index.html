@@ -579,7 +579,7 @@
         const CASES = [
             { id: 0, type: 'start', name: 'Départ', icon: '🏁' },
             { id: 1, type: 'activite', name: 'Vêtements', icon: '👔', prix: 200, facture: 40, hash: true, prixEquip: 100 },
-            { id: 2, type: 'ligne2', name: 'Ligne 2', icon: '🚌', cout: 50 },
+            { id: 2, type: 'ligne2', name: 'SNCB', icon: '🚌', cout: 50 },
             { id: 3, type: 'activite', name: 'Pharmacie', icon: '💊', prix: 220, facture: 45, hash: true, prixEquip: 110 },
             { id: 4, type: 'chance', name: 'Chance', icon: '🍀' },
             { id: 5, type: 'activite', name: 'Jardin', icon: '🌻', prix: 240, facture: 50, hash: true, prixEquip: 120 },
@@ -7029,82 +7029,69 @@ function initSystemeDe() {
             const players = Object.values(playersData);
             const ownerPlayer = players.find(p => p.id === ownerId);
             
+            // Calcul limites du curseur
+            const maxPctHash = Math.min(100, Math.floor(myEspoyr / facture * 100));
+            const minPctHash = Math.max(0, Math.ceil((facture - myEuro) / facture * 100));
+            const defaultPct = Math.max(minPctHash, Math.min(50, maxPctHash));
+            
             showModal(`
                 <h3>🤝 Paiement Mixte</h3>
-                <p>${c.icon} ${c.name} - Propriétaire: ${ownerPlayer?.avatar} ${ownerPlayer?.name}</p>
+                <p>${c.icon} ${c.name} — Propriétaire : ${ownerPlayer?.avatar} ${ownerPlayer?.name}</p>
                 <p style="font-size: 1.1rem;"><strong>Facture :</strong> <span style="color: #dc2626;">${fmt(facture)}€</span></p>
                 
                 <div style="background: #dbeafe; padding: 10px; border-radius: 8px; margin: 10px 0;">
                     <p style="margin: 0;"><strong>Ton solde :</strong> ${fmt(myEuro)}€ / ${fmt(myEspoyr)}#</p>
                 </div>
                 
-                <div style="display: flex; gap: 15px; margin: 15px 0;">
-                    <div style="flex:1; text-align: center;">
-                        <label style="font-size: 0.9rem; font-weight: bold; display: block; margin-bottom: 5px;">💶 Euros</label>
-                        <input type="range" id="negoEuroSlider" min="0" max="${Math.min(myEuro, facture)}" value="${Math.min(myEuro, facture)}" 
-                               oninput="updateNegoDisplay(${facture}, ${myEuro}, ${myEspoyr})" style="width: 100%;">
-                        <input type="number" id="negoEuro" min="0" max="${Math.min(myEuro, facture)}" value="${Math.min(myEuro, facture)}"
-                               onchange="document.getElementById('negoEuroSlider').value=this.value; updateNegoDisplay(${facture}, ${myEuro}, ${myEspoyr})"
-                               style="width: 80px; text-align: center; font-size: 1.2rem; font-weight: bold;">
+                <div style="margin: 18px 0;">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 600; margin-bottom: 4px;">
+                        <span>💶 100% €</span>
+                        <span>💚 100% #</span>
                     </div>
-                    <div style="flex:1; text-align: center;">
-                        <label style="font-size: 0.9rem; font-weight: bold; display: block; margin-bottom: 5px;">💚 Espoyr</label>
-                        <input type="range" id="negoHashSlider" min="0" max="${myEspoyr}" value="0" 
-                               oninput="updateNegoDisplay(${facture}, ${myEuro}, ${myEspoyr})" style="width: 100%;">
-                        <input type="number" id="negoHash" min="0" max="${myEspoyr}" value="0"
-                               onchange="document.getElementById('negoHashSlider').value=this.value; updateNegoDisplay(${facture}, ${myEuro}, ${myEspoyr})"
-                               style="width: 80px; text-align: center; font-size: 1.2rem; font-weight: bold;">
+                    <input type="range" id="negoMixSlider" min="${minPctHash}" max="${maxPctHash}" value="${defaultPct}" 
+                           oninput="updateMixDisplay(${facture})" style="width: 100%; accent-color: #059669;">
+                    <div style="text-align: center; margin-top: 6px;">
+                        <span id="negoPctLabel" style="font-size: 1.1rem; font-weight: bold; color: #065f46;">${defaultPct}% en #</span>
                     </div>
                 </div>
                 
-                <div id="negoTotal" style="text-align: center; padding: 10px; background: #f3f4f6; border-radius: 8px;">
-                    <p style="margin: 0; font-size: 1.1rem;"><strong>Total :</strong> <span id="negoTotalValue">${Math.min(myEuro, facture)}</span> / ${facture} requis</p>
-                    <p id="negoStatus" style="margin: 4px 0 0 0; font-size: 0.9rem; color: #059669;">✅ Valide</p>
+                <div id="negoMixResult" style="text-align: center; padding: 12px; background: #f0fdf4; border-radius: 8px; border: 2px solid #059669;">
                 </div>
                 
-                <p style="font-size: 0.8rem; color: var(--gray); margin-top: 10px;">
-                    💡 Le propriétaire doit accepter si le total < facture
-                </p>
+                <div id="negoMixStatus" style="text-align: center; margin-top: 8px; font-size: 0.9rem;"></div>
             `, `
-                <button class="btn btn-primary" id="negoSubmitBtn" onclick="sendNegoOffer(${caseId}, '${ownerId}', ${facture})">📤 Proposer</button>
+                <button class="btn btn-primary" id="negoSubmitBtn" onclick="sendNegoOffer(${caseId}, '${ownerId}', ${facture})">💸 Payer</button>
                 <button class="btn btn-secondary" onclick="showPayOrNegotiateModal(CASES[${caseId}], '${ownerId}', ${myEuro})">⬅️ Retour</button>
             `);
             
-            // Initialiser l'affichage
-            updateNegoDisplay(facture, myEuro, myEspoyr);
+            updateMixDisplay(facture);
         }
         
-        function updateNegoDisplay(facture, maxEuro, maxHash) {
-            const euroVal = parseInt(document.getElementById('negoEuroSlider').value) || 0;
-            const hashVal = parseInt(document.getElementById('negoHashSlider').value) || 0;
+        function updateMixDisplay(facture) {
+            const pct = parseInt(document.getElementById('negoMixSlider').value) || 0;
+            const hashAmount = Math.round(facture * pct / 100);
+            const euroAmount = facture - hashAmount;
             
-            document.getElementById('negoEuro').value = euroVal;
-            document.getElementById('negoHash').value = hashVal;
+            document.getElementById('negoPctLabel').textContent = `${pct}% en #`;
             
-            const total = euroVal + hashVal;
-            document.getElementById('negoTotalValue').textContent = total;
+            document.getElementById('negoMixResult').innerHTML = `
+                <p style="margin: 0; font-size: 1.2rem;">
+                    <strong>💶 ${fmt(euroAmount)}€</strong>  +  <strong style="color: #059669;">💚 ${fmt(hashAmount)}#</strong>
+                </p>
+                <p style="margin: 4px 0 0 0; font-size: 0.95rem; color: #374151;">
+                    = ${fmt(euroAmount + hashAmount)} / ${fmt(facture)} ✅
+                </p>
+            `;
             
-            const statusEl = document.getElementById('negoStatus');
-            const submitBtn = document.getElementById('negoSubmitBtn');
-            
-            if (total >= facture) {
-                statusEl.textContent = '✅ Valide - Paiement direct';
-                statusEl.style.color = '#059669';
-                submitBtn.textContent = '💸 Payer';
-            } else if (total > 0) {
-                statusEl.textContent = '⏳ Nécessite validation du propriétaire';
-                statusEl.style.color = '#f59e0b';
-                submitBtn.textContent = '📤 Proposer';
-            } else {
-                statusEl.textContent = '❌ Montant invalide';
-                statusEl.style.color = '#dc2626';
-                submitBtn.disabled = true;
-            }
+            // Stocker pour sendNegoOffer
+            document.getElementById('negoMixSlider').dataset.euroAmount = euroAmount;
+            document.getElementById('negoMixSlider').dataset.hashAmount = hashAmount;
         }
         
         async function sendNegoOffer(caseId, ownerId, facture) {
-            const euroOffer = parseInt(document.getElementById('negoEuro').value) || 0;
-            const hashOffer = parseInt(document.getElementById('negoHash').value) || 0;
+            const slider = document.getElementById('negoMixSlider');
+            const euroOffer = parseInt(slider.dataset.euroAmount) || 0;
+            const hashOffer = parseInt(slider.dataset.hashAmount) || 0;
             const total = euroOffer + hashOffer;
             
             if (total <= 0) {
