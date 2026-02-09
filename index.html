@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -4317,7 +4317,7 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                 joinedAt: firebase.database.ServerValue.TIMESTAMP,
                     isConnected: true,
                     lastSeen: firebase.database.ServerValue.TIMESTAMP,
-                  secretHash: 'bot'
+                    secretHash: secretHash
             });
             
             // Si le profil est membre AAA, l'ajouter à la liste comptable
@@ -4439,18 +4439,10 @@ if (isMyTurn) {
                     isMyTurn ? 'Lance le dé !' : `${currentPlayer.name} joue...`;
                 
                 // Robot joue avec le timing configurable (seulement si pas en mode replay)
-              if (isBot && isHost && !replayMode) {
-    const delaiBot = (gameConfig.timingBot || 2) * 1000;
-    setTimeout(async () => {
-        try {
-            await playBotTurn(currentPlayer);
-        } catch(e) {
-            console.error('🤖 Bot bloqué:', e);
-            sendSystemMessage(`⚠️ ${currentPlayer.name} est bloqué, tour passé`);
-            nextTurn();
-        }
-    }, delaiBot);
-}
+                if (isBot && isHost && !replayMode) {
+                    const delaiBot = (gameConfig.timingBot || 2) * 1000;
+                    setTimeout(() => playBotTurn(currentPlayer), delaiBot);
+                }
             }
             
             updateBoard();
@@ -4683,8 +4675,9 @@ async function rollDice() {
     if (!joueurActuel) return;
 
     // ── Seul le joueur actif (ou l'hôte pour un bot) peut lancer ──
-   const estMonTour = (joueurActuel.id === myPlayerId);
+    const estMonTour = (joueurActuel.id === myPlayerId);
     const estTourBot = !!joueurActuel.isBot;
+
     if (!estMonTour && !(isHost && estTourBot)) return;
 
     // Désactiver le bouton pendant le traitement
@@ -4818,26 +4811,26 @@ function choisirSens(joueur, valeurDe) {
             </p>
 
             <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-                <div onclick="if(!window.__avatarChoisi){alert('Choisis ton avatar !');return;}window.__callbackChoixSens(1)"
+                <div onclick="window.__callbackChoixSens(1)"
                     style="flex:1; min-width: 140px; background: #dbeafe; border: 3px solid #3b82f6;
                         border-radius: 12px; padding: 15px; cursor: pointer; text-align: center;
                         transition: all 0.2s;"
                     onmouseover="this.style.transform='scale(1.03)'"
                     onmouseout="this.style.transform='scale(1)'">
-                    <p style="font-size: 1.5rem; margin: 0;">➡️</p>>
+                    <p style="font-size: 1.5rem; margin: 0;">⬅️</p>
                     <p style="font-weight: bold; margin: 6px 0 2px 0;">Horaire</p>
                     <p style="font-size: 0.8rem; color: #6b7280;">
                         → case ${caseHoraire} : ${CASES[caseHoraire]?.icon || ''} ${nomHoraire}
                     </p>
                 </div>
 
-                <div onclick="if(!window.__avatarChoisi){alert('Choisis ton avatar !');return;}window.__callbackChoixSens(-1)"
+                <div onclick="window.__callbackChoixSens(-1)"
                     style="flex:1; min-width: 140px; background: #fef3c7; border: 3px solid #f59e0b;
                         border-radius: 12px; padding: 15px; cursor: pointer; text-align: center;
                         transition: all 0.2s;"
                     onmouseover="this.style.transform='scale(1.03)'"
                     onmouseout="this.style.transform='scale(1)'">
-                    <p style="font-size: 1.5rem; margin: 0;">⬅️</p>
+                    <p style="font-size: 1.5rem; margin: 0;">➡️</p>
                     <p style="font-weight: bold; margin: 6px 0 2px 0;">Anti-horaire</p>
                     <p style="font-size: 0.8rem; color: #6b7280;">
                         → case ${caseAntiHoraire} : ${CASES[caseAntiHoraire]?.icon || ''} ${nomAntiHoraire}
@@ -5048,7 +5041,7 @@ function ecouterReponsesDe() {
         if (!reponse || !reponse.playerId || !reponse.valeur) return;
 
         // C'est pertinent uniquement si c'est le tour de ce joueur
-        const listeJoueurs = getOrderedPlayers();
+        const listeJoueurs = getOrderedPlayers()
         const indexActuel = gameState?.currentPlayerIndex || 0;
         const joueurActuel = listeJoueurs[indexActuel];
 
@@ -7236,7 +7229,7 @@ function initSystemeDe() {
                 effects: playerEffects
             }, ledgerEntryIds);
             
-            sendSystemMessage(`🚌 Transport Commun ! Tout le monde paie ${c.cout}€`);
+            sendSystemMessage(`🚌 LIGNE 2 ! Tout le monde paie ${c.cout}€`);
             
             // Afficher le modal avec un timer qui passe au tour suivant automatiquement
             let countdown = 3;
@@ -7811,9 +7804,8 @@ function initSystemeDe() {
                                 if ((profil.id === 'PREDATEUR' || profil.id === 'INVESTISSEUR') && euroApresAchat >= prixEquipA) {
                                     typeEquip = 'A';
                                 }
-                                // ligne pour que le robot ne bloque pas
-                                // ancienne ligne :await comptaEquipementActivite(botId, position, typeEquip);
-                               try { await comptaEquipementActivite(botId, position, typeEquip); } catch(e) { console.warn('⚠️ comptaEquipement non disponible'); }
+                                
+                                await comptaEquipementActivite(botId, position, typeEquip);
                                 const caisseApresEquip = COMPTABILITE.caisseJoueurs[botId];
                                 await db.ref(`parties/${currentGameCode}/players/${botId}/euro`).set(caisseApresEquip.euro);
                                 
@@ -7880,8 +7872,8 @@ function initSystemeDe() {
                                 } else if (profil.id === 'PRUDENT') {
                                     typeEquip = 'B';  // Type B = moins cher
                                 }
-                                // ancinne ligne qui bloc le passe à l'autrer await comptaEquipementActivite(botId, position, typeEquip);
-                                try { await comptaEquipementActivite(botId, position, typeEquip); } catch(e) { console.warn('⚠️ comptaEquipement non disponible'); }
+                                
+                                await comptaEquipementActivite(botId, position, typeEquip);
                                 const newCaisse = COMPTABILITE.caisseJoueurs[botId];
                                 await db.ref(`parties/${currentGameCode}/players/${botId}/euro`).set(newCaisse.euro);
                                 
@@ -8042,21 +8034,22 @@ function initSystemeDe() {
             const players = Object.values(playersData);
             
             // Générer les lignes joueurs
-         const playerRows = players.map(p => {
+            const playerRows = players.map(p => {
                 const bj = bilan.bilansJoueurs[p.id] || {};
-                const euro = Math.round((bj.actif?.euro || 0) * 100) / 100;
-                const espoyr = Math.round((bj.actif?.espoyr || 0) * 100) / 100;
-                const activites = Math.round((bj.actif?.activites || 0) * 100) / 100;
-                const dette = Math.round((bj.passif?.emprunt || 0) * 100) / 100;
-                const net = Math.round((bj.net || 0) * 100) / 100;
+                const euro = bj.actif?.euro || 0;
+                const espoyr = bj.actif?.espoyr || 0;
+                const activites = bj.actif?.activites || 0;
+                const dette = bj.passif?.emprunt || 0;
+                const net = bj.net || 0;
                 
                 return `
                     <tr>
-                        <td>${Math.round(bilan.actif.caisseEuro * 100) / 100}€</td>
-                        <td>${Math.round(bilan.actif.caisseEspoyr * 100) / 100}#</td>
-                        <td>${Math.round(bilan.actif.activites * 100) / 100}€</td>
-                        <td>${Math.round(bilan.passif.emprunts * 100) / 100}€</td>
-                        <td>${Math.round((bilan.actif.total - bilan.passif.emprunts) * 100) / 100}€</td>
+                        <td>${p.avatar} ${p.name}</td>
+                        <td class="actif">${euro}€</td>
+                        <td class="actif">${espoyr}#</td>
+                        <td class="actif">${activites}€</td>
+                        <td class="passif">${dette}€</td>
+                        <td style="font-weight:bold;">${net}€</td>
                     </tr>
                 `;
             }).join('');
@@ -8185,7 +8178,7 @@ function initSystemeDe() {
             
             // Vérification équilibre
             const equilibreHtml = Math.abs(bilan.equilibre) > 1 ? 
-                `<p style="color: #dc2626; font-size: 0.8rem;">⚠️ Déséquilibre: ${Math.round(bilan.equilibre * 100) / 100}€</p>`
+                `<p style="color: #dc2626; font-size: 0.8rem;">⚠️ Déséquilibre: ${bilan.equilibre}€</p>` : 
                 `<p style="color: #059669; font-size: 0.8rem;">✅ Bilan équilibré</p>`;
             
             showModal(`
