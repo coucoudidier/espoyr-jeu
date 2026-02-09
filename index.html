@@ -281,6 +281,14 @@
             <p class="subtitle">Jeu collaboratif d'économie - V3 Comptabilité complète</p>
             <div class="error-message" id="errorMessage"></div>
             
+            <div style="margin-bottom: 15px; text-align: center;">
+                <a href="https://docs.google.com/document/d/1fTV-keDtwbxwTQPUuj4JCEN-sUBkqvRx/edit?usp=sharing&ouid=114447202650775631504&rtpof=true&sd=true" 
+                   target="_blank" rel="noopener noreferrer"
+                   style="display: inline-block; padding: 10px 20px; background: #f0fdf4; border: 2px solid #059669; border-radius: 8px; color: #065f46; font-weight: 600; text-decoration: none; font-size: 0.95rem;">
+                    📖 Explications détaillées et règles
+                </a>
+            </div>
+            
             <div style="margin-bottom: 15px;">
                 <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 6px; font-size: 0.9rem;">Introduit ton Prénom :</label>
                 <input type="text" id="playerName" placeholder="Entre ton prénom..." maxlength="15">
@@ -2622,6 +2630,70 @@ activiteId: actId
             if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
             
             return { montantEuro, montantHT, montantTVA, montantEspoyr, total, facture, ledgerEntryIds };
+        }
+        
+        // ========== SURPLUS €→# (échange de moyen de paiement via 468 transit) ==========
+        // Le payeur donne un surplus en € au propriétaire et reçoit l'équivalent en #
+        // Aucun impact TVA ni chiffre d'affaires — échange pur
+        async function comptaSurplusEuroHash(payeurId, proprietaireId, actId, surplus) {
+            initCaisseJoueur(payeurId);
+            initCaisseJoueur(proprietaireId);
+            
+            const c = CASES[actId];
+            const ledgerEntryIds = [];
+            surplus = arrondir2(surplus);
+            
+            // Écriture 1: Payeur — € sort via transit 468
+            let e = enregistrerEcriture({
+                joueurId: payeurId,
+                libelle: `Surplus € échange # ${c?.name || actId}`,
+                compteDebit: 468,   // Consignes Espoyr # (transit)
+                compteCredit: 500,  // Caisse € (sort)
+                montantEuro: surplus,
+                activiteId: actId
+            });
+            if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
+            
+            // Écriture 2: Payeur — reçoit # depuis transit 468
+            e = enregistrerEcriture({
+                joueurId: payeurId,
+                libelle: `Réception # surplus ${c?.name || actId}`,
+                compteDebit: 501,   // Caisse # (entre)
+                compteCredit: 468,  // Consignes Espoyr # (transit soldé)
+                montantEspoyr: surplus,
+                activiteId: actId
+            });
+            if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
+            
+            // Écriture 3: Propriétaire — reçoit surplus €
+            e = enregistrerEcriture({
+                joueurId: proprietaireId,
+                libelle: `Réception surplus € ${c?.name || actId}`,
+                compteDebit: 500,   // Caisse € (entre)
+                compteCredit: 468,  // Consignes Espoyr # (transit)
+                montantEuro: surplus,
+                activiteId: actId
+            });
+            if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
+            
+            // Écriture 4: Propriétaire — donne # en retour
+            e = enregistrerEcriture({
+                joueurId: proprietaireId,
+                libelle: `Rendu # surplus ${c?.name || actId}`,
+                compteDebit: 468,   // Consignes Espoyr # (transit soldé)
+                compteCredit: 501,  // Caisse # (sort)
+                montantEspoyr: surplus,
+                activiteId: actId
+            });
+            if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
+            
+            // Mise à jour caisses
+            COMPTABILITE.caisseJoueurs[payeurId].euro -= surplus;
+            COMPTABILITE.caisseJoueurs[payeurId].espoyr += surplus;
+            COMPTABILITE.caisseJoueurs[proprietaireId].euro += surplus;
+            COMPTABILITE.caisseJoueurs[proprietaireId].espoyr -= surplus;
+            
+            return { surplus, ledgerEntryIds };
         }
         
         // Travail coopératif (D:501 C:706 pour les deux)
@@ -6826,6 +6898,12 @@ function initSystemeDe() {
             // Option 4: Travail coopératif
             buttons += `<button class="btn" style="background:#dbeafe;color:#1d4ed8;" onclick="showWorkModal(${c.id}, '${ownerId}', ${facture})">👷 Travailler</button>`;
             
+            // Option 4b: Surplus €→# (si le payeur a plus que la facture ET le propriétaire a des #)
+            const ownerEspoyr = COMPTABILITE.caisseJoueurs[ownerId]?.espoyr || 0;
+            if (canPayEuro && currentEuro > facture && ownerEspoyr > 0) {
+                buttons += `<button class="btn" style="background:#d1fae5;color:#065f46;" onclick="showSurplusModal(${c.id}, '${ownerId}', ${facture})">💱 Surplus €→#</button>`;
+            }
+            
             // Option 5: Emprunter (TOUJOURS visible si capacité disponible)
             if (status.capaciteEmprunt > 0) {
                 buttons += `<button class="btn" style="background:#fef3c7;color:#b45309;" onclick="showDiffereModal(${c.id}, '${ownerId}', ${facture})">💰 Emprunter</button>`;
@@ -7092,7 +7170,11 @@ function initSystemeDe() {
             gameRef.child('negotiations').on('child_added', (snap) => {
                 const nego = snap.val();
                 if (nego && nego.ownerId === myPlayerId && nego.status === 'pending') {
-                    showNegotiationRequestModal(nego);
+                    if (nego.type === 'surplus') {
+                        showSurplusRequestModal(nego);
+                    } else {
+                        showNegotiationRequestModal(nego);
+                    }
                 }
             });
         }
@@ -7134,6 +7216,36 @@ function initSystemeDe() {
             } else {
                 sendSystemMessage(`❌ ${myName} refuse la proposition`);
             }
+        }
+        
+        function showSurplusRequestModal(nego) {
+            const myEspoyr = COMPTABILITE.caisseJoueurs[myPlayerId]?.espoyr || 0;
+            const canAccept = myEspoyr >= nego.surplus;
+            
+            showModal(`
+                <h3>💱 Demande de Surplus €→#</h3>
+                <p><strong>${nego.payerName}</strong> veut acheter des bons # chez toi</p>
+                
+                <div style="background: #d1fae5; padding: 15px; border-radius: 8px; margin: 15px 0; text-align: center;">
+                    <p style="margin: 0; font-size: 1.1rem;">
+                        Facture : <strong>${fmt(nego.facture)}€</strong>
+                    </p>
+                    <p style="margin: 8px 0 0 0; font-size: 1.3rem; color: #065f46;">
+                        + Surplus : <strong>${fmt(nego.surplus)}€ → ${fmt(nego.surplus)}#</strong>
+                    </p>
+                </div>
+                
+                <div style="background: #f3f4f6; padding: 10px; border-radius: 8px; margin: 10px 0;">
+                    <p style="margin: 0;">Tu reçois : <strong style="color: #2563eb;">${fmt(nego.surplus)}€ en plus</strong></p>
+                    <p style="margin: 4px 0 0 0;">Tu donnes : <strong style="color: #dc2626;">${fmt(nego.surplus)}# de tes bons</strong></p>
+                    <p style="margin: 4px 0 0 0;">Ton solde # actuel : <strong>${fmt(myEspoyr)}#</strong></p>
+                </div>
+                
+                ${!canAccept ? '<p style="color: #dc2626; font-weight: bold;">⚠️ Tu n\'as pas assez de # !</p>' : ''}
+            `, `
+                ${canAccept ? `<button class="btn btn-primary" onclick="respondToNegotiation('${nego.id}', true)">✅ Accepter (+${fmt(nego.surplus)}€ / -${fmt(nego.surplus)}#)</button>` : ''}
+                <button class="btn" style="background:#fee2e2;color:#dc2626;" onclick="respondToNegotiation('${nego.id}', false)">❌ Refuser</button>
+            `);
         }
         
         // ========== TRAVAIL COOPÉRATIF ==========
@@ -7191,6 +7303,197 @@ function initSystemeDe() {
             }, ecriture?.ledgerEntryId ? [ecriture.ledgerEntryId] : []);
             
             sendSystemMessage(`👷 ${myName} travaille chez ${ownerPlayer?.name} (${c.icon}) : +${fmt(gainHash)}# chacun !`);
+            
+            nextTurn();
+        }
+        
+        // ========== SURPLUS €→# ==========
+        function showSurplusModal(caseId, ownerId, facture) {
+            closeModal();
+            const c = CASES[caseId];
+            const players = Object.values(playersData);
+            const ownerPlayer = players.find(p => p.id === ownerId);
+            const myEuro = COMPTABILITE.caisseJoueurs[myPlayerId]?.euro || 0;
+            const ownerEspoyr = COMPTABILITE.caisseJoueurs[ownerId]?.espoyr || 0;
+            const maxSurplus = arrondir2(Math.min(myEuro - facture, ownerEspoyr));
+            
+            showModal(`
+                <h3>💱 Surplus €→#</h3>
+                <p>${c.icon} ${c.name} — Facture : ${fmt(facture)}€</p>
+                <p>Propriétaire : ${ownerPlayer?.avatar} ${ownerPlayer?.name}</p>
+                <hr style="margin: 10px 0;">
+                
+                <div style="background: #d1fae5; padding: 12px; border-radius: 8px; margin: 10px 0;">
+                    <p style="margin: 0; font-size: 0.9rem;">
+                        💡 Tu paies la facture <strong>+ un surplus en €</strong> et tu reçois l'équivalent en <strong>bons #</strong> du propriétaire.
+                    </p>
+                </div>
+                
+                <div style="background: #f3f4f6; padding: 10px; border-radius: 8px; margin: 10px 0;">
+                    <p style="margin: 0;">Ton solde : <strong>${fmt(myEuro)}€</strong></p>
+                    <p style="margin: 4px 0 0 0;"># disponibles chez ${ownerPlayer?.name} : <strong>${fmt(ownerEspoyr)}#</strong></p>
+                    <p style="margin: 4px 0 0 0;">Surplus max : <strong>${fmt(maxSurplus)}€</strong></p>
+                </div>
+                
+                <div style="text-align: center; margin: 15px 0;">
+                    <label style="font-size: 0.9rem; font-weight: bold; display: block; margin-bottom: 8px;">Montant du surplus :</label>
+                    <input type="number" id="surplusAmount" min="0.5" max="${maxSurplus}" step="0.5" value="${Math.min(arrondir2(maxSurplus / 2), maxSurplus)}" 
+                           oninput="updateSurplusDisplay(${facture}, ${myEuro}, ${ownerEspoyr})"
+                           style="width: 120px; text-align: center; font-size: 1.3rem; font-weight: bold; padding: 8px;">
+                    <p id="surplusInfo" style="margin: 8px 0 0 0; font-size: 0.9rem; color: #065f46;"></p>
+                </div>
+                
+                <div id="surplusSummary" style="background: #ecfdf5; padding: 12px; border-radius: 8px; text-align: center;">
+                </div>
+            `, `
+                <button class="btn btn-primary" id="surplusSubmitBtn" onclick="submitSurplus(${caseId}, '${ownerId}', ${facture})">💱 Payer avec surplus</button>
+                <button class="btn btn-secondary" onclick="showPayOrNegotiateModal(CASES[${caseId}], '${ownerId}', ${myEuro})">⬅️ Retour</button>
+            `);
+            
+            updateSurplusDisplay(facture, myEuro, ownerEspoyr);
+        }
+        
+        function updateSurplusDisplay(facture, myEuro, ownerEspoyr) {
+            const input = document.getElementById('surplusAmount');
+            let surplus = parseFloat(input.value) || 0;
+            // Arrondir à 0.5
+            surplus = Math.round(surplus * 2) / 2;
+            surplus = arrondir2(surplus);
+            
+            const maxSurplus = arrondir2(Math.min(myEuro - facture, ownerEspoyr));
+            const infoEl = document.getElementById('surplusInfo');
+            const summaryEl = document.getElementById('surplusSummary');
+            const submitBtn = document.getElementById('surplusSubmitBtn');
+            
+            const totalPaye = arrondir2(facture + surplus);
+            const valid = surplus >= 0.5 && surplus <= maxSurplus;
+            
+            if (valid) {
+                infoEl.textContent = `Tu reçois ${fmt(surplus)}# en retour`;
+                infoEl.style.color = '#065f46';
+                summaryEl.innerHTML = `
+                    <p style="margin: 0;"><strong>Total payé :</strong> ${fmt(totalPaye)}€</p>
+                    <p style="margin: 4px 0 0 0;">Facture : ${fmt(facture)}€ + Surplus : ${fmt(surplus)}€</p>
+                    <p style="margin: 4px 0 0 0; color: #059669; font-weight: bold;">→ Tu reçois ${fmt(surplus)}# en bons d'achat</p>
+                `;
+                submitBtn.disabled = false;
+            } else if (surplus > maxSurplus) {
+                infoEl.textContent = `⚠️ Maximum ${fmt(maxSurplus)}€`;
+                infoEl.style.color = '#dc2626';
+                summaryEl.innerHTML = '';
+                submitBtn.disabled = true;
+            } else {
+                infoEl.textContent = 'Minimum 0,50€';
+                infoEl.style.color = '#6b7280';
+                summaryEl.innerHTML = '';
+                submitBtn.disabled = true;
+            }
+        }
+        
+        async function submitSurplus(caseId, ownerId, facture) {
+            let surplus = parseFloat(document.getElementById('surplusAmount').value) || 0;
+            surplus = Math.round(surplus * 2) / 2; // Arrondi 0.5
+            surplus = arrondir2(surplus);
+            
+            if (surplus < 0.5) { alert('Montant minimum : 0,50€'); return; }
+            
+            const ownerEspoyr = COMPTABILITE.caisseJoueurs[ownerId]?.espoyr || 0;
+            const myEuro = COMPTABILITE.caisseJoueurs[myPlayerId]?.euro || 0;
+            if (surplus > ownerEspoyr) { alert(`Le propriétaire n'a que ${fmt(ownerEspoyr)}#`); return; }
+            if (facture + surplus > myEuro) { alert(`Tu n'as que ${fmt(myEuro)}€`); return; }
+            
+            const ownerPlayer = Object.values(playersData).find(p => p.id === ownerId);
+            const isBot = ownerPlayer?.isBot;
+            
+            if (isBot) {
+                // Robot propriétaire : auto-décision basée sur le profil
+                const profilId = ownerPlayer?.profilIA || 'PREDATEUR';
+                const accepte = ['COOPERATIF', 'SOLIDAIRE', 'EQUILIBRE'].includes(profilId);
+                
+                if (accepte) {
+                    await executerSurplus(caseId, ownerId, facture, surplus);
+                } else {
+                    closeModal();
+                    sendSystemMessage(`❌ ${ownerPlayer.name} (${PROFILS_IA[profilId]?.nom || profilId}) refuse l'échange €→#`);
+                    showPayOrNegotiateModal(CASES[caseId], ownerId, myEuro);
+                }
+            } else {
+                // Propriétaire humain : demande via Firebase
+                closeModal();
+                const surplusNegoId = 'surplus_' + Date.now();
+                await gameRef.child(`negotiations/${surplusNegoId}`).set({
+                    id: surplusNegoId,
+                    type: 'surplus',
+                    caseId,
+                    caseName: CASES[caseId].name,
+                    payerId: myPlayerId,
+                    payerName: myName,
+                    ownerId,
+                    ownerName: ownerPlayer?.name,
+                    facture,
+                    surplus,
+                    status: 'pending',
+                    createdAt: firebase.database.ServerValue.TIMESTAMP
+                });
+                
+                sendSystemMessage(`💱 ${myName} propose un surplus de ${fmt(surplus)}€→# à ${ownerPlayer?.name}`);
+                
+                showModal(`
+                    <h3>⏳ En attente...</h3>
+                    <p>Demande de surplus envoyée à ${ownerPlayer?.name}</p>
+                    <p>Facture : <strong>${fmt(facture)}€</strong> + Surplus : <strong>${fmt(surplus)}€→${fmt(surplus)}#</strong></p>
+                    <p style="color: #6b7280;">Le propriétaire doit accepter de rendre ${fmt(surplus)}# contre ${fmt(surplus)}€.</p>
+                `, ``);
+                
+                // Écouter la réponse
+                gameRef.child(`negotiations/${surplusNegoId}/status`).on('value', async (snap) => {
+                    const status = snap.val();
+                    if (status === 'accepted') {
+                        gameRef.child(`negotiations/${surplusNegoId}`).off();
+                        await executerSurplus(caseId, ownerId, facture, surplus);
+                    } else if (status === 'rejected') {
+                        gameRef.child(`negotiations/${surplusNegoId}`).off();
+                        closeModal();
+                        sendSystemMessage(`❌ ${ownerPlayer?.name} refuse l'échange surplus €→#`);
+                        showPayOrNegotiateModal(CASES[caseId], ownerId, COMPTABILITE.caisseJoueurs[myPlayerId]?.euro || 0);
+                    }
+                });
+            }
+        }
+        
+        async function executerSurplus(caseId, ownerId, facture, surplus) {
+            closeModal();
+            const c = CASES[caseId];
+            
+            // 1) Paiement normal de la facture
+            const resultFacture = await comptaPaiementFacture(myPlayerId, ownerId, caseId, facture, 0);
+            
+            // 2) Échange surplus €→#
+            const resultSurplus = await comptaSurplusEuroHash(myPlayerId, ownerId, caseId, surplus);
+            
+            // Firebase — mettre à jour les deux joueurs
+            const maCaisse = COMPTABILITE.caisseJoueurs[myPlayerId];
+            const ownerCaisse = COMPTABILITE.caisseJoueurs[ownerId];
+            
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}`).update({
+                euro: maCaisse.euro, espoyr: maCaisse.espoyr
+            });
+            await db.ref(`parties/${currentGameCode}/players/${ownerId}`).update({
+                euro: ownerCaisse.euro, espoyr: ownerCaisse.espoyr
+            });
+            await syncComptabiliteToFirebase();
+            
+            const ownerPlayer = Object.values(playersData).find(p => p.id === ownerId);
+            
+            // LOG EVENT
+            logEvent('PAY_SURPLUS', myPlayerId, {
+                caseId, actName: c.name, ownerId,
+                facture, surplus,
+                totalEuroPaye: facture + surplus,
+                hashRecu: surplus
+            }, [...(resultFacture.ledgerEntryIds || []), ...(resultSurplus.ledgerEntryIds || [])]);
+            
+            sendSystemMessage(`💱 ${myName} paie ${fmt(facture)}€ + surplus ${fmt(surplus)}€→${fmt(surplus)}# à ${ownerPlayer?.name}`);
             
             nextTurn();
         }
@@ -8122,15 +8425,47 @@ function initSystemeDe() {
                         }
                     }
                     
+                    // ========== SURPLUS €→# POUR BOTS ==========
+                    // Profils Coopératif/Solidaire/Équilibré tentent un surplus si conditions remplies
+                    const botProfilSurplus = ['COOPERATIF', 'SOLIDAIRE', 'EQUILIBRE'].includes(profil.id);
+                    if (botProfilSurplus) {
+                        const botCaisseApres = COMPTABILITE.caisseJoueurs[botId];
+                        const excessEuro = (botCaisseApres.euro || 0);
+                        const ownerPlayer = playersData[owner];
+                        const ownerEspoyr = COMPTABILITE.caisseJoueurs[owner]?.espoyr || 0;
+                        
+                        // Le propriétaire doit accepter : bot Coopératif/Solidaire/Équilibré ou humain (skip humain pour les bots)
+                        let ownerAccepte = false;
+                        if (ownerPlayer?.isBot) {
+                            const ownerProfilId = ownerPlayer?.profilIA || 'PREDATEUR';
+                            ownerAccepte = ['COOPERATIF', 'SOLIDAIRE', 'EQUILIBRE'].includes(ownerProfilId);
+                        }
+                        // Pas de surplus bot→humain (nécessiterait négociation async)
+                        
+                        if (ownerAccepte && excessEuro >= 1 && ownerEspoyr >= 0.5) {
+                            // Montant: Coopératif/Solidaire = 50% de l'excès, Équilibré = 25%
+                            const pctSurplus = profil.id === 'EQUILIBRE' ? 0.25 : 0.50;
+                            let surplusBot = Math.round(Math.min(excessEuro * pctSurplus, ownerEspoyr) * 2) / 2; // arrondi 0.5
+                            surplusBot = arrondir2(surplusBot);
+                            
+                            if (surplusBot >= 0.5) {
+                                await comptaSurplusEuroHash(botId, owner, position, surplusBot);
+                                sendSystemMessage(`💱 🤖 ${bot.name} surplus ${fmt(surplusBot)}€→${fmt(surplusBot)}# avec ${ownerPlayer.name}`);
+                            }
+                        }
+                    }
+                    
                     const botCaisse = COMPTABILITE.caisseJoueurs[botId];
                     
                     await db.ref(`parties/${currentGameCode}/players/${botId}`).update({
-                        euro: botCaisse.euro, emprunt: botCaisse.emprunt || 0
+                        euro: botCaisse.euro, espoyr: botCaisse.espoyr || 0, emprunt: botCaisse.emprunt || 0
                     });
                     if (owner !== botId) {
-                        await db.ref(`parties/${currentGameCode}/players/${owner}/euro`).set(
-                            (playersData[owner]?.euro || 0) + facture
-                        );
+                        const ownerCaisseSync = COMPTABILITE.caisseJoueurs[owner];
+                        await db.ref(`parties/${currentGameCode}/players/${owner}`).update({
+                            euro: ownerCaisseSync?.euro ?? ((playersData[owner]?.euro || 0) + facture),
+                            espoyr: ownerCaisseSync?.espoyr ?? (playersData[owner]?.espoyr || 0)
+                        });
                     }
                     await syncComptabiliteToFirebase();
                 }
