@@ -450,7 +450,7 @@
                     <div style="background: #f8fafc; padding: 8px; border-radius: 8px; margin: 10px 0;">
                         <p style="margin: 0 0 6px 0; font-size: 0.75rem; color: #64748b; font-weight: bold;">⚡ ACTIONS</p>
                         <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-                            <button class="btn" style="background: #dcfce7; color: #059669; flex: 1; font-size: 0.75rem; padding: 6px;" onclick="showQuickAdhererAAA()"><svg style="display:inline-block;width:1.1em;height:1.1em;vertical-align:middle;" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="#FDDB31" stroke="#C4A800" stroke-width="3"/><text x="50" y="58" text-anchor="middle" font-size="48" font-weight="bold" fill="#000" font-family="Arial">#</text><text x="50" y="82" text-anchor="middle" font-size="18" font-weight="bold" fill="#000" font-family="Arial">AAA</text></svg> Adhérer AAA</button>
+                            <button class="btn" style="background: #dcfce7; color: #059669; flex: 1; font-size: 0.75rem; padding: 6px;" onclick="showQuickAdhererAAA()"><svg style="display:inline-block;width:1.1em;height:1.1em;vertical-align:middle;" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="#FDDB31" stroke="#C4A800" stroke-width="3"/><text x="50" y="58" text-anchor="middle" font-size="48" font-weight="bold" fill="#000" font-family="Arial">#</text><text x="50" y="82" text-anchor="middle" font-size="18" font-weight="bold" fill="#000" font-family="Arial">AAA</text></svg> Devenir membre AAA</button>
                             <button class="btn" style="background: #dbeafe; color: #2563eb; flex: 1; font-size: 0.75rem; padding: 6px;" onclick="showQuickEmprunter()">💶 Emprunter</button>
                             <button id="equiperBtn" class="btn" style="background: #fef3c7; color: #92400e; flex: 1; font-size: 0.75rem; padding: 6px;" onclick="showQuickEquiper()">📚 Formation</button>
                         </div>
@@ -12076,13 +12076,12 @@ function initSystemeDe() {
                 
                 <hr style="margin: 10px 0;">
                 ${!isMembre ? `
-                    <p>❌ Tu n'es pas membre.</p>
-                    <p style="font-size:0.9rem;">Adhère pour :</p>
-                    <ul style="font-size:0.85rem; margin:5px 0;">
-                        <li>Cotiser des # et recevoir des bonus</li>
-                        <li>Emprunter des # sans intérêts</li>
-                        <li>Bénéficier de l'aide en cas de faillite</li>
-                    </ul>
+                    <p>❌ Tu n'es pas encore membre.</p>
+                    <div style="background:#fffbeb; padding:10px; border-radius:8px; margin:8px 0; font-size:0.85rem; line-height:1.4; color:#78350f;">
+                        <p style="margin:0; font-style:italic;">"Tout humain, par le simple fait de son existence, crée une même masse de valeur d'échange."</p>
+                        <p style="margin:6px 0 0 0;">Les # financent ce que la communauté considère comme utile : eau, nourriture, soins, école, justice, culture…</p>
+                        <p style="margin:4px 0 0 0; font-size:0.8rem;">🌐 <a href="https://espoyr.com" target="_blank" style="color:#2563eb;">espoyr.com</a></p>
+                    </div>
                 ` : `
                     <p>✅ <strong>Tu es membre</strong></p>
                     <p>Ton solde # : <strong>${fmt(myEspoyr)}#</strong></p>
@@ -12096,7 +12095,7 @@ function initSystemeDe() {
                     </div>
                 `}
             `, `
-                ${!isMembre ? `<button class="btn btn-primary" onclick="joinAAA()">${LOGO_AAA} Adhérer</button>` : `
+                ${!isMembre ? `<button class="btn btn-primary" onclick="joinAAA()">${LOGO_AAA} Devenir membre</button>` : `
                     <button class="btn btn-primary" onclick="contributeAAA()">⬆️ Cotiser</button>
                     <button class="btn btn-secondary" onclick="creditAAA()">🗳️ Demander crédit</button>
                 `}
@@ -13059,33 +13058,46 @@ function initSystemeDe() {
         
         // ========== ACTIONS RAPIDES ==========
         
-        // Action rapide : Adhérer au Pot AAA
+        // Action rapide : Devenir membre AAA
         function showQuickAdhererAAA() {
             const isMembre = COMPTABILITE.potAAA.membres?.includes(myPlayerId);
             
             if (isMembre) {
                 showModal(`
-                    <h3>${LOGO_AAA} Déjà membre du Pot AAA</h3>
-                    <p>Tu es déjà membre du Pot AAA !</p>
-                    <p>Avantages actifs :</p>
+                    <h3>${LOGO_AAA} Tu es membre AAA</h3>
+                    <p>Tes avantages actifs :</p>
                     <ul style="font-size: 0.9rem;">
                         <li>+50# créés dans le Pot à chaque lancer de dé</li>
-                        <li>Emprunter en # sans intérêts</li>
+                        <li>Demander un crédit en # (0%, validé par les membres)</li>
+                        <li>Complément de salaire en # si érosion (Phase 2+)</li>
                         <li>Aide en cas de faillite</li>
                     </ul>
                 `, `<button class="btn btn-primary" onclick="closeModal()">OK</button>`);
             } else {
                 showModal(`
-                    <h3>${LOGO_AAA} Adhérer au Pot AAA</h3>
-                    <p>Devenir membre te donne accès à :</p>
-                    <ul style="font-size: 0.9rem;">
-                        <li>✨ +50# créés dans le Pot à chaque lancer de dé</li>
-                        <li>💵 Emprunter en # sans intérêts</li>
-                        <li>🛟 Aide en cas de faillite (dette annulée + 250#)</li>
-                    </ul>
-                    <p style="margin-top: 10px; color: #059669; font-weight: bold;">Adhésion gratuite !</p>
+                    <h3>${LOGO_AAA} Devenir membre AAA</h3>
+                    <div style="background:#fffbeb; padding:12px; border-radius:10px; margin:10px 0; font-size:0.88rem; line-height:1.5; color:#78350f;">
+                        <p style="margin:0;">Les membres AAA sont des citoyens qui pensent que la création de valeur d'échange doit répondre à une <strong>loi universelle</strong> :</p>
+                        <p style="margin:8px 0; font-style:italic; font-weight:bold; color:#92400e;">
+                            "Tout humain, par le simple fait de son existence, crée une même masse de valeur d'échange."
+                        </p>
+                        <p style="margin:0;">Ici, ces <strong>#</strong> ne peuvent servir qu'à financer les <strong>actions AAA</strong> : tout ce que chaque communauté considère comme utile à la collectivité pour satisfaire les besoins de base les plus élevés — eau, nourriture, sécurité, soins, école, justice, information, culture…</p>
+                        <p style="margin:8px 0 0 0; font-size:0.8rem;">
+                            🌐 En savoir plus : <a href="https://espoyr.com" target="_blank" style="color:#2563eb;">espoyr.com</a>
+                        </p>
+                    </div>
+                    <div style="background:#f0fdf4; padding:10px; border-radius:8px; margin-top:10px;">
+                        <p style="margin:0 0 6px 0; font-weight:bold; color:#059669;">✨ En pratique dans le jeu :</p>
+                        <ul style="font-size:0.85rem; margin:0; padding-left:20px;">
+                            <li>+50# créés dans le Pot AAA à chaque lancer de dé</li>
+                            <li>Demander un crédit en # (0%, validé par les membres)</li>
+                            <li>Complément de salaire en # si érosion (Phase 2+)</li>
+                            <li>Aide en cas de faillite (dette annulée + prêt de relance)</li>
+                        </ul>
+                        <p style="margin:8px 0 0 0; color:#059669; font-weight:bold;">Adhésion gratuite et libre !</p>
+                    </div>
                 `, `
-                    <button class="btn btn-primary" onclick="adhererPotAAA()">${LOGO_AAA} Adhérer maintenant</button>
+                    <button class="btn btn-primary" onclick="adhererPotAAA()">${LOGO_AAA} Devenir membre</button>
                     <button class="btn btn-secondary" onclick="closeModal()">Plus tard</button>
                 `);
             }
@@ -13101,8 +13113,8 @@ function initSystemeDe() {
                 
                 logEvent('JOIN_AAA', myPlayerId, {});
                 
-                sendSystemMessage(`${LOGO_AAA} ${myName} a rejoint le Pot AAA !`);
-                showModal(`<h3>🎉 Bienvenue !</h3><p>Tu es maintenant membre du Pot AAA.</p>`,
+                sendSystemMessage(`${LOGO_AAA} ${myName} est devenu membre AAA !`);
+                showModal(`<h3>🎉 Bienvenue !</h3><p>Tu es maintenant membre AAA. À chaque lancer de dé, <strong>+50#</strong> seront créés dans le Pot !</p>`,
                     `<button class="btn btn-primary" onclick="closeModal()">Super !</button>`);
             }
         }
@@ -13178,9 +13190,9 @@ function initSystemeDe() {
                 </div>
                 ` : `
                 <div style="background: #f0fdf4; padding: 10px; border-radius: 8px; border: 1px dashed #059669;">
-                    <p style="margin: 0; color: #059669;">💡 <strong>Astuce :</strong> Adhère au Pot AAA pour emprunter en # <strong>sans intérêts</strong> !</p>
+                    <p style="margin: 0; color: #059669;">💡 <strong>Astuce :</strong> Deviens membre AAA pour emprunter en # <strong>sans intérêts</strong> !</p>
                     <button class="btn" style="background: #dcfce7; color: #059669; width: 100%; margin-top: 8px;" onclick="closeModal(); showQuickAdhererAAA();">
-                        ${LOGO_AAA} Adhérer maintenant
+                        ${LOGO_AAA} Devenir membre
                     </button>
                 </div>
                 `}
