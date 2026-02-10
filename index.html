@@ -391,6 +391,7 @@
                     <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                         <button class="btn" style="background: #dbeafe; color: #2563eb; flex: 1;" onclick="showComptaModal()">📒 Compta</button>
                         <button class="btn" style="background: #fef3c7; color: #92400e; flex: 1;" onclick="showBilanModal()">📊 Bilan</button>
+                        <button class="btn" style="background: #dcfce7; color: #065f46; flex: 1;" onclick="showReleveCompteModal()">📋 Relevé</button>
                         <button class="btn" style="background: #f3e8ff; color: #7c3aed; flex: 1;" onclick="showSaveAnalysisModal()">📈 Audit</button>
                     </div>
                     <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;">
@@ -783,6 +784,21 @@
             INVESTISSEUR: { id: 'INVESTISSEUR', nom: '📈 Investisseur', acheteToujours: true, equipeToujours: true },
             SOLIDAIRE: { id: 'SOLIDAIRE', nom: '💚 Solidaire', membreAAA: true, equipeParfois: true }
         };
+        
+        // ========== TRAVAUX COOPÉRATIFS (Actions Contributives) ==========
+        const TRAVAUX_COOP = [
+            { id: 1, nom: '🌱 Participer au jardin communautaire', gain: 190 },
+            { id: 2, nom: '🏃 Organiser des activités physiques', gain: 195 },
+            { id: 3, nom: '🛒 Travailler dans un magasin solidaire', gain: 195 },
+            { id: 4, nom: '🍲 Préparer des repas pour enfants', gain: 195 },
+            { id: 5, nom: '🧘 Travail du bien-être', gain: 200 },
+            { id: 6, nom: '📊 Gérer la comptabilité d\'une association', gain: 200 },
+            { id: 7, nom: '📚 Aider à l\'école', gain: 205 },
+            { id: 8, nom: '🛍️ Faire les courses pour personnes âgées', gain: 205 },
+            { id: 9, nom: '👶 Garder un enfant malade', gain: 215 },
+            { id: 10, nom: '💬 Tenir compagnie à une personne isolée', gain: 220 },
+            { id: 11, nom: '🎉 Aider à l\'organisation d\'événements', gain: 220 }
+        ];
         
         const PLAYER_COLORS = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
         
@@ -5138,6 +5154,78 @@ async function rollDice() {
     if (btnLancer) btnLancer.disabled = true;
 
     try {
+        // ── SKIP TOUR : Action Contributive → passe son tour ──
+        const skipSnap = await gameRef.child(`skipTurns/${joueurActuel.id}`).once('value');
+        const skipCount = skipSnap.val() || 0;
+        if (skipCount > 0) {
+            // Intérêts découvert même quand on passe
+            const caisseSk = COMPTABILITE.caisseJoueurs[joueurActuel.id] || {};
+            if ((caisseSk.euro || 0) < 0) {
+                const decouvert = Math.abs(caisseSk.euro);
+                const interetsDec = arrondir2(decouvert * 0.03);
+                caisseSk.euro -= interetsDec;
+                await db.ref(`parties/${currentGameCode}/players/${joueurActuel.id}/euro`).set(caisseSk.euro);
+                await syncComptabiliteToFirebase();
+                sendSystemMessage(`📉 ${joueurActuel.name} : intérêts découvert 3% = -${fmt(interetsDec)}€ (solde: ${fmt(caisseSk.euro)}€)`);
+            }
+            // Décrémenter et passer
+            await gameRef.child(`skipTurns/${joueurActuel.id}`).set(skipCount - 1);
+            sendSystemMessage(`⏭️ ${joueurActuel.name} passe son tour (action contributive)`);
+            showModal(`
+                <h3>⏭️ Tour passé</h3>
+                <p><strong>${joueurActuel.avatar} ${joueurActuel.name}</strong> passe ce tour.</p>
+                <p style="font-size:0.9rem;color:#6b7280;">Conséquence de l'action contributive effectuée précédemment.</p>
+                ${(caisseSk.euro || 0) < 0 ? `<p style="color:#dc2626;font-size:0.9rem;">📉 Intérêts découvert 3% appliqués</p>` : ''}
+            `, `<button class="btn btn-primary" onclick="closeModal(); nextTurn();">OK</button>`);
+            if (btnLancer) btnLancer.disabled = false;
+            return;
+        }
+
+        // ── INTÉRÊTS DÉCOUVERT 3% avant le lancé ──
+        const caisseAvantLancer = COMPTABILITE.caisseJoueurs[joueurActuel.id] || {};
+        if ((caisseAvantLancer.euro || 0) < 0) {
+            const decouvertAvant = Math.abs(caisseAvantLancer.euro);
+            const interetsDecouvert = arrondir2(decouvertAvant * 0.03);
+            caisseAvantLancer.euro -= interetsDecouvert;
+            
+            // Compteur de difficultés consécutives (déclencheur social Phase 2)
+            const diffSnap = await gameRef.child(`difficulteConsecutive/${joueurActuel.id}`).once('value');
+            const diffCount = (diffSnap.val() || 0) + 1;
+            await gameRef.child(`difficulteConsecutive/${joueurActuel.id}`).set(diffCount);
+            
+            await db.ref(`parties/${currentGameCode}/players/${joueurActuel.id}/euro`).set(caisseAvantLancer.euro);
+            await syncComptabiliteToFirebase();
+            
+            sendSystemMessage(`📉 ${joueurActuel.name} : intérêts découvert 3% = -${fmt(interetsDecouvert)}€ (solde: ${fmt(caisseAvantLancer.euro)}€)`);
+            
+            // Déclencheur social : 2x de suite en difficulté → Phase 2
+            const phase = gameState?.phase || 1;
+            if (phase === 1 && diffCount >= 2) {
+                await gameRef.child('state/phase').set(2);
+                await gameRef.child(`difficulteConsecutive/${joueurActuel.id}`).set(0);
+                showModal(`
+                    <h3>🤝 Transition vers la Phase 2</h3>
+                    <div style="background:#dbeafe;padding:12px;border-radius:8px;">
+                        <p style="margin:0;font-style:italic;color:#1e40af;line-height:1.5;">
+                            "Une société responsable ne laisse pas ses semblables dans l'exclusion. 
+                            Il y a tant d'actions contributives qui sont nobles et méritent d'être remplies, 
+                            même s'il n'y a pas de rendement économique mesurable."
+                        </p>
+                    </div>
+                    <p style="margin-top:10px;text-align:center;">
+                        <strong>Les Actions Contributives sont maintenant disponibles !</strong>
+                    </p>
+                `, `<button class="btn btn-primary" onclick="closeModal()">🤝 Compris</button>`);
+                sendSystemMessage(`🤝 PHASE 2 déclenchée par la solidarité ! Les actions contributives sont disponibles.`);
+                // Attendre que le modal soit fermé avant de continuer
+                if (btnLancer) btnLancer.disabled = false;
+                return; // Le joueur relancera après avoir fermé le modal
+            }
+        } else {
+            // Solde positif → reset compteur difficultés
+            await gameRef.child(`difficulteConsecutive/${joueurActuel.id}`).set(0);
+        }
+
             // Choix du sens AVANT le lancer
         if (!joueurASens(joueurActuel.id)) {
             await choisirSens(joueurActuel, null);
@@ -7174,7 +7262,7 @@ function initSystemeDe() {
                 <p style="font-size: 0.9rem; color: #059669; margin-top: 10px;">
                     Tu repars avec une nouvelle chance. Utilise-la bien !
                 </p>
-            `, `<button class="btn btn-primary" onclick="closeModal()">Merci AAA ! 💚</button>`);
+            `, `<button class="btn btn-primary" onclick="closeModal(); nextTurn();">Merci AAA ! 💚</button>`);
         }
         
         // Déclarer faillite totale (non-membre AAA)
@@ -7224,7 +7312,7 @@ function initSystemeDe() {
                 <p style="font-size: 0.9rem; color: #dc2626; margin-top: 10px;">
                     Tu repars de zéro. Rejoins le Pot AAA pour te protéger à l'avenir !
                 </p>
-            `, `<button class="btn btn-primary" onclick="closeModal()">Recommencer 💪</button>`);
+            `, `<button class="btn btn-primary" onclick="closeModal(); nextTurn();">Recommencer 💪</button>`);
         }
         
         // Vérifier automatiquement la faillite quand on ne peut pas payer
@@ -7315,8 +7403,14 @@ function initSystemeDe() {
                 buttons += `<button class="btn" style="background:#fef3c7;color:#92400e;" onclick="showNegoModal(${c.id}, '${ownerId}', ${facture})">🤝 Paiement mixte</button>`;
             }
             
-            // Option 4: Travail coopératif
-            buttons += `<button class="btn" style="background:#dbeafe;color:#1d4ed8;" onclick="showWorkModal(${c.id}, '${ownerId}', ${facture})">👷 Travailler</button>`;
+            // Option 4: Action Contributive (Phase 2+ uniquement, max 2/tour)
+            const actionContribCeTour = playersData[myPlayerId]?.actionContribCeTour || 0;
+            const potAAADispo = COMPTABILITE.potAAA?.solde || 0;
+            if (phase >= 2 && actionContribCeTour < 2 && potAAADispo >= 190) {
+                buttons += `<button class="btn" style="background:#dbeafe;color:#1d4ed8;" onclick="showActionContributiveModal(${c.id}, '${ownerId}', ${facture})">🤝 Action Contributive</button>`;
+            } else if (phase >= 2 && actionContribCeTour < 2 && potAAADispo < 190) {
+                buttons += `<button class="btn" style="background:#dbeafe;color:#1d4ed8;" onclick="showVoteAugmentationPotAAA(${c.id}, '${ownerId}', ${facture})">🤝 Action Contributive (Pot AAA insuffisant)</button>`;
+            }
             
             // Option 4b: Surplus €→# (si le payeur a plus que la facture ET le propriétaire a des #)
             const ownerEspoyr = COMPTABILITE.caisseJoueurs[ownerId]?.espoyr || 0;
@@ -7329,15 +7423,25 @@ function initSystemeDe() {
                 buttons += `<button class="btn" style="background:#fef3c7;color:#b45309;" onclick="showDiffereModal(${c.id}, '${ownerId}', ${facture})">💰 Emprunter</button>`;
             }
             
+            // Option 5b: Vendre une activité aux enchères
+            const mesActivites = Object.entries(COMPTABILITE.caisseActivites || {})
+                .filter(([id, a]) => a.proprietaireId === myPlayerId);
+            if (mesActivites.length > 1) {
+                buttons += `<button class="btn" style="background:#fce7f3;color:#9d174d;" onclick="showVenteActivitePourPayer(${c.id}, '${ownerId}', ${facture})">🔨 Vendre aux enchères</button>`;
+            }
+            
             // Option 6: Reporter le paiement (si ne peut pas payer du tout)
             if (!canPayEuro && !canPayHash) {
                 buttons += `<button class="btn" style="background:#e0e7ff;color:#3730a3;" onclick="showReportModal(${c.id}, '${ownerId}', ${facture})">📜 Reporter le paiement</button>`;
             }
             
-            // Option 7: Faillite
-            if (cannotPayAtAll) {
-                buttons += `<button class="btn" style="background:#fef9c3;color:#854d0e;" onclick="closeModal(); showFailliteModal();">⚠️ Faillite</button>`;
+            // Option 7: Découvert (filet ultime — payer en négatif)
+            if (!canPayEuro) {
+                buttons += `<button class="btn" style="background:#fee2e2;color:#991b1b;" onclick="payerEnDecouvert(${c.id}, '${ownerId}', ${facture})">⚠️ Accepter le découvert</button>`;
             }
+            
+            // Option 8: Abandonner (volontaire)
+            buttons += `<button class="btn" style="background:#fef9c3;color:#854d0e;font-size:0.8rem;margin-top:6px;" onclick="closeModal(); showAbandonModal();">🚪 Abandonner la partie</button>`;
             
             showModal(content, buttons);
         }
@@ -7530,7 +7634,7 @@ function initSystemeDe() {
                             À rembourser au prochain passage Ligne 1
                         </p>
                     </div>
-                `, `<button class="btn btn-primary" onclick="closeModal()">✅ OK</button>`);
+                `, `<button class="btn btn-primary" onclick="closeModal(); nextTurn();">✅ OK</button>`);
             } else {
                 // Refusé — retour au modal de paiement
                 const myEuro = COMPTABILITE.caisseJoueurs[myPlayerId]?.euro || 0;
@@ -8269,61 +8373,328 @@ function initSystemeDe() {
         }
         
         // ========== TRAVAIL COOPÉRATIF ==========
-        function showWorkModal(caseId, ownerId, facture) {
+        // ========== ACTION CONTRIBUTIVE (ex-Travail Coopératif) ==========
+        function showActionContributiveModal(caseId, ownerId, facture) {
             closeModal();
             const c = CASES[caseId];
-            const players = Object.values(playersData);
-            const ownerPlayer = players.find(p => p.id === ownerId);
-            const gainHash = Math.ceil(facture / 2);
+            const ownerPlayer = Object.values(playersData).find(p => p.id === ownerId);
+            const actionContribCeTour = playersData[myPlayerId]?.actionContribCeTour || 0;
+            const potDispo = COMPTABILITE.potAAA?.solde || 0;
+            
+            // Phase 2+ : condition d'accepter le paiement mixte
+            let conditionHtml = '';
+            const phase = gameState?.phase || 1;
+            if (phase === 2) {
+                conditionHtml = `
+                    <div style="background:#fef3c7;padding:10px;border-radius:8px;margin:10px 0;">
+                        <p style="margin:0;font-weight:bold;color:#92400e;">⚠️ Condition</p>
+                        <p style="margin:4px 0 0 0;font-size:0.9rem;">En acceptant, toutes tes activités accepteront le paiement mixte €/#. Le logo # sera affiché.</p>
+                    </div>`;
+            }
+            
+            let listeHtml = '<div style="max-height:300px;overflow-y:auto;">';
+            TRAVAUX_COOP.forEach(t => {
+                const dispo = potDispo >= t.gain;
+                listeHtml += `
+                    <button class="btn" style="width:100%;margin:3px 0;text-align:left;padding:8px 12px;
+                        background:${dispo ? '#f0fdf4' : '#f3f4f6'};color:${dispo ? '#065f46' : '#9ca3af'};
+                        font-size:0.85rem;border:1px solid ${dispo ? '#86efac' : '#e5e7eb'};"
+                        ${dispo ? `onclick="executerActionContributive(${caseId}, '${ownerId}', ${facture}, ${t.id}, ${t.gain})"` : 'disabled'}
+                    >
+                        ${t.nom} — <strong>${t.gain}#</strong>${!dispo ? ' (pot insuffisant)' : ''}
+                    </button>`;
+            });
+            listeHtml += '</div>';
             
             showModal(`
-                <h3>👷 Travail Coopératif</h3>
-                <p>Tu proposes de travailler chez ${ownerPlayer?.avatar} ${ownerPlayer?.name}</p>
-                <p>${c.icon} ${c.name}</p>
-                <hr style="margin: 10px 0;">
-                <p>En échange :</p>
-                <ul style="padding-left: 20px; margin: 10px 0;">
-                    <li>Tu gagnes <strong style="color: #059669;">${fmt(gainHash)}#</strong></li>
-                    <li>Le propriétaire gagne <strong style="color: #059669;">${fmt(gainHash)}#</strong></li>
-                    <li>Pas de facture à payer</li>
-                </ul>
+                <h3>🤝 Action Contributive</h3>
+                <p>Facture : <strong>${fmt(facture)}€</strong> → ${ownerPlayer?.avatar} ${ownerPlayer?.name}</p>
+                <p style="font-size:0.85rem;color:#6b7280;">Tu recevras des # du Pot AAA pour payer la facture en #.</p>
+                <p style="font-size:0.85rem;color:#dc2626;">⏭️ Tu passeras ton prochain tour. (${actionContribCeTour + 1}/2 ce tour)</p>
+                ${conditionHtml}
+                <hr style="margin:10px 0;">
+                <p style="font-weight:bold;">Choisis une action :</p>
+                ${listeHtml}
             `, `
-                <button class="btn btn-primary" onclick="doWorkCoop(${caseId}, '${ownerId}', ${gainHash})">👷 Travailler</button>
-                <button class="btn btn-secondary" onclick="showPayOrNegotiateModal(CASES[${caseId}], '${ownerId}', COMPTABILITE.caisseJoueurs['${myPlayerId}']?.euro || 0)">Retour</button>
+                <button class="btn btn-secondary" onclick="showPayOrNegotiateModal(CASES[${caseId}], '${ownerId}', COMPTABILITE.caisseJoueurs['${myPlayerId}']?.euro || 0)">⬅️ Retour</button>
             `);
         }
         
-        async function doWorkCoop(caseId, ownerId, gainHash) {
+        async function executerActionContributive(caseId, ownerId, facture, travailId, gainHash) {
             closeModal();
             const c = CASES[caseId];
+            const ownerPlayer = Object.values(playersData).find(p => p.id === ownerId);
+            const phase = gameState?.phase || 1;
             
-            // Comptabilité
-            const ecriture = await comptaTravailCoop(myPlayerId, ownerId, caseId, gainHash);
-            
-            // Firebase
+            // 1. Recevoir les # du Pot AAA
+            initCaisseJoueur(myPlayerId);
             const maCaisse = COMPTABILITE.caisseJoueurs[myPlayerId];
-            const ownerCaisse = COMPTABILITE.caisseJoueurs[ownerId];
+            maCaisse.espoyr += gainHash;
+            COMPTABILITE.potAAA.solde -= gainHash;
+            COMPTABILITE.potAAA.circulationHash += gainHash;
             
+            const travail = TRAVAUX_COOP.find(t => t.id === travailId);
+            enregistrerEcriture({
+                joueurId: myPlayerId, libelle: `Action contributive: ${travail?.nom || 'Travail'}`,
+                compteDebit: 501, compteCredit: 468, montantEspoyr: gainHash, activiteId: caseId
+            });
+            
+            sendSystemMessage(`🤝 ${myName} effectue "${travail?.nom}" → +${fmt(gainHash)}#`);
+            
+            // 2. Payer la facture en # au propriétaire (pas de TVA sur #)
+            const montantPaye = Math.min(gainHash, facture);
+            initCaisseJoueur(ownerId);
+            maCaisse.espoyr -= montantPaye;
+            COMPTABILITE.caisseJoueurs[ownerId].espoyr += montantPaye;
+            
+            enregistrerEcriture({
+                joueurId: myPlayerId, libelle: `Paiement # ${c.name}`,
+                compteDebit: 468, compteCredit: 501, montantEspoyr: montantPaye, activiteId: caseId
+            });
+            enregistrerEcriture({
+                joueurId: ownerId, libelle: `Recette # ${c.name}`,
+                compteDebit: 501, compteCredit: 468, montantEspoyr: montantPaye, activiteId: caseId
+            });
+            
+            sendSystemMessage(`💚 ${myName} paie ${fmt(montantPaye)}# à ${ownerPlayer?.name} (${c.icon})`);
+            
+            // 3. Si pas assez pour couvrir toute la facture, le reste va en découvert €
+            let resteEnEuro = 0;
+            if (gainHash < facture) {
+                resteEnEuro = facture - gainHash;
+                maCaisse.euro -= resteEnEuro;
+                COMPTABILITE.caisseJoueurs[ownerId].euro += Math.round(resteEnEuro / 1.21 * 100) / 100; // HT
+                const tvaReste = resteEnEuro - Math.round(resteEnEuro / 1.21 * 100) / 100;
+                COMPTABILITE.etat.tresor += tvaReste;
+                sendSystemMessage(`⚠️ Complément ${fmt(resteEnEuro)}€ (découvert)`);
+            }
+            
+            // 4. Phase 2 : accepter paiement mixte sur toutes ses activités + logo #
+            if (phase === 2) {
+                const mesActs = Object.entries(COMPTABILITE.caisseActivites || {})
+                    .filter(([id, a]) => a.proprietaireId === myPlayerId);
+                for (const [actId, act] of mesActs) {
+                    await gameRef.child(`activites_hash/${actId}`).set(true);
+                    CASES[actId].hash = true;
+                }
+                sendSystemMessage(`💚 ${myName} accepte le paiement mixte sur toutes ses activités`);
+            }
+            
+            // 5. Skip tour suivant
+            const skipSnap = await gameRef.child(`skipTurns/${myPlayerId}`).once('value');
+            const currentSkip = skipSnap.val() || 0;
+            await gameRef.child(`skipTurns/${myPlayerId}`).set(currentSkip + 1);
+            
+            // 6. Compteur d'actions ce tour
+            const newCount = (playersData[myPlayerId]?.actionContribCeTour || 0) + 1;
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/actionContribCeTour`).set(newCount);
+            
+            // 7. Firebase sync
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/euro`).set(maCaisse.euro);
             await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/espoyr`).set(maCaisse.espoyr);
-            await db.ref(`parties/${currentGameCode}/players/${ownerId}/espoyr`).set(ownerCaisse.espoyr);
+            await db.ref(`parties/${currentGameCode}/players/${ownerId}/espoyr`).set(COMPTABILITE.caisseJoueurs[ownerId].espoyr);
+            if (resteEnEuro > 0) {
+                await db.ref(`parties/${currentGameCode}/players/${ownerId}/euro`).set(COMPTABILITE.caisseJoueurs[ownerId].euro);
+            }
             await syncComptabiliteToFirebase();
             
-            const players = Object.values(playersData);
-            const ownerPlayer = players.find(p => p.id === ownerId);
+            // 8. LOG EVENT
+            logEvent('ACTION_CONTRIBUTIVE', myPlayerId, {
+                caseId, travailId, gainHash, facture, montantPaye, resteEnEuro,
+                ownerId, ownerName: ownerPlayer?.name, skipTurns: currentSkip + 1
+            });
             
-            // LOG EVENT: COOP_WORK
-            logEvent('COOP_WORK', myPlayerId, {
-                caseId,
-                caseName: c.name,
-                ownerId,
-                ownerName: ownerPlayer?.name,
-                gainHash,
-                workerEspoyr: maCaisse.espoyr,
-                ownerEspoyr: ownerCaisse.espoyr
-            }, ecriture?.ledgerEntryId ? [ecriture.ledgerEntryId] : []);
+            // 9. Modal récap
+            showModal(`
+                <h3>✅ Action Contributive effectuée !</h3>
+                <p>🤝 ${travail?.nom}</p>
+                <div style="background:#dcfce7;padding:10px;border-radius:8px;margin:8px 0;">
+                    <p style="margin:0;">Reçu : <strong>+${fmt(gainHash)}#</strong> du Pot AAA</p>
+                    <p style="margin:4px 0 0 0;">Payé : <strong>${fmt(montantPaye)}#</strong> à ${ownerPlayer?.avatar} ${ownerPlayer?.name}</p>
+                    ${resteEnEuro > 0 ? `<p style="margin:4px 0 0 0;color:#dc2626;">Complément découvert : -${fmt(resteEnEuro)}€</p>` : ''}
+                </div>
+                <div style="background:#dbeafe;padding:10px;border-radius:8px;margin:8px 0;">
+                    <p style="margin:0;">⏭️ Tu passeras ton prochain tour.</p>
+                </div>
+                <p style="font-size:0.85rem;color:#6b7280;">Solde: ${fmt(maCaisse.euro)}€ / ${fmt(maCaisse.espoyr)}#</p>
+            `, `<button class="btn btn-primary" onclick="closeModal(); nextTurn();">OK</button>`);
+        }
+        
+        // ========== DÉCOUVERT (filet ultime) ==========
+        async function payerEnDecouvert(caseId, ownerId, facture) {
+            closeModal();
+            const c = CASES[caseId];
+            const ownerPlayer = Object.values(playersData).find(p => p.id === ownerId);
             
-            sendSystemMessage(`👷 ${myName} travaille chez ${ownerPlayer?.name} (${c.icon}) : +${fmt(gainHash)}# chacun !`);
+            showModal(`
+                <h3>⚠️ Accepter le découvert</h3>
+                <p>Facture : <strong>${fmt(facture)}€</strong> → ${ownerPlayer?.avatar} ${ownerPlayer?.name}</p>
+                <div style="background:#fee2e2;padding:12px;border-radius:8px;margin:10px 0;">
+                    <p style="margin:0;font-weight:bold;color:#991b1b;">📉 Ton solde passera en négatif</p>
+                    <p style="margin:6px 0 0 0;font-size:0.9rem;">Solde actuel : <strong>${fmt(COMPTABILITE.caisseJoueurs[myPlayerId]?.euro || 0)}€</strong></p>
+                    <p style="margin:4px 0 0 0;font-size:0.9rem;">Après paiement : <strong style="color:#dc2626;">${fmt((COMPTABILITE.caisseJoueurs[myPlayerId]?.euro || 0) - facture)}€</strong></p>
+                    <hr style="margin:8px 0;border-color:#fca5a5;">
+                    <p style="margin:0;font-size:0.85rem;color:#991b1b;">
+                        ⚠️ <strong>Intérêts 3%</strong> sur le découvert à <strong>chaque lancé de dé</strong>
+                    </p>
+                    <p style="margin:4px 0 0 0;font-size:0.85rem;color:#6b7280;">
+                        💡 Tu peux transformer ton découvert en prêt bancaire (10%/passage Ligne 1) à tout moment.
+                    </p>
+                </div>
+            `, `
+                <button class="btn" style="background:#dc2626;color:white;" onclick="confirmerDecouvert(${caseId}, '${ownerId}', ${facture})">📉 Confirmer le découvert</button>
+                <button class="btn btn-secondary" onclick="showPayOrNegotiateModal(CASES[${caseId}], '${ownerId}', COMPTABILITE.caisseJoueurs['${myPlayerId}']?.euro || 0)">⬅️ Retour</button>
+            `);
+        }
+        
+        async function confirmerDecouvert(caseId, ownerId, facture) {
+            closeModal();
             
+            // Payer normalement — le solde passe en négatif
+            await payOwner(caseId, ownerId, facture, 0);
+            
+            // Compteur de difficultés (déclencheur social Phase 2)
+            const diffSnap = await gameRef.child(`difficulteConsecutive/${myPlayerId}`).once('value');
+            await gameRef.child(`difficulteConsecutive/${myPlayerId}`).set((diffSnap.val() || 0) + 1);
+        }
+        
+        // ========== VOTE AUGMENTATION POT AAA ==========
+        async function showVoteAugmentationPotAAA(caseId, ownerId, facture) {
+            closeModal();
+            const potActuel = COMPTABILITE.potAAA?.solde || 0;
+            
+            showModal(`
+                <h3>🗳️ Vote : Augmenter le Pot AAA</h3>
+                <p>Le Pot AAA est insuffisant (<strong>${fmt(potActuel)}#</strong>) pour une action contributive.</p>
+                <div style="background:#dbeafe;padding:12px;border-radius:8px;margin:10px 0;">
+                    <p style="margin:0;font-weight:bold;">Proposition : ajouter +500# au Pot AAA</p>
+                    <p style="margin:6px 0 0 0;font-size:0.9rem;color:#6b7280;">
+                        Cette décision doit être validée par <strong>tous les joueurs humains</strong>.
+                    </p>
+                </div>
+            `, `
+                <button class="btn btn-primary" onclick="lancerVoteAugmentationPot(${caseId}, '${ownerId}', ${facture})">🗳️ Soumettre au vote</button>
+                <button class="btn btn-secondary" onclick="showPayOrNegotiateModal(CASES[${caseId}], '${ownerId}', COMPTABILITE.caisseJoueurs['${myPlayerId}']?.euro || 0)">⬅️ Retour</button>
+            `);
+        }
+        
+        async function lancerVoteAugmentationPot(caseId, ownerId, facture) {
+            closeModal();
+            // Simuler un vote unanime (pour les parties avec bots, auto-accepté selon profil)
+            const players = getOrderedPlayers();
+            let tousAcceptent = true;
+            const votes = [];
+            
+            for (const p of players) {
+                if (p.id === myPlayerId) {
+                    votes.push({ name: p.name, vote: '✅' });
+                    continue;
+                }
+                if (p.isBot) {
+                    const profil = PROFILS_IA[p.botProfil] || PROFILS_IA.EQUILIBRE;
+                    const accepte = ['COOPERATIF', 'SOLIDAIRE', 'EQUILIBRE'].includes(profil.id);
+                    votes.push({ name: p.name, vote: accepte ? '✅' : '❌' });
+                    if (!accepte) tousAcceptent = false;
+                } else {
+                    // Joueur humain — auto-accepté pour simplifier (en multijoueur réel, un système de vote Firebase serait nécessaire)
+                    votes.push({ name: p.name, vote: '✅' });
+                }
+            }
+            
+            let votesHtml = votes.map(v => `<p style="margin:2px 0;">${v.vote} ${v.name}</p>`).join('');
+            
+            if (tousAcceptent) {
+                COMPTABILITE.potAAA.solde += 500;
+                await syncComptabiliteToFirebase();
+                sendSystemMessage(`🗳️ Vote unanime : +500# ajoutés au Pot AAA (total: ${fmt(COMPTABILITE.potAAA.solde)}#)`);
+                
+                showModal(`
+                    <h3>✅ Vote accepté !</h3>
+                    ${votesHtml}
+                    <p style="margin-top:10px;font-weight:bold;color:#059669;">+500# ajoutés au Pot AAA</p>
+                `, `<button class="btn btn-primary" onclick="showActionContributiveModal(${caseId}, '${ownerId}', ${facture})">🤝 Continuer</button>`);
+            } else {
+                showModal(`
+                    <h3>❌ Vote refusé</h3>
+                    ${votesHtml}
+                    <p style="margin-top:10px;color:#dc2626;">L'augmentation n'a pas été acceptée à l'unanimité.</p>
+                `, `<button class="btn btn-secondary" onclick="showPayOrNegotiateModal(CASES[${caseId}], '${ownerId}', COMPTABILITE.caisseJoueurs['${myPlayerId}']?.euro || 0)">⬅️ Retour</button>`);
+            }
+        }
+        
+        // ========== VENTE AUX ENCHÈRES POUR PAYER ==========
+        async function showVenteActivitePourPayer(caseId, ownerId, facture) {
+            closeModal();
+            const mesActs = Object.entries(COMPTABILITE.caisseActivites || {})
+                .filter(([id, a]) => a.proprietaireId === myPlayerId);
+            
+            let listeHtml = '';
+            for (const [actId, act] of mesActs) {
+                const ca = CASES[actId];
+                if (!ca) continue;
+                const check = canSellActivity(myPlayerId, parseInt(actId));
+                const prixDepart = Math.floor((act.capital || ca.prix) * 0.5);
+                listeHtml += `
+                    <button class="btn" style="width:100%;margin:3px 0;text-align:left;padding:8px 12px;
+                        background:${check.canSell ? '#fdf2f8' : '#f3f4f6'};color:${check.canSell ? '#9d174d' : '#9ca3af'};
+                        border:1px solid ${check.canSell ? '#f9a8d4' : '#e5e7eb'};font-size:0.85rem;"
+                        ${check.canSell ? `onclick="showVenteActiviteModal(${actId})"` : 'disabled'}
+                    >
+                        ${ca.icon} ${ca.name} — départ ${fmt(prixDepart)}€
+                        ${!check.canSell ? `<br><span style="font-size:0.75rem;">${check.reason}</span>` : ''}
+                    </button>`;
+            }
+            
+            showModal(`
+                <h3>🔨 Vendre une activité aux enchères</h3>
+                <p style="font-size:0.9rem;color:#6b7280;">Vends une activité pour lever des fonds et payer ta facture de ${fmt(facture)}€.</p>
+                <hr style="margin:10px 0;">
+                ${listeHtml}
+            `, `
+                <button class="btn btn-secondary" onclick="showPayOrNegotiateModal(CASES[${caseId}], '${ownerId}', COMPTABILITE.caisseJoueurs['${myPlayerId}']?.euro || 0)">⬅️ Retour</button>
+            `);
+        }
+        
+        // ========== ABANDON (ex-Faillite) ==========
+        function showAbandonModal() {
+            showModal(`
+                <h3>🚪 Abandonner la partie</h3>
+                <div style="background:#fee2e2;padding:12px;border-radius:8px;margin:10px 0;">
+                    <p style="margin:0;font-weight:bold;color:#991b1b;">⚠️ Cette action est irréversible</p>
+                    <p style="margin:6px 0 0 0;font-size:0.9rem;">
+                        Toutes tes activités seront libérées.<br>
+                        Ton solde sera remis à zéro.<br>
+                        Tu ne pourras plus jouer cette partie.
+                    </p>
+                </div>
+            `, `
+                <button class="btn" style="background:#dc2626;color:white;" onclick="confirmerAbandon()">🚪 Confirmer l'abandon</button>
+                <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+            `);
+        }
+        
+        async function confirmerAbandon() {
+            closeModal();
+            // Libérer toutes les activités
+            const mesActs = Object.entries(COMPTABILITE.caisseActivites || {})
+                .filter(([id, a]) => a.proprietaireId === myPlayerId);
+            for (const [actId, act] of mesActs) {
+                await gameRef.child(`activites/${actId}`).remove();
+                delete COMPTABILITE.caisseActivites[actId].proprietaireId;
+            }
+            // Remettre soldes à 0
+            if (COMPTABILITE.caisseJoueurs[myPlayerId]) {
+                COMPTABILITE.caisseJoueurs[myPlayerId].euro = 0;
+                COMPTABILITE.caisseJoueurs[myPlayerId].espoyr = 0;
+                COMPTABILITE.caisseJoueurs[myPlayerId].emprunt = 0;
+            }
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/euro`).set(0);
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/espoyr`).set(0);
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/emprunt`).set(0);
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/abandon`).set(true);
+            await syncComptabiliteToFirebase();
+            
+            sendSystemMessage(`🚪 ${myName} a abandonné la partie.`);
             nextTurn();
         }
         
@@ -9079,6 +9450,12 @@ function initSystemeDe() {
                     console.log(`📸 Snapshot créé: Tour ${newTurn}`);
                 }
                 
+                // Reset compteur actions contributives du joueur qui vient de jouer
+                const currentPlayer = players[currentIdx];
+                if (currentPlayer) {
+                    await db.ref(`parties/${currentGameCode}/players/${currentPlayer.id}/actionContribCeTour`).set(0);
+                }
+                
                 await gameRef.child('state').update({
                     currentPlayerIndex: nextIdx,
                     turn: newTurn,
@@ -9389,6 +9766,34 @@ function initSystemeDe() {
             }
             console.log(`🤖 playBotTurn: ${bot.name} joue (index=${idx})`);
             
+            // ── SKIP TOUR BOT ──
+            const skipSnap = await gameRef.child(`skipTurns/${bot.id}`).once('value');
+            const skipCount = skipSnap.val() || 0;
+            if (skipCount > 0) {
+                // Intérêts découvert même quand on passe
+                const caisseSk = COMPTABILITE.caisseJoueurs[bot.id] || {};
+                if ((caisseSk.euro || 0) < 0) {
+                    const interetsDec = arrondir2(Math.abs(caisseSk.euro) * 0.03);
+                    caisseSk.euro -= interetsDec;
+                    await db.ref(`parties/${currentGameCode}/players/${bot.id}/euro`).set(caisseSk.euro);
+                    sendSystemMessage(`📉 🤖 ${bot.name} : intérêts découvert 3% = -${fmt(interetsDec)}€`);
+                }
+                await gameRef.child(`skipTurns/${bot.id}`).set(skipCount - 1);
+                sendSystemMessage(`⏭️ 🤖 ${bot.name} passe son tour (action contributive)`);
+                await syncComptabiliteToFirebase();
+                await nextTurn();
+                return;
+            }
+            
+            // ── INTÉRÊTS DÉCOUVERT 3% BOT ──
+            const caisseBot = COMPTABILITE.caisseJoueurs[bot.id] || {};
+            if ((caisseBot.euro || 0) < 0) {
+                const interetsDecBot = arrondir2(Math.abs(caisseBot.euro) * 0.03);
+                caisseBot.euro -= interetsDecBot;
+                await db.ref(`parties/${currentGameCode}/players/${bot.id}/euro`).set(caisseBot.euro);
+                await syncComptabiliteToFirebase();
+                sendSystemMessage(`📉 🤖 ${bot.name} : intérêts découvert 3% = -${fmt(interetsDecBot)}€ (solde: ${fmt(caisseBot.euro)}€)`);
+            }
             const profil = PROFILS_IA[bot.botProfil] || PROFILS_IA.EQUILIBRE;
             
             // Vérifier/définir le sens du bot
@@ -9846,44 +10251,71 @@ function initSystemeDe() {
                     const equipTypesSnap = await gameRef.child(`equipementTypes/${position}`).once('value');
                     const equipTypesList = equipTypesSnap.val() || [];
                     const facture = calculerFactureActivite(position, equipTypesList);
+                    const phase = gameState?.phase || 1;
+                    const botEuro = caisse.euro || 0;
+                    const botHash = caisse.espoyr || 0;
                     
-                    if ((caisse.euro || 0) >= facture) {
+                    if (botEuro >= facture) {
+                        // Cas 1: Assez d'€
                         await comptaPaiementFacture(botId, owner, position, facture, 0);
+                        sendSystemMessage(`🤖 ${bot.name} paie ${fmt(facture)}€ à ${playersData[owner]?.name}`);
+                    } else if (phase >= 2 && botHash >= facture && CASES[position]?.hash) {
+                        // Cas 2: Payer en # (Phase 2+ et activité accepte #)
+                        await comptaPaiementFacture(botId, owner, position, 0, facture);
+                        sendSystemMessage(`🤖 ${bot.name} paie ${fmt(facture)}# à ${playersData[owner]?.name}`);
+                    } else if (phase >= 2 && isMembre && (bot.actionContribCeTour || 0) < 2 && (COMPTABILITE.potAAA?.solde || 0) >= 190) {
+                        // Cas 3: Action Contributive (Phase 2+, membre AAA)
+                        const travail = TRAVAUX_COOP[Math.floor(Math.random() * TRAVAUX_COOP.length)];
+                        if ((COMPTABILITE.potAAA?.solde || 0) >= travail.gain) {
+                            // Recevoir # du Pot AAA
+                            initCaisseJoueur(botId);
+                            caisse.espoyr += travail.gain;
+                            COMPTABILITE.potAAA.solde -= travail.gain;
+                            COMPTABILITE.potAAA.circulationHash += travail.gain;
+                            enregistrerEcriture({
+                                joueurId: botId, libelle: `Action contributive: ${travail.nom}`,
+                                compteDebit: 501, compteCredit: 468, montantEspoyr: travail.gain, activiteId: position
+                            });
+                            // Payer la facture en #
+                            const montantHash = Math.min(travail.gain, facture);
+                            initCaisseJoueur(owner);
+                            caisse.espoyr -= montantHash;
+                            COMPTABILITE.caisseJoueurs[owner].espoyr += montantHash;
+                            // Complément en découvert si nécessaire
+                            if (travail.gain < facture) {
+                                const resteEuro = facture - travail.gain;
+                                caisse.euro -= resteEuro;
+                                const montantHT = Math.round(resteEuro / 1.21 * 100) / 100;
+                                COMPTABILITE.caisseJoueurs[owner].euro += montantHT;
+                                COMPTABILITE.etat.tresor += (resteEuro - montantHT);
+                            }
+                            // Skip tour + compteur
+                            const skipSnap = await gameRef.child(`skipTurns/${botId}`).once('value');
+                            await gameRef.child(`skipTurns/${botId}`).set((skipSnap.val() || 0) + 1);
+                            await db.ref(`parties/${currentGameCode}/players/${botId}/actionContribCeTour`).set((bot.actionContribCeTour || 0) + 1);
+                            await db.ref(`parties/${currentGameCode}/players/${botId}/euro`).set(caisse.euro);
+                            await db.ref(`parties/${currentGameCode}/players/${botId}/espoyr`).set(caisse.espoyr);
+                            await db.ref(`parties/${currentGameCode}/players/${owner}/espoyr`).set(COMPTABILITE.caisseJoueurs[owner].espoyr);
+                            sendSystemMessage(`🤝 🤖 ${bot.name} : "${travail.nom}" (+${fmt(travail.gain)}#) → paie ${fmt(Math.min(travail.gain, facture))}# (passe prochain tour)`);
+                        }
                     } else {
-                        // Robot emprunte d'abord, puis paie via comptaPaiementFacture
-                        const manque = facture - (caisse.euro || 0);
-                        
-                        // Vérifier limite d'emprunt selon profil
-                        const players = Object.values(playersData);
-                        const nbJoueurs = players.length || 1;
+                        // Cas 4: Emprunter si possible, sinon découvert (toujours payer la totalité)
+                        const manque = facture - Math.max(0, botEuro);
+                        const nbJoueurs = Object.values(playersData).length || 1;
                         const masseMonetaire = COMPTABILITE.banque.masseMonetaire || 0;
                         const limiteEmprunt = Math.max(750, Math.floor(masseMonetaire / nbJoueurs));
                         const detteActuelle = caisse.emprunt || bot.emprunt || 0;
                         const capaciteEmprunt = limiteEmprunt - detteActuelle;
-                        
-                        // Le robot prudent n'emprunte pas, les autres respectent la limite
-                        const peutEmprunter = profil.id !== 'PRUDENT' && capaciteEmprunt >= manque;
+                        const peutEmprunter = profil.id !== 'PRUDENT' && capaciteEmprunt >= manque && manque > 0;
                         
                         if (peutEmprunter) {
                             await comptaEmprunt(botId, manque);
                             await comptaPaiementFacture(botId, owner, position, facture, 0);
                             sendSystemMessage(`🤖 ${bot.name} emprunte ${fmt(manque)}€ et paie ${fmt(facture)}€`);
-                        } else if (profil.id === 'PRUDENT') {
-                            // Le prudent paie ce qu'il peut et ne fait pas faillite
-                            const paiementPartiel = Math.min(caisse.euro || 0, facture);
-                            if (paiementPartiel > 0) {
-                                await comptaPaiementFacture(botId, owner, position, paiementPartiel, 0);
-                                sendSystemMessage(`🤖 ${bot.name} (🐢 Prudent) paie partiellement ${fmt(paiementPartiel)}€/${fmt(facture)}€`);
-                            } else {
-                                sendSystemMessage(`🤖 ${bot.name} (🐢 Prudent) ne peut pas payer`);
-                            }
                         } else {
-                            // Capacité d'emprunt insuffisante - paie ce qu'il peut
-                            const paiementPartiel = Math.min(caisse.euro || 0, facture);
-                            if (paiementPartiel > 0) {
-                                await comptaPaiementFacture(botId, owner, position, paiementPartiel, 0);
-                            }
-                            sendSystemMessage(`🤖 ${bot.name} - limite d'emprunt atteinte`);
+                            // DÉCOUVERT : le bot paie la totalité, solde passe en négatif
+                            await comptaPaiementFacture(botId, owner, position, facture, 0);
+                            sendSystemMessage(`🤖 ${bot.name} paie ${fmt(facture)}€ (découvert: ${fmt(caisse.euro)}€)`);
                         }
                     }
                     
@@ -10018,6 +10450,168 @@ function initSystemeDe() {
                 <button class="btn" style="background:#dbeafe; color:#2563eb;" onclick="exportJournalCSV()">📥 Export CSV</button>
                 <button class="btn btn-secondary" onclick="closeModal()">Fermer</button>
             `);
+        }
+        
+        // ========== RELEVÉ DE COMPTE (Entrées / Sorties / Solde) ==========
+        function showReleveCompteModal(joueurIdCible) {
+            const joueurId = joueurIdCible || myPlayerId;
+            const joueurNom = playersData[joueurId]?.name || joueurId;
+            const joueurAvatar = playersData[joueurId]?.avatar || '⬜';
+            
+            // Parcourir le journal pour construire le relevé
+            // Compte 500 = Caisse € : Débit = entrée €, Crédit = sortie €
+            // Compte 501 = Caisse # : Débit = entrée #, Crédit = sortie #
+            const lignes = [];
+            let soldeEuro = 0;
+            let soldeHash = 0;
+            let totalEntreesEuro = 0;
+            let totalSortiesEuro = 0;
+            let totalEntreesHash = 0;
+            let totalSortiesHash = 0;
+            
+            for (const e of COMPTABILITE.journal) {
+                if (e.joueurId !== joueurId) continue;
+                
+                let entreeEuro = 0, sortieEuro = 0, entreeHash = 0, sortieHash = 0;
+                
+                // € : compte 500 (Caisse)
+                if (e.debit.compte === 500 && e.debit.euro > 0) {
+                    entreeEuro = e.debit.euro;
+                }
+                if (e.credit.compte === 500 && e.credit.euro > 0) {
+                    sortieEuro = e.credit.euro;
+                }
+                
+                // # : compte 501 (Caisse #)
+                if (e.debit.compte === 501 && e.debit.espoyr > 0) {
+                    entreeHash = e.debit.espoyr;
+                }
+                if (e.credit.compte === 501 && e.credit.espoyr > 0) {
+                    sortieHash = e.credit.espoyr;
+                }
+                
+                // Ignorer les écritures sans mouvement de caisse
+                if (entreeEuro === 0 && sortieEuro === 0 && entreeHash === 0 && sortieHash === 0) continue;
+                
+                soldeEuro += entreeEuro - sortieEuro;
+                soldeHash += entreeHash - sortieHash;
+                totalEntreesEuro += entreeEuro;
+                totalSortiesEuro += sortieEuro;
+                totalEntreesHash += entreeHash;
+                totalSortiesHash += sortieHash;
+                
+                lignes.push({
+                    tour: e.tour,
+                    libelle: e.libelle,
+                    entreeEuro, sortieEuro, soldeEuro: arrondir2(soldeEuro),
+                    entreeHash, sortieHash, soldeHash: arrondir2(soldeHash)
+                });
+            }
+            
+            // Sélecteur de joueur
+            const players = Object.values(playersData);
+            const selectJoueur = players.map(p => 
+                `<button class="btn" style="padding:4px 8px;font-size:0.8rem;margin:2px;
+                    background:${p.id === joueurId ? '#3b82f6' : '#f3f4f6'};
+                    color:${p.id === joueurId ? 'white' : '#374151'};"
+                    onclick="showReleveCompteModal('${p.id}')">${p.avatar} ${p.name}</button>`
+            ).join('');
+            
+            // Tableau des mouvements (derniers 50)
+            const lignesAffichees = lignes.slice(-50).reverse();
+            const rowsHtml = lignesAffichees.map(l => `
+                <tr style="font-size:0.75rem;">
+                    <td style="padding:3px 5px;border-bottom:1px solid #e5e7eb;color:#6b7280;">T${l.tour}</td>
+                    <td style="padding:3px 5px;border-bottom:1px solid #e5e7eb;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${l.libelle}">${l.libelle}</td>
+                    <td style="padding:3px 5px;border-bottom:1px solid #e5e7eb;text-align:right;color:#059669;font-weight:${l.entreeEuro > 0 ? 'bold' : 'normal'};">${l.entreeEuro > 0 ? '+' + fmt(l.entreeEuro) : ''}</td>
+                    <td style="padding:3px 5px;border-bottom:1px solid #e5e7eb;text-align:right;color:#dc2626;font-weight:${l.sortieEuro > 0 ? 'bold' : 'normal'};">${l.sortieEuro > 0 ? '-' + fmt(l.sortieEuro) : ''}</td>
+                    <td style="padding:3px 5px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:bold;color:${l.soldeEuro >= 0 ? '#059669' : '#dc2626'};">${fmt(l.soldeEuro)}€</td>
+                    <td style="padding:3px 5px;border-bottom:1px solid #e5e7eb;text-align:right;color:#059669;">${l.entreeHash > 0 ? '+' + fmt(l.entreeHash) : ''}</td>
+                    <td style="padding:3px 5px;border-bottom:1px solid #e5e7eb;text-align:right;color:#dc2626;">${l.sortieHash > 0 ? '-' + fmt(l.sortieHash) : ''}</td>
+                    <td style="padding:3px 5px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:bold;color:#7c3aed;">${fmt(l.soldeHash)}#</td>
+                </tr>
+            `).join('');
+            
+            showModal(`
+                <h3>📋 Relevé de Compte</h3>
+                <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;">${selectJoueur}</div>
+                
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+                    <div style="background:#dcfce7;padding:8px;border-radius:6px;text-align:center;">
+                        <p style="margin:0;font-size:0.75rem;color:#065f46;">Total Entrées</p>
+                        <p style="margin:2px 0 0 0;font-weight:bold;color:#059669;">${fmt(totalEntreesEuro)}€ / ${fmt(totalEntreesHash)}#</p>
+                    </div>
+                    <div style="background:#fee2e2;padding:8px;border-radius:6px;text-align:center;">
+                        <p style="margin:0;font-size:0.75rem;color:#991b1b;">Total Sorties</p>
+                        <p style="margin:2px 0 0 0;font-weight:bold;color:#dc2626;">${fmt(totalSortiesEuro)}€ / ${fmt(totalSortiesHash)}#</p>
+                    </div>
+                </div>
+                
+                <div style="background:${soldeEuro >= 0 ? '#f0fdf4' : '#fef2f2'};padding:10px;border-radius:8px;margin-bottom:10px;display:flex;justify-content:space-around;">
+                    <div style="text-align:center;">
+                        <p style="margin:0;font-size:0.75rem;">Solde €</p>
+                        <p style="margin:2px 0 0 0;font-size:1.2rem;font-weight:bold;color:${soldeEuro >= 0 ? '#059669' : '#dc2626'};">${fmt(soldeEuro)}€</p>
+                    </div>
+                    <div style="text-align:center;">
+                        <p style="margin:0;font-size:0.75rem;">Solde #</p>
+                        <p style="margin:2px 0 0 0;font-size:1.2rem;font-weight:bold;color:#7c3aed;">${fmt(soldeHash)}#</p>
+                    </div>
+                    <div style="text-align:center;">
+                        <p style="margin:0;font-size:0.75rem;">Nb mouvements</p>
+                        <p style="margin:2px 0 0 0;font-size:1.2rem;font-weight:bold;">${lignes.length}</p>
+                    </div>
+                </div>
+                
+                <div style="max-height:300px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:6px;">
+                    <table style="width:100%;border-collapse:collapse;">
+                        <thead>
+                            <tr style="background:#f3f4f6;font-size:0.7rem;position:sticky;top:0;">
+                                <th style="padding:4px 5px;text-align:left;">Tour</th>
+                                <th style="padding:4px 5px;text-align:left;">Description</th>
+                                <th style="padding:4px 5px;text-align:right;color:#059669;">+€</th>
+                                <th style="padding:4px 5px;text-align:right;color:#dc2626;">-€</th>
+                                <th style="padding:4px 5px;text-align:right;">Solde €</th>
+                                <th style="padding:4px 5px;text-align:right;color:#059669;">+#</th>
+                                <th style="padding:4px 5px;text-align:right;color:#dc2626;">-#</th>
+                                <th style="padding:4px 5px;text-align:right;">Solde #</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rowsHtml || '<tr><td colspan="8" style="padding:20px;text-align:center;color:#9ca3af;">Aucun mouvement</td></tr>'}</tbody>
+                    </table>
+                </div>
+                ${lignes.length > 50 ? `<p style="font-size:0.75rem;color:#6b7280;text-align:center;margin-top:4px;">Affichage limité aux 50 derniers mouvements (${lignes.length} au total)</p>` : ''}
+            `, `
+                <button class="btn" style="background:#dcfce7;color:#065f46;" onclick="exportReleveCSV('${joueurId}')">📥 Export CSV</button>
+                <button class="btn btn-secondary" onclick="closeModal()">Fermer</button>
+            `);
+        }
+        
+        // Export CSV du relevé de compte
+        function exportReleveCSV(joueurId) {
+            const joueurNom = playersData[joueurId]?.name || joueurId;
+            let csv = 'Tour;Description;Entrée €;Sortie €;Solde €;Entrée #;Sortie #;Solde #\n';
+            let soldeEuro = 0, soldeHash = 0;
+            
+            for (const e of COMPTABILITE.journal) {
+                if (e.joueurId !== joueurId) continue;
+                let entreeEuro = 0, sortieEuro = 0, entreeHash = 0, sortieHash = 0;
+                if (e.debit.compte === 500 && e.debit.euro > 0) entreeEuro = e.debit.euro;
+                if (e.credit.compte === 500 && e.credit.euro > 0) sortieEuro = e.credit.euro;
+                if (e.debit.compte === 501 && e.debit.espoyr > 0) entreeHash = e.debit.espoyr;
+                if (e.credit.compte === 501 && e.credit.espoyr > 0) sortieHash = e.credit.espoyr;
+                if (entreeEuro === 0 && sortieEuro === 0 && entreeHash === 0 && sortieHash === 0) continue;
+                soldeEuro += entreeEuro - sortieEuro;
+                soldeHash += entreeHash - sortieHash;
+                csv += `${e.tour};"${e.libelle}";${entreeEuro || ''};${sortieEuro || ''};${arrondir2(soldeEuro)};${entreeHash || ''};${sortieHash || ''};${arrondir2(soldeHash)}\n`;
+            }
+            
+            const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `releve_${joueurNom}_T${gameState?.turn || 0}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
         }
         
         function showBilanModal() {
