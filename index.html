@@ -372,7 +372,7 @@
                     <div style="background: #f8fafc; padding: 8px; border-radius: 8px; margin: 10px 0;">
                         <p style="margin: 0 0 6px 0; font-size: 0.75rem; color: #64748b; font-weight: bold;">⚡ ACTIONS</p>
                         <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-                            <button class="btn" style="background: #dcfce7; color: #059669; flex: 1; font-size: 0.75rem; padding: 6px;" onclick="showQuickAdhererAAA()">💚 Adhérer AAA</button>
+                            <button class="btn" style="background: #dcfce7; color: #059669; flex: 1; font-size: 0.75rem; padding: 6px;" onclick="showQuickAdhererAAA()"><svg style="display:inline-block;width:1.1em;height:1.1em;vertical-align:middle;" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="#FDDB31" stroke="#C4A800" stroke-width="3"/><text x="50" y="58" text-anchor="middle" font-size="48" font-weight="bold" fill="#000" font-family="Arial">#</text><text x="50" y="82" text-anchor="middle" font-size="18" font-weight="bold" fill="#000" font-family="Arial">AAA</text></svg> Adhérer AAA</button>
                             <button class="btn" style="background: #dbeafe; color: #2563eb; flex: 1; font-size: 0.75rem; padding: 6px;" onclick="showQuickEmprunter()">💶 Emprunter</button>
                             <button id="equiperBtn" class="btn" style="background: #fef3c7; color: #92400e; flex: 1; font-size: 0.75rem; padding: 6px;" onclick="showQuickEquiper()">📚 Formation</button>
                         </div>
@@ -384,7 +384,7 @@
                     </div>
                     
                     <div style="display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0;">
-                        <button class="btn" style="background: #dcfce7; color: #059669; flex: 1;" onclick="showAAAModal()">💚 Pot AAA</button>
+                        <button class="btn" style="background: #dcfce7; color: #059669; flex: 1;" onclick="showAAAModal()"><svg style="display:inline-block;width:1.1em;height:1.1em;vertical-align:middle;" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="#FDDB31" stroke="#C4A800" stroke-width="3"/><text x="50" y="58" text-anchor="middle" font-size="48" font-weight="bold" fill="#000" font-family="Arial">#</text><text x="50" y="82" text-anchor="middle" font-size="18" font-weight="bold" fill="#000" font-family="Arial">AAA</text></svg> Pot AAA</button>
                         <button class="btn" style="background: #fee2e2; color: #dc2626; flex: 1;" onclick="showBankModal()">🏦 Banque</button>
                         <button class="btn" style="background: #fef9c3; color: #854d0e; flex: 1;" onclick="showFailliteModal()">⚠️ Faillite</button>
                     </div>
@@ -782,7 +782,7 @@
             COOPERATIF: { id: 'COOPERATIF', nom: '🤝 Coopératif', membreAAA: true, equipeParfois: true },
             EQUILIBRE: { id: 'EQUILIBRE', nom: '⚖️ Équilibré', equipeRaisonnable: true },
             INVESTISSEUR: { id: 'INVESTISSEUR', nom: '📈 Investisseur', acheteToujours: true, equipeToujours: true },
-            SOLIDAIRE: { id: 'SOLIDAIRE', nom: '💚 Solidaire', membreAAA: true, equipeParfois: true }
+            SOLIDAIRE: { id: 'SOLIDAIRE', nom: LOGO_AAA + ' Solidaire', membreAAA: true, equipeParfois: true }
         };
         
         // ========== TRAVAUX COOPÉRATIFS (Actions Contributives) ==========
@@ -799,6 +799,10 @@
             { id: 10, nom: '💬 Tenir compagnie à une personne isolée', gain: 220 },
             { id: 11, nom: '🎉 Aider à l\'organisation d\'événements', gain: 220 }
         ];
+        
+        // Logo AAA (SVG inline jaune #FDDB31, texte noir)
+        const LOGO_AAA = `<svg style="display:inline-block;width:1.1em;height:1.1em;vertical-align:middle;" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="#FDDB31" stroke="#C4A800" stroke-width="3"/><text x="50" y="58" text-anchor="middle" font-size="48" font-weight="bold" fill="#000" font-family="Arial">#</text><text x="50" y="82" text-anchor="middle" font-size="18" font-weight="bold" fill="#000" font-family="Arial">AAA</text></svg>`;
+        const LOGO_AAA_SM = `<svg style="display:inline-block;width:0.9em;height:0.9em;vertical-align:middle;" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="#FDDB31" stroke="#C4A800" stroke-width="3"/><text x="50" y="58" text-anchor="middle" font-size="48" font-weight="bold" fill="#000" font-family="Arial">#</text><text x="50" y="82" text-anchor="middle" font-size="18" font-weight="bold" fill="#000" font-family="Arial">AAA</text></svg>`;
         
         const PLAYER_COLORS = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
         
@@ -4406,10 +4410,10 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                         <span style="width: 12px; height: 12px; border-radius: 50%; background: ${PLAYER_COLORS[idx]}; flex-shrink: 0;"></span>
                         <span class="player-avatar">${p.avatar}</span>
                         <div class="player-info">
-                            <div class="player-name">${p.name} ${isMembre ? '💚' : ''} ${p.isBot ? '<span class="bot-badge">ROBOT</span>' : ''}</div>
+                            <div class="player-name">${p.name} ${isMembre ? LOGO_AAA : ''} ${p.isBot ? '<span class="bot-badge">ROBOT</span>' : ''}</div>
                             <div class="player-stats">
                                 💰${fmt(euroActuel)}€ 
-                                💚${fmt(espoyrActuel)}# 
+                                ${LOGO_AAA}${fmt(espoyrActuel)}# 
                                 ${empruntActuel > 0 ? `<span style="color:#ef4444">📋${fmt(empruntActuel)}€</span>` : ''}
                             </div>
                         </div>
@@ -4744,7 +4748,7 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             await syncComptabiliteToFirebase();
             
             const profilIcon = botEcoProfil === 'creatif' ? '🎨' : '🏛️';
-            sendSystemMessage(`🤖 ${botName} (${profil.nom} ${profilIcon}) a rejoint !${profil.membreAAA ? ' 💚 Membre AAA' : ''}`);
+            sendSystemMessage(`🤖 ${botName} (${profil.nom} ${profilIcon}) a rejoint !${profil.membreAAA ? ' ' + LOGO_AAA + ' Membre AAA' : ''}`);
         }
         
         // ========== UI JEU ==========
@@ -5935,7 +5939,7 @@ function initSystemeDe() {
                     contexte: 'potAAA'
                 });
                 
-                sendSystemMessage(`💚 ${myName} rembourse ${fmt(detteAAA)}# au Pot AAA`);
+                sendSystemMessage(`${LOGO_AAA} ${myName} rembourse ${fmt(detteAAA)}# au Pot AAA`);
             }
             
             // ========== 6. REMBOURSEMENT DETTES ENTRE JOUEURS ==========
@@ -5965,7 +5969,7 @@ function initSystemeDe() {
             
             // Message système avec complément AAA
             if (complementAAA > 0) {
-                sendSystemMessage(`💰 ${myName} ${profilIcon} reçoit ${fmt(salaire)}€ + 💚${fmt(complementAAA)}# (complément AAA)`);
+                sendSystemMessage(`💰 ${myName} ${profilIcon} reçoit ${fmt(salaire)}€ + ${LOGO_AAA}${fmt(complementAAA)}# (complément AAA)`);
             } else {
                 sendSystemMessage(`💰 ${myName} ${profilIcon} reçoit ${fmt(salaire)}€ (${payeur})`);
             }
@@ -6043,7 +6047,7 @@ function initSystemeDe() {
                 modalHtml += `
                     <div style="background: ${aAssez ? '#d1fae5' : '#fef3c7'}; padding: 8px; border-radius: 8px; margin-bottom: 8px;">
                         <div style="display: flex; justify-content: space-between;">
-                            <span>💚 Crédit AAA (prêt relance)</span>
+                            <span>${LOGO_AAA} Crédit AAA (prêt relance)</span>
                             <span style="font-weight: 600;">${aAssez ? '✅ Remboursé -'+fmt(detteAAAPayee)+'#' : '⏳ '+fmt(detteAAA)+'# (pas assez de #)'}</span>
                         </div>
                         <p style="margin: 2px 0 0 0; font-size: 0.8rem; color: #6b7280;">Sans intérêts (0%)</p>
@@ -6055,7 +6059,7 @@ function initSystemeDe() {
                 modalHtml += `
                     <div style="background: #dcfce7; padding: 8px; border-radius: 8px; margin-bottom: 8px; border: 1px solid #86efac;">
                         <div style="display: flex; justify-content: space-between;">
-                            <span style="font-weight: bold; color: #059669;">💚 Complément AAA</span>
+                            <span style="font-weight: bold; color: #059669;">${LOGO_AAA} Complément AAA</span>
                             <span style="font-weight: bold; color: #059669;">+${fmt(complementAAA)}#</span>
                         </div>
                         <p style="margin: 2px 0 0 0; font-size: 0.8rem; color: #6b7280;">Solidarité : compensation de l'érosion</p>
@@ -6755,7 +6759,7 @@ function initSystemeDe() {
             const equipDisplay = [...Array(nbA).fill('A'), ...Array(nbB).fill('B')].join('');
             
             showModal(`
-                <h3>💚 Vendre équipement au Pot AAA</h3>
+                <h3>${LOGO_AAA} Vendre équipement au Pot AAA</h3>
                 <p><strong>${c.icon} ${c.name}</strong> [${equipDisplay}]</p>
                 <hr style="margin: 10px 0;">
                 <p>Le Pot AAA rachète à <strong>75%</strong> du prix d'achat</p>
@@ -6767,7 +6771,7 @@ function initSystemeDe() {
                     (Prix achat: ${fmt(prixAchat)}€ × 75% = ${prixRachat}#)
                 </p>
             `, `
-                <button class="btn btn-primary" onclick="vendreEquipementAAA(${actId})">💚 Vendre ${typeVendu}</button>
+                <button class="btn btn-primary" onclick="vendreEquipementAAA(${actId})">${LOGO_AAA} Vendre ${typeVendu}</button>
                 <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
             `);
         }
@@ -6788,7 +6792,7 @@ function initSystemeDe() {
             await gameRef.child(`equipementTypes/${actId}`).set(types);
             await syncComptabiliteToFirebase();
             
-            sendSystemMessage(`💚 ${myName} vend 1 équipement ${result.typeVendu} de ${c.icon} au Pot AAA (+${fmt(result.prixRachat)}#)`);
+            sendSystemMessage(`${LOGO_AAA} ${myName} vend 1 équipement ${result.typeVendu} de ${c.icon} au Pot AAA (+${fmt(result.prixRachat)}#)`);
             
             showModal(`
                 <h3>✅ Équipement ${result.typeVendu} vendu !</h3>
@@ -7193,7 +7197,7 @@ function initSystemeDe() {
                     <p><strong>Dette :</strong> ${fmt(status.emprunt)}€</p>
                     <hr style="margin: 10px 0;">
                     <div style="background: #dcfce7; padding: 10px; border-radius: 8px;">
-                        <p style="margin: 0; font-weight: bold;">💚 Intervention du Pot AAA</p>
+                        <p style="margin: 0; font-weight: bold;">${LOGO_AAA} Intervention du Pot AAA</p>
                         <p style="margin: 4px 0 0 0; font-size: 0.9rem;">
                             En tant que membre, tu bénéficies de :
                         </p>
@@ -7203,7 +7207,7 @@ function initSystemeDe() {
                         </ul>
                     </div>
                 `, `
-                    <button class="btn btn-primary" onclick="declarerFailliteAAA()">💚 Accepter l'aide AAA</button>
+                    <button class="btn btn-primary" onclick="declarerFailliteAAA()">${LOGO_AAA} Accepter l'aide AAA</button>
                     <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
                 `);
             } else {
@@ -7250,10 +7254,10 @@ function initSystemeDe() {
             });
             await syncComptabiliteToFirebase();
             
-            sendSystemMessage(`💚 ${myName} a été sauvé par le Pot AAA ! Dette annulée: ${fmt(result.detteAnnulee)}€, Prêt: +${fmt(result.pretRelance)}#`);
+            sendSystemMessage(`${LOGO_AAA} ${myName} a été sauvé par le Pot AAA ! Dette annulée: ${fmt(result.detteAnnulee)}€, Prêt: +${fmt(result.pretRelance)}#`);
             
             showModal(`
-                <h3>💚 Intervention AAA réussie !</h3>
+                <h3>${LOGO_AAA} Intervention AAA réussie !</h3>
                 <p><strong>Dette annulée :</strong> ${fmt(result.detteAnnulee)}€</p>
                 <p><strong>Prêt de relance :</strong> +${fmt(result.pretRelance)}#</p>
                 <p style="font-size: 0.85rem; color: #4338ca; margin-top: 8px;">
@@ -7262,7 +7266,7 @@ function initSystemeDe() {
                 <p style="font-size: 0.9rem; color: #059669; margin-top: 10px;">
                     Tu repars avec une nouvelle chance. Utilise-la bien !
                 </p>
-            `, `<button class="btn btn-primary" onclick="closeModal(); nextTurn();">Merci AAA ! 💚</button>`);
+            `, `<button class="btn btn-primary" onclick="closeModal(); nextTurn();">Merci AAA ! ${LOGO_AAA}</button>`);
         }
         
         // Déclarer faillite totale (non-membre AAA)
@@ -7395,7 +7399,7 @@ function initSystemeDe() {
             
             // Option 2: Payer en # (Phase 1+ et si assez de #)
             if (canPayHash && c.hash) {
-                buttons += `<button class="btn" style="background:#dcfce7;color:#059669;" onclick="payOwner(${c.id}, '${ownerId}', 0, ${facture})">💚 Payer ${facture}#</button>`;
+                buttons += `<button class="btn" style="background:#dcfce7;color:#059669;" onclick="payOwner(${c.id}, '${ownerId}', 0, ${facture})">${LOGO_AAA} Payer ${facture}#</button>`;
             }
             
             // Option 3: Paiement mixte (négociation)
@@ -8183,7 +8187,7 @@ function initSystemeDe() {
                 <div style="margin: 18px 0;">
                     <div style="display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 600; margin-bottom: 4px;">
                         <span>💶 100% €</span>
-                        <span>💚 100% #</span>
+                        <span>${LOGO_AAA} 100% #</span>
                     </div>
                     <input type="range" id="negoMixSlider" min="${minPctHash}" max="${maxPctHash}" value="${defaultPct}" 
                            oninput="updateMixDisplay(${facture})" style="width: 100%; accent-color: #059669;">
@@ -8213,7 +8217,7 @@ function initSystemeDe() {
             
             document.getElementById('negoMixResult').innerHTML = `
                 <p style="margin: 0; font-size: 1.2rem;">
-                    <strong>💶 ${fmt(euroAmount)}€</strong>  +  <strong style="color: #059669;">💚 ${fmt(hashAmount)}#</strong>
+                    <strong>💶 ${fmt(euroAmount)}€</strong>  +  <strong style="color: #059669;">${LOGO_AAA} ${fmt(hashAmount)}#</strong>
                 </p>
                 <p style="margin: 4px 0 0 0; font-size: 0.95rem; color: #374151;">
                     = ${fmt(euroAmount + hashAmount)} / ${fmt(facture)} ✅
@@ -8456,7 +8460,7 @@ function initSystemeDe() {
                 compteDebit: 501, compteCredit: 468, montantEspoyr: montantPaye, activiteId: caseId
             });
             
-            sendSystemMessage(`💚 ${myName} paie ${fmt(montantPaye)}# à ${ownerPlayer?.name} (${c.icon})`);
+            sendSystemMessage(`${LOGO_AAA} ${myName} paie ${fmt(montantPaye)}# à ${ownerPlayer?.name} (${c.icon})`);
             
             // 3. Si pas assez pour couvrir toute la facture, le reste va en découvert €
             let resteEnEuro = 0;
@@ -8477,7 +8481,7 @@ function initSystemeDe() {
                     await gameRef.child(`activites_hash/${actId}`).set(true);
                     CASES[actId].hash = true;
                 }
-                sendSystemMessage(`💚 ${myName} accepte le paiement mixte sur toutes ses activités`);
+                sendSystemMessage(`${LOGO_AAA} ${myName} accepte le paiement mixte sur toutes ses activités`);
             }
             
             // 5. Skip tour suivant
@@ -9826,7 +9830,7 @@ function initSystemeDe() {
             const isMembre = COMPTABILITE.potAAA.membres?.includes(bot.id) || bot.membreAAA;
             if (isMembre) {
                 await comptaBonusAAALancer(bot.id);
-                sendSystemMessage(`💚 +50# créés dans le Pot AAA (${bot.name} membre)`);
+                sendSystemMessage(`${LOGO_AAA} +50# créés dans le Pot AAA (${bot.name} membre)`);
             }
             
             // *** ANIMATION : Passer sur chaque case ***
@@ -10001,7 +10005,7 @@ function initSystemeDe() {
                             contexte: 'potAAA'
                         });
                         
-                        sendSystemMessage(`💚 ${bot.name} rembourse ${fmt(detteAAABot)}# au Pot AAA`);
+                        sendSystemMessage(`${LOGO_AAA} ${bot.name} rembourse ${fmt(detteAAABot)}# au Pot AAA`);
                     } else {
                         sendSystemMessage(`⏳ ${bot.name} : créance AAA ${fmt(detteAAABot)}# en attente (pas assez de #)`);
                     }
@@ -10053,7 +10057,7 @@ function initSystemeDe() {
                 await syncComptabiliteToFirebase();
                 
                 if (complementAAA > 0) {
-                    sendSystemMessage(`💰 ${bot.name} reçoit ${fmt(salaire)}€ + 💚${fmt(complementAAA)}# (complément AAA)`);
+                    sendSystemMessage(`💰 ${bot.name} reçoit ${fmt(salaire)}€ + ${LOGO_AAA}${fmt(complementAAA)}# (complément AAA)`);
                 } else {
                     sendSystemMessage(`💰 ${bot.name} reçoit ${fmt(salaire)}€${phase >= 2 ? ' (érosion)' : ''}`);
                 }
@@ -10690,7 +10694,7 @@ function initSystemeDe() {
             
             const bilanAAA = `
                 <tr>
-                    <td colspan="6" style="background:#dcfce7;"><strong>💚 Pot AAA (${bilan.bilanAAA.membres} membres)</strong></td>
+                    <td colspan="6" style="background:#dcfce7;"><strong>${LOGO_AAA} Pot AAA (${bilan.bilanAAA.membres} membres)</strong></td>
                 </tr>
                 <tr>
                     <td>Solde</td>
@@ -10930,7 +10934,7 @@ function initSystemeDe() {
                 <p style="font-size:0.85rem; color:#6b7280; margin-bottom:10px;">
                     Profil: <strong>${player.profil || 'contributif'}</strong> 
                     ${player.isBot ? '🤖 Robot' : ''} 
-                    ${isMembre ? '💚 Membre AAA' : ''}
+                    ${isMembre ? LOGO_AAA + ' Membre AAA' : ''}
                 </p>
                 
                 <!-- ══════════════════════════════════════════════════════ -->
@@ -11790,7 +11794,7 @@ function initSystemeDe() {
             const totalCreances = creances.reduce((s, [_, v]) => s + v, 0);
             
             showModal(`
-                <h3>💚 Pot AAA (Aide Amicale Autonome)</h3>
+                <h3>${LOGO_AAA} Pot AAA (Aide Amicale Autonome)</h3>
                 
                 <div style="background:#dcfce7; padding:10px; border-radius:8px; margin-bottom:10px;">
                     <p style="margin:0; font-weight:bold;">📊 Bilan du Pot AAA</p>
@@ -11841,7 +11845,7 @@ function initSystemeDe() {
                     </div>
                 `}
             `, `
-                ${!isMembre ? `<button class="btn btn-primary" onclick="joinAAA()">💚 Adhérer</button>` : `
+                ${!isMembre ? `<button class="btn btn-primary" onclick="joinAAA()">${LOGO_AAA} Adhérer</button>` : `
                     <button class="btn btn-primary" onclick="contributeAAA()">⬆️ Cotiser</button>
                     <button class="btn btn-secondary" onclick="creditAAA()">⬇️ Emprunter</button>
                 `}
@@ -11858,7 +11862,7 @@ function initSystemeDe() {
             await syncComptabiliteToFirebase();
             
             closeModal();
-            sendSystemMessage(`💚 ${myName} rejoint le Pot AAA !`);
+            sendSystemMessage(`${LOGO_AAA} ${myName} rejoint le Pot AAA !`);
             showAAAModal();
         }
         
@@ -11878,7 +11882,7 @@ function initSystemeDe() {
             await syncComptabiliteToFirebase();
             
             closeModal();
-            sendSystemMessage(`💚 ${myName} cotise ${fmt(amount)}# au Pot AAA`);
+            sendSystemMessage(`${LOGO_AAA} ${myName} cotise ${fmt(amount)}# au Pot AAA`);
             showAAAModal();
         }
         
@@ -11898,7 +11902,7 @@ function initSystemeDe() {
             await syncComptabiliteToFirebase();
             
             closeModal();
-            sendSystemMessage(`💚 ${myName} emprunte ${fmt(amount)}# au Pot AAA`);
+            sendSystemMessage(`${LOGO_AAA} ${myName} emprunte ${fmt(amount)}# au Pot AAA`);
             showAAAModal();
         }
         
@@ -12279,7 +12283,7 @@ function initSystemeDe() {
                 // Bouton vente équipement
                 if (nbEquip > 0) {
                     buttons = `
-                        <button class="btn" style="background:#dcfce7;color:#059669;" onclick="closeModal(); showVenteEquipementModal(${caseId});">💚 Vendre équipement</button>
+                        <button class="btn" style="background:#dcfce7;color:#059669;" onclick="closeModal(); showVenteEquipementModal(${caseId});">${LOGO_AAA} Vendre équipement</button>
                         ${buttons}
                     `;
                 }
@@ -12721,7 +12725,7 @@ function initSystemeDe() {
             
             if (isMembre) {
                 showModal(`
-                    <h3>💚 Déjà membre du Pot AAA</h3>
+                    <h3>${LOGO_AAA} Déjà membre du Pot AAA</h3>
                     <p>Tu es déjà membre du Pot AAA !</p>
                     <p>Avantages actifs :</p>
                     <ul style="font-size: 0.9rem;">
@@ -12732,7 +12736,7 @@ function initSystemeDe() {
                 `, `<button class="btn btn-primary" onclick="closeModal()">OK</button>`);
             } else {
                 showModal(`
-                    <h3>💚 Adhérer au Pot AAA</h3>
+                    <h3>${LOGO_AAA} Adhérer au Pot AAA</h3>
                     <p>Devenir membre te donne accès à :</p>
                     <ul style="font-size: 0.9rem;">
                         <li>✨ +50# créés dans le Pot à chaque lancer de dé</li>
@@ -12741,7 +12745,7 @@ function initSystemeDe() {
                     </ul>
                     <p style="margin-top: 10px; color: #059669; font-weight: bold;">Adhésion gratuite !</p>
                 `, `
-                    <button class="btn btn-primary" onclick="adhererPotAAA()">💚 Adhérer maintenant</button>
+                    <button class="btn btn-primary" onclick="adhererPotAAA()">${LOGO_AAA} Adhérer maintenant</button>
                     <button class="btn btn-secondary" onclick="closeModal()">Plus tard</button>
                 `);
             }
@@ -12757,7 +12761,7 @@ function initSystemeDe() {
                 
                 logEvent('JOIN_AAA', myPlayerId, {});
                 
-                sendSystemMessage(`💚 ${myName} a rejoint le Pot AAA !`);
+                sendSystemMessage(`${LOGO_AAA} ${myName} a rejoint le Pot AAA !`);
                 showModal(`<h3>🎉 Bienvenue !</h3><p>Tu es maintenant membre du Pot AAA.</p>`,
                     `<button class="btn btn-primary" onclick="closeModal()">Super !</button>`);
             }
@@ -12822,13 +12826,13 @@ function initSystemeDe() {
                 
                 ${isMembre ? `
                 <div style="background: #dcfce7; padding: 10px; border-radius: 8px;">
-                    <p style="margin: 0; font-weight: bold;">💚 Pot AAA (en #)</p>
+                    <p style="margin: 0; font-weight: bold;">${LOGO_AAA} Pot AAA (en #)</p>
                     <p style="margin: 4px 0 0 0;">Solde du Pot : ${fmt(potSolde)}# | Ta dette AAA : ${fmt(detteAAA)}#</p>
                     <p style="margin: 4px 0 0 0; color: #059669; font-weight: bold;">✨ Sans intérêts !</p>
                     ${potSolde > 0 ? `
                         <input type="number" id="empruntHashMontant" value="${Math.min(100, potSolde)}" min="10" max="${potSolde}" step="10" style="width: 100%; padding: 8px; margin-top: 8px;">
                         <button class="btn" style="background: #059669; color: white; width: 100%; margin-top: 6px; padding: 10px;" onclick="executeEmprunterHash()">
-                            💚 Emprunter au Pot AAA
+                            ${LOGO_AAA} Emprunter au Pot AAA
                         </button>
                     ` : '<p style="color: #6b7280; margin-top: 6px;">Le Pot est vide</p>'}
                 </div>
@@ -12836,7 +12840,7 @@ function initSystemeDe() {
                 <div style="background: #f0fdf4; padding: 10px; border-radius: 8px; border: 1px dashed #059669;">
                     <p style="margin: 0; color: #059669;">💡 <strong>Astuce :</strong> Adhère au Pot AAA pour emprunter en # <strong>sans intérêts</strong> !</p>
                     <button class="btn" style="background: #dcfce7; color: #059669; width: 100%; margin-top: 8px;" onclick="closeModal(); showQuickAdhererAAA();">
-                        💚 Adhérer maintenant
+                        ${LOGO_AAA} Adhérer maintenant
                     </button>
                 </div>
                 `}
@@ -12907,7 +12911,7 @@ function initSystemeDe() {
                 nouvelleDetteAAA: COMPTABILITE.potAAA.creances?.[myPlayerId] || 0
             }, ecriture?.ledgerEntryId ? [ecriture.ledgerEntryId] : []);
             
-            sendSystemMessage(`💚 ${myName} emprunte ${fmt(montant)}# au Pot AAA (sans intérêts)`);
+            sendSystemMessage(`${LOGO_AAA} ${myName} emprunte ${fmt(montant)}# au Pot AAA (sans intérêts)`);
         }
         
         // Action rapide : Équiper
@@ -13028,7 +13032,7 @@ function initSystemeDe() {
                 
                 ${detteAAA > 0 ? `
                 <div style="background: #dcfce7; padding: 10px; border-radius: 8px;">
-                    <p style="margin: 0; font-weight: bold;">💚 Dette AAA : ${fmt(detteAAA)}#</p>
+                    <p style="margin: 0; font-weight: bold;">${LOGO_AAA} Dette AAA : ${fmt(detteAAA)}#</p>
                     <input type="number" id="remboursHashMontant" value="${Math.min(detteAAA, currentHash)}" min="0" max="${Math.min(detteAAA, currentHash)}" step="10" style="width: 100%; padding: 6px; margin-top: 8px;">
                     <button class="btn" style="background: #dcfce7; color: #059669; width: 100%; margin-top: 6px;" onclick="executeRemboursHash()">Rembourser #</button>
                 </div>
@@ -13073,7 +13077,7 @@ function initSystemeDe() {
                 detteRestante: COMPTABILITE.potAAA.creances?.[myPlayerId] || 0
             }, ecriture?.ledgerEntryId ? [ecriture.ledgerEntryId] : []);
             
-            sendSystemMessage(`💚 ${myName} rembourse ${fmt(montant)}# au Pot AAA`);
+            sendSystemMessage(`${LOGO_AAA} ${myName} rembourse ${fmt(montant)}# au Pot AAA`);
         }
         
         // Afficher le modal d'analyse de sauvegarde
@@ -13731,10 +13735,10 @@ function initSystemeDe() {
                 'CHANCE_CARD': '🍀',
                 'MALCHANCE_CARD': '👨‍👩‍👧‍👦',
                 'BANK_LOAN': '🏦',
-                'AAA_LOAN': '💚',
+                'AAA_LOAN': LOGO_AAA,
                 'REPAY_LOAN': '💳',
-                'REPAY_AAA': '💚',
-                'JOIN_AAA': '💚',
+                'REPAY_AAA': LOGO_AAA,
+                'JOIN_AAA': LOGO_AAA,
                 'NEW_ROUND': '🔄',
                 'AUCTION_START': '🔨',
                 'AUCTION_BID': '💰',
