@@ -2531,38 +2531,8 @@ function isAbsent(player) {
             });
             if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
             
-// Bonus # (10% du prix) du Pot AAA
-            const bonusHash = Math.floor(prix * 0.1);
-            if (bonusHash > 0) {
-                COMPTABILITE.caisseJoueurs[joueurId].espoyr += bonusHash;
-                COMPTABILITE.potAAA.solde -= bonusHash;
-                COMPTABILITE.potAAA.circulationHash += bonusHash;
-                
-                // Écriture 4a: Joueur reçoit le bonus #
-                e = enregistrerEcriture({
-                    joueurId, 
-                    libelle: `Bonus # achat activité`,
-                    compteDebit: 501,   // Caisse # (actif +)
-                    compteCredit: 468,   // Subventions (produit +)
-                    montantEspoyr: bonusHash, 
-                    activiteId: actId,
-                    contexte: 'potAAA'
-                });
-                if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
-                
-                // Écriture 4b: Pot AAA distribue
-                e = enregistrerEcriture({
-                    joueurId: 'POT_AAA', 
-                    libelle: `Distribution bonus ${playersData[joueurId]?.name || joueurId}`,
-                    compteDebit: 671,   // Charges exceptionnelles (charge +)
-                    compteCredit: 580,  // Caisse Pot AAA (actif -)
-                    montantEspoyr: bonusHash,
-                    contexte: 'potAAA'
-                });
-                if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
-            }
             
-            return { partEtat, partExport, partRedistrib, partParJoueur: 0, partHorsCircuit: partRedistrib, bonusHash, facture, ledgerEntryIds };
+            return { partEtat, partExport, partRedistrib, partParJoueur: 0, partHorsCircuit: partRedistrib, bonusHash: 0, facture, ledgerEntryIds };
         }
         
         // Achat équipement (D:218 C:500)
@@ -6261,7 +6231,6 @@ function initSystemeDe() {
                     <p style="margin: 4px 0 0 0;">🏛️ État : ${facture.destinationEtat.toFixed(2)}€ (TVA + Droits)</p>
                     <p style="margin: 2px 0 0 0;">🌍 Export : ${facture.destinationExport.toFixed(2)}€ (TVA + Droits)</p>
                     <p style="margin: 2px 0 0 0;">🛰️ Hors circuit : ${partHorsCircuit.toFixed(2)}€ (économie spéculative / importation)</p>
-                    <p style="margin: 2px 0 0 0;">✨ Bonus : +${fmt(bonusHash)}# du Pot AAA</p>
                 </div>
                 
                 <p><strong>Facture/passage :</strong> ${fmt(calculerFactureActivite(c.id, []))}€ <span style="font-size:0.8rem; color:#6b7280;">(5% de ${fmt(c.prix)}€)</span></p>
@@ -6328,8 +6297,7 @@ function initSystemeDe() {
             await gameRef.child(`activites/${caseId}`).set(myPlayerId);
             await syncComptabiliteToFirebase();
             
-            const bonusHash = Math.floor(prix * 0.1);
-            sendSystemMessage(`🏪 ${myName} achète ${c.icon} (-${fmt(prix)}€ +${fmt(bonusHash)}#) → 🛰️ hors circuit ${fmt(result.partHorsCircuit || 0)}€`);
+            sendSystemMessage(`🏪 ${myName} achète ${c.icon} (-${fmt(prix)}€) → 🛰️ hors circuit ${fmt(result.partHorsCircuit || 0)}€`);
             
             // Vérifier si on peut équiper immédiatement
             const currentEuro = COMPTABILITE.caisseJoueurs[myPlayerId]?.euro || 0;
