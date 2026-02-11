@@ -1,4 +1,4 @@
-  <!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -168,6 +168,42 @@
         }
         
         .dice-area { text-align: center; padding: 15px; background: #f9fafb; border-radius: 12px; margin: 10px 0; }
+        .my-balance-bar {
+            display: flex; justify-content: center; gap: 16px; align-items: center;
+            padding: 8px 14px; margin-bottom: 8px; border-radius: 10px;
+            background: linear-gradient(135deg, #f0fdf4, #ecfdf5);
+            border: 2px solid #bbf7d0;
+            font-size: 1.1rem; font-weight: 700;
+            transition: all 0.3s ease;
+        }
+        .my-balance-bar .bal-euro { color: #1e40af; }
+        .my-balance-bar .bal-hash { color: #059669; }
+        .my-balance-bar.flash-green {
+            animation: balanceFlashGreen 1.2s ease-out;
+        }
+        .my-balance-bar.flash-red {
+            animation: balanceFlashRed 1.2s ease-out;
+        }
+        .my-balance-bar .bal-delta {
+            font-size: 0.85rem; font-weight: 600;
+            animation: deltaFloat 1.5s ease-out forwards;
+            position: absolute; top: -18px; right: 10px;
+            pointer-events: none;
+        }
+        @keyframes balanceFlashGreen {
+            0% { background: #22c55e; border-color: #16a34a; transform: scale(1.05); }
+            30% { background: #86efac; }
+            100% { background: linear-gradient(135deg, #f0fdf4, #ecfdf5); border-color: #bbf7d0; transform: scale(1); }
+        }
+        @keyframes balanceFlashRed {
+            0% { background: #fca5a5; border-color: #ef4444; transform: scale(1.05); }
+            30% { background: #fecaca; }
+            100% { background: linear-gradient(135deg, #f0fdf4, #ecfdf5); border-color: #bbf7d0; transform: scale(1); }
+        }
+        @keyframes deltaFloat {
+            0% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-30px); }
+        }
         .dice { font-size: 3.5rem; margin: 8px 0; display: inline-block; }
         .dice.rolling { animation: roll 0.1s infinite; }
         @keyframes roll {
@@ -204,6 +240,43 @@
         .chat-message { margin-bottom: 6px; padding: 6px 10px; background: white; border-radius: 8px; }
         .chat-message .sender { font-weight: 600; color: var(--green-dark); }
         .chat-message.system { background: #fef3c7; font-style: italic; color: #92400e; }
+        
+        /* ═══ TOASTS LIVE (style TikTok) ═══ */
+        .live-toast-container {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10000;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            max-width: 90vw;
+        }
+        .live-toast {
+            background: rgba(0, 0, 0, 0.82);
+            color: white;
+            padding: 10px 22px;
+            border-radius: 25px;
+            font-size: 0.92rem;
+            font-weight: 500;
+            text-align: center;
+            max-width: 85vw;
+            pointer-events: none;
+            animation: toastSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1), toastFadeOut 0.6s ease-in 3.2s forwards;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+        }
+        @keyframes toastSlideIn {
+            from { opacity: 0; transform: translateY(25px) scale(0.85); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes toastFadeOut {
+            from { opacity: 1; transform: translateY(0) scale(1); }
+            to { opacity: 0; transform: translateY(-15px) scale(0.95); }
+        }
         .chat-input { display: flex; gap: 8px; }
         .chat-input input { flex: 1; margin-bottom: 0; font-size: 0.85rem; padding: 8px 10px; }
         
@@ -363,7 +436,12 @@
                 <div class="main-area">
                     <div class="board-container" id="gameBoard"></div>
                     <div class="dice-area" id="diceArea">
-                        <div id="diceMessage" style="font-size: 0.9rem;">Lance le dé !</div>
+                        <div class="my-balance-bar" id="myBalanceBar" style="position:relative;">
+                            <span class="bal-euro" id="balEuro">0,00 €</span>
+                            <span style="color:#d1d5db;">|</span>
+                            <span class="bal-hash" id="balHash">0,00 #</span>
+                        </div>
+                        <div id="diceMessage" style="font-size: 0.9rem;">En attente...</div>
                         <div class="dice" id="dice">🎲</div>
                         <button class="btn btn-orange" id="rollDiceBtn" onclick="rollDice()">🎲 Lancer</button>
                     </div>
@@ -372,7 +450,7 @@
                     <div style="background: #f8fafc; padding: 8px; border-radius: 8px; margin: 10px 0;">
                         <p style="margin: 0 0 6px 0; font-size: 0.75rem; color: #64748b; font-weight: bold;">⚡ ACTIONS</p>
                         <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-                            <button class="btn" style="background: #dcfce7; color: #059669; flex: 1; font-size: 0.75rem; padding: 6px;" onclick="showQuickAdhererAAA()">💚 Adhérer AAA</button>
+                            <button class="btn" style="background: #dcfce7; color: #059669; flex: 1; font-size: 0.75rem; padding: 6px;" onclick="showQuickAdhererAAA()"><svg style="display:inline-block;width:1.1em;height:1.1em;vertical-align:middle;" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="#FDDB31" stroke="#C4A800" stroke-width="3"/><text x="50" y="58" text-anchor="middle" font-size="48" font-weight="bold" fill="#000" font-family="Arial">#</text><text x="50" y="82" text-anchor="middle" font-size="18" font-weight="bold" fill="#000" font-family="Arial">AAA</text></svg> Devenir membre AAA</button>
                             <button class="btn" style="background: #dbeafe; color: #2563eb; flex: 1; font-size: 0.75rem; padding: 6px;" onclick="showQuickEmprunter()">💶 Emprunter</button>
                             <button id="equiperBtn" class="btn" style="background: #fef3c7; color: #92400e; flex: 1; font-size: 0.75rem; padding: 6px;" onclick="showQuickEquiper()">📚 Formation</button>
                         </div>
@@ -384,7 +462,7 @@
                     </div>
                     
                     <div style="display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0;">
-                        <button class="btn" style="background: #dcfce7; color: #059669; flex: 1;" onclick="showAAAModal()">💚 Pot AAA</button>
+                        <button class="btn" style="background: #dcfce7; color: #059669; flex: 1;" onclick="showAAAModal()"><svg style="display:inline-block;width:1.1em;height:1.1em;vertical-align:middle;" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="#FDDB31" stroke="#C4A800" stroke-width="3"/><text x="50" y="58" text-anchor="middle" font-size="48" font-weight="bold" fill="#000" font-family="Arial">#</text><text x="50" y="82" text-anchor="middle" font-size="18" font-weight="bold" fill="#000" font-family="Arial">AAA</text></svg> Pot AAA</button>
                         <button class="btn" style="background: #fee2e2; color: #dc2626; flex: 1;" onclick="showBankModal()">🏦 Banque</button>
                         <button class="btn" style="background: #fef9c3; color: #854d0e; flex: 1;" onclick="showFailliteModal()">⚠️ Faillite</button>
                     </div>
@@ -420,11 +498,10 @@
     </div>
     
     <div id="modalContainer"></div>
+    <div class="live-toast-container" id="liveToastContainer"></div>
     
-   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
-
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     
     <script>
         // ========== VÉRIFICATION FIREBASE ==========
@@ -447,30 +524,18 @@
             throw new Error('Firebase SDK non chargé — vérifiez votre connexion internet');
         }
         
-      // ========== FIREBASE CONFIG ==========
-const firebaseConfig = {
-    apiKey: "AIzaSyC5hPhmhgQNY1qrFQ63XOIFNXhdy5EsDMM",
-    authDomain: "espoyr--game.firebaseapp.com",
-    databaseURL: "https://espoyr--game-default-rtdb.europe-west1.firebasedatabase.app",
-    projectId: "espoyr--game",
-    storageBucket: "espoyr--game.firebasestorage.app",
-    messagingSenderId: "689112154741",
-    appId: "1:689112154741:web:a471dadae9becbaf3ca3eb"
-};
-
-firebase.initializeApp(firebaseConfig);
-
-// 🔐 Connexion anonyme obligatoire si règles = auth != null
-firebase.auth().signInAnonymously()
-    .then(() => {
-        console.log("✅ Connecté anonymement à Firebase");
-    })
-    .catch((error) => {
-        console.error("❌ Erreur connexion anonyme :", error);
-    });
-
-const db = firebase.database();
-
+        // ========== FIREBASE CONFIG ==========
+        const firebaseConfig = {
+            apiKey: "AIzaSyC5hPhmhgQNY1qrFQ63XOIFNXhdy5EsDMM",
+            authDomain: "espoyr--game.firebaseapp.com",
+            databaseURL: "https://espoyr--game-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "espoyr--game",
+            storageBucket: "espoyr--game.firebasestorage.app",
+            messagingSenderId: "689112154741",
+            appId: "1:689112154741:web:a471dadae9becbaf3ca3eb"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
         
         // ========== PLAN COMPTABLE ==========
         const PLAN_COMPTABLE = {
@@ -617,14 +682,14 @@ const db = firebase.database();
         const CASES = [
             { id: 0, type: 'start', name: 'Départ', icon: '🏁' },
             { id: 1, type: 'activite', name: 'Vêtements', icon: '👔', prix: 200, facture: 40, hash: true, prixEquip: 100 },
-            { id: 2, type: 'ligne2', name: 'Culture', icon: '📚', cout: 50 },
+            { id: 2, type: 'ligne2', name: 'Frais culturels', icon: '🎭', cout: 50, description: 'Spectacles, musées, activités culturelles — chacun contribue à la vie culturelle.' },
             { id: 3, type: 'activite', name: 'Pharmacie', icon: '💊', prix: 220, facture: 45, hash: true, prixEquip: 110 },
             { id: 4, type: 'chance', name: 'Chance', icon: '🍀' },
             { id: 5, type: 'activite', name: 'Jardin', icon: '🌻', prix: 240, facture: 50, hash: true, prixEquip: 120 },
             { id: 6, type: 'activite', name: 'Librairie', icon: '📚', prix: 180, facture: 35, hash: true, prixEquip: 90 },
             { id: 7, type: 'activite', name: 'Boulangerie', icon: '🥖', prix: 200, facture: 45, hash: true, prixEquip: 100 },
             { id: 8, type: 'activite', name: 'Coiffeur', icon: '✂️', prix: 160, facture: 30, hash: true, prixEquip: 80 },
-            { id: 9, type: 'frais', name: 'Alimentaire', icon: '🛒', cout: 50 },
+            { id: 9, type: 'frais', name: 'Frais alimentaires', icon: '🍽️', cout: 50, description: 'Courses et repas — un besoin essentiel que chacun doit assumer.' },
             { id: 10, type: 'activite', name: 'Fleuriste', icon: '🌸', prix: 150, facture: 28, hash: true, prixEquip: 75 },
             { id: 11, type: 'activite', name: 'Café', icon: '☕', prix: 200, facture: 40, hash: true, prixEquip: 100 },
             { id: 12, type: 'activite', name: 'Restaurant', icon: '🍽️', prix: 280, facture: 55, hash: true, prixEquip: 140 },
@@ -635,7 +700,7 @@ const db = firebase.database();
             { id: 17, type: 'activite', name: 'Électricien', icon: '⚡', prix: 220, facture: 44, hash: true, prixEquip: 110 },
             { id: 18, type: 'malchance', name: 'Merci', icon: '👨‍👩‍👧‍👦' },
             { id: 19, type: 'activite', name: 'Plombier', icon: '🔩', prix: 240, facture: 48, hash: true, prixEquip: 120 },
-            { id: 20, type: 'frais', name: 'Médical', icon: '🏥', cout: 75 },
+            { id: 20, type: 'frais', name: 'Frais de soins', icon: '🩺', cout: 75, description: 'Consultation, médicaments — prendre soin de sa santé a un coût.' },
             { id: 21, type: 'activite', name: 'Entrepreneur', icon: '🛠️', prix: 320, facture: 65, hash: true, prixEquip: 160 },
             { id: 22, type: 'activite', name: 'Ferme', icon: '🐄', prix: 350, facture: 70, hash: true, prixEquip: 175 }
         ];
@@ -693,7 +758,6 @@ const db = firebase.database();
         // Peut-on acheter un A ?
         function peutAcheterA(caseId, equipList, joueurId) {
             const phase = gameState?.phase || 1;
-            if (phase < 2) return { ok: false, raison: 'Phase 1 — A disponible en Phase 2' };
             
             const nbA = (equipList || []).filter(e => e === 'A').length;
             const nbB = (equipList || []).filter(e => e === 'B').length;
@@ -721,9 +785,6 @@ const db = firebase.database();
         
         // Peut-on convertir B→A ?
         function peutConvertirBtoA(caseId, equipList, joueurId) {
-            const phase = gameState?.phase || 1;
-            if (phase < 2) return { ok: false, raison: 'Phase 1 — disponible en Phase 2' };
-            
             const nbB = (equipList || []).filter(e => e === 'B').length;
             if (nbB === 0) return { ok: false, raison: 'Aucun B à convertir' };
             
@@ -790,13 +851,17 @@ const db = firebase.database();
             { id: 6, nom: "Études enfant", icon: "🎓", description: "Votre enfant entre en études supérieures.", valeur: 600, interets: 15, total: 690, mensualite: 69, duree: 10 }
         ];
         
+        // Logo AAA (SVG inline jaune #FDDB31, texte noir)
+        const LOGO_AAA = `<svg style="display:inline-block;width:1.1em;height:1.1em;vertical-align:middle;" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="#FDDB31" stroke="#C4A800" stroke-width="3"/><text x="50" y="58" text-anchor="middle" font-size="48" font-weight="bold" fill="#000" font-family="Arial">#</text><text x="50" y="82" text-anchor="middle" font-size="18" font-weight="bold" fill="#000" font-family="Arial">AAA</text></svg>`;
+        const LOGO_AAA_SM = `<svg style="display:inline-block;width:0.9em;height:0.9em;vertical-align:middle;" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="#FDDB31" stroke="#C4A800" stroke-width="3"/><text x="50" y="58" text-anchor="middle" font-size="48" font-weight="bold" fill="#000" font-family="Arial">#</text><text x="50" y="82" text-anchor="middle" font-size="18" font-weight="bold" fill="#000" font-family="Arial">AAA</text></svg>`;
+        
         const PROFILS_IA = {
             PREDATEUR: { id: 'PREDATEUR', nom: '🦈 Prédateur', acheteToujours: true, equipeToujours: true, emprunteLibrement: true },
             PRUDENT: { id: 'PRUDENT', nom: '🐢 Prudent', acheteToujours: false, equipeToujours: false, emprunteLibrement: false },
             COOPERATIF: { id: 'COOPERATIF', nom: '🤝 Coopératif', membreAAA: true, equipeParfois: true },
             EQUILIBRE: { id: 'EQUILIBRE', nom: '⚖️ Équilibré', equipeRaisonnable: true },
             INVESTISSEUR: { id: 'INVESTISSEUR', nom: '📈 Investisseur', acheteToujours: true, equipeToujours: true },
-            SOLIDAIRE: { id: 'SOLIDAIRE', nom: '💚 Solidaire', membreAAA: true, equipeParfois: true }
+            SOLIDAIRE: { id: 'SOLIDAIRE', nom: LOGO_AAA + ' Solidaire', membreAAA: true, equipeParfois: true }
         };
         
         // ========== TRAVAUX COOPÉRATIFS (Actions Contributives) ==========
@@ -830,7 +895,63 @@ const db = firebase.database();
             return Math.round((n || 0) * 100) / 100;
         }
         // Formatage affichage monétaire : 2 décimales
-        function fmt(n) { return Number(n || 0).toFixed(2); }
+        function fmt(n) { n = Number(n || 0); return n % 1 === 0 ? n.toFixed(0) : n.toFixed(2); }
+        
+        // ═══ AFFICHAGE SOLDE EN TEMPS RÉEL ═══
+        let _prevBalEuro = null;
+        let _prevBalHash = null;
+        
+        function updateMyBalance() {
+            const caisse = COMPTABILITE?.caisseJoueurs?.[myPlayerId];
+            if (!caisse) return;
+            const euro = caisse.euro || 0;
+            const hash = caisse.espoyr || 0;
+            
+            const elEuro = document.getElementById('balEuro');
+            const elHash = document.getElementById('balHash');
+            if (!elEuro || !elHash) return;
+            
+            elEuro.textContent = `${fmt(euro)} €`;
+            elHash.textContent = `${fmt(hash)} #`;
+            
+            // Détecter le changement et flasher
+            if (_prevBalEuro !== null) {
+                const deltaEuro = euro - _prevBalEuro;
+                const deltaHash = hash - _prevBalHash;
+                if (deltaEuro !== 0 || deltaHash !== 0) {
+                    const isPositive = deltaEuro > 0 || (deltaEuro === 0 && deltaHash > 0);
+                    let deltaText = '';
+                    if (deltaEuro !== 0) deltaText += `${deltaEuro > 0 ? '+' : ''}${fmt(deltaEuro)}€`;
+                    if (deltaHash !== 0) deltaText += `${deltaText ? ' ' : ''}${deltaHash > 0 ? '+' : ''}${fmt(deltaHash)}#`;
+                    flashBalance(isPositive ? 'green' : 'red', deltaText);
+                }
+            }
+            _prevBalEuro = euro;
+            _prevBalHash = hash;
+        }
+        
+        function flashBalance(type, deltaText) {
+            const bar = document.getElementById('myBalanceBar');
+            if (!bar) return;
+            
+            // Retirer les anciennes animations
+            bar.classList.remove('flash-green', 'flash-red');
+            void bar.offsetWidth; // Force reflow
+            bar.classList.add(type === 'green' ? 'flash-green' : 'flash-red');
+            
+            // Afficher le delta flottant
+            const existing = bar.querySelector('.bal-delta');
+            if (existing) existing.remove();
+            
+            const delta = document.createElement('span');
+            delta.className = 'bal-delta';
+            delta.style.color = type === 'green' ? '#16a34a' : '#dc2626';
+            delta.textContent = deltaText;
+            bar.appendChild(delta);
+            
+            setTimeout(() => { if (delta.parentNode) delta.remove(); }, 1600);
+            setTimeout(() => { bar.classList.remove('flash-green', 'flash-red'); }, 1300);
+        }
         
         const CONFIG = {
             salaireBase: 350,  // Net payé au joueur
@@ -1532,7 +1653,7 @@ function isAbsent(player) {
             
             switch (type) {
                 case 'frais':
-                    // Frais (Alimentaire, Médical, Culture) : 100% vers État
+                    // Frais (Frais alimentaires, Frais de soins, Frais culturels) : 100% vers État
                     // Montant affiché = TTC
                     facture.ht = Math.round((montantTTC / (1 + TVA_TAUX)) * 100) / 100;
                     facture.tva = Math.round((montantTTC - facture.ht) * 100) / 100;
@@ -2541,38 +2662,8 @@ function isAbsent(player) {
             });
             if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
             
-// Bonus # (10% du prix) du Pot AAA
-            const bonusHash = Math.floor(prix * 0.1);
-            if (bonusHash > 0) {
-                COMPTABILITE.caisseJoueurs[joueurId].espoyr += bonusHash;
-                COMPTABILITE.potAAA.solde -= bonusHash;
-                COMPTABILITE.potAAA.circulationHash += bonusHash;
-                
-                // Écriture 4a: Joueur reçoit le bonus #
-                e = enregistrerEcriture({
-                    joueurId, 
-                    libelle: `Bonus # achat activité`,
-                    compteDebit: 501,   // Caisse # (actif +)
-                    compteCredit: 468,   // Subventions (produit +)
-                    montantEspoyr: bonusHash, 
-                    activiteId: actId,
-                    contexte: 'potAAA'
-                });
-                if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
-                
-                // Écriture 4b: Pot AAA distribue
-                e = enregistrerEcriture({
-                    joueurId: 'POT_AAA', 
-                    libelle: `Distribution bonus ${playersData[joueurId]?.name || joueurId}`,
-                    compteDebit: 671,   // Charges exceptionnelles (charge +)
-                    compteCredit: 580,  // Caisse Pot AAA (actif -)
-                    montantEspoyr: bonusHash,
-                    contexte: 'potAAA'
-                });
-                if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
-            }
             
-            return { partEtat, partExport, partRedistrib, partParJoueur: 0, partHorsCircuit: partRedistrib, bonusHash, facture, ledgerEntryIds };
+            return { partEtat, partExport, partRedistrib, partParJoueur: 0, partHorsCircuit: partRedistrib, bonusHash: 0, facture, ledgerEntryIds };
         }
         
         // Achat équipement (D:218 C:500)
@@ -3804,6 +3895,7 @@ activiteId: actId
             try {
                 await gameRef.child('comptabilite').set(COMPTABILITE);
                 console.log('✅ Comptabilité synchronisée');
+                updateMyBalance(); // MAJ affichage solde
             } catch (err) {
                 console.error('❌ Erreur sync compta:', err);
             }
@@ -3822,6 +3914,7 @@ activiteId: actId
                 console.log('✅ Comptabilité chargée depuis Firebase');
                 // Mettre à jour l'UI après chargement
                 updatePlayersUI();
+                updateMyBalance(); // MAJ affichage solde
             }
         }
         
@@ -3953,8 +4046,8 @@ activiteId: actId
                 console.log('DEBUG gameConfig final:', gameConfig);
 
 
-                // Demander le profil économique
-                showProfilChoiceModal(async (profil) => {
+                // Afficher l'intro puis demander le profil économique
+                showIntroModal(() => showProfilChoiceModal(async (profil) => {
 
                 const code = generateCode();
                 currentGameCode = code;
@@ -4065,12 +4158,96 @@ activiteId: actId
                 document.getElementById('waitingMessage').classList.add('hidden');
                 
                 sendSystemMessage(`${myName} (${profil === 'creatif' ? '🎨 Créatif' : '🏛️ Contributif'}) a créé la partie !`);
-            });
+            }));
             });
         }
         
         // Variable pour stocker le profil du joueur
         let myProfil = 'contributif';
+        
+        // Modal d'introduction du jeu (avant choix de profil)
+        function showIntroModal(callback) {
+            document.getElementById('modalContainer').innerHTML = `
+                <div class="modal-overlay">
+                    <div class="modal" style="max-height: 85vh; overflow-y: auto;">
+                        <h3 style="text-align:center; font-size:1.3rem;">🎮 ESPOYR</h3>
+                        
+                        <div style="background:#f0fdf4; padding:12px; border-radius:10px; margin-bottom:10px;">
+                            <p style="margin:0; font-weight:bold; color:#059669;">👤 Ta situation</p>
+                            <p style="margin:6px 0 0 0; font-size:0.9rem;">
+                                Imagine. Tu as 18 ans. Tu es seul·e aux commandes de ton ménage. 
+                                Personne pour payer à ta place. Bienvenue dans la vraie vie… en version jeu de plateau.
+                            </p>
+                        </div>
+                        
+                        <div style="background:#dbeafe; padding:12px; border-radius:10px; margin-bottom:10px;">
+                            <p style="margin:0; font-weight:bold; color:#2563eb;">🎯 Ton objectif</p>
+                            <p style="margin:6px 0 0 0; font-size:0.9rem;">
+                                Ton but n'est pas seulement d'avoir de l'argent, mais de survivre économiquement 
+                                en construisant le mode de vie que tu choisis.
+                            </p>
+                        </div>
+                        
+                        <div style="background:#fef3c7; padding:12px; border-radius:10px; margin-bottom:10px;">
+                            <p style="margin:0; font-weight:bold; color:#92400e;">💰 Le départ</p>
+                            <p style="margin:6px 0 0 0; font-size:0.9rem;">
+                                Au début, tu touches un salaire. C'est ton filet de sécurité, mais il n'est pas garanti. 
+                                Des crises peuvent arriver et des économies peuvent être imposées. Tu dois apprendre à anticiper.
+                            </p>
+                        </div>
+                        
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
+                            <div style="background:#e0e7ff; padding:10px; border-radius:10px;">
+                                <p style="margin:0; font-weight:bold; color:#3730a3; font-size:0.9rem;">🏪 Investir</p>
+                                <p style="margin:4px 0 0 0; font-size:0.85rem;">
+                                    Tu peux investir et créer des activités : potager, ferme, atelier, service… 
+                                    Chaque activité peut te rapporter un revenu.
+                                </p>
+                            </div>
+                            <div style="background:#f3e8ff; padding:10px; border-radius:10px;">
+                                <p style="margin:0; font-weight:bold; color:#7c3aed; font-size:0.9rem;">🔧 Améliorer</p>
+                                <p style="margin:4px 0 0 0; font-size:0.85rem;">
+                                    Tu peux équiper tes activités. Cela coûte de l'argent, mais un bon équipement 
+                                    peut augmenter fortement tes revenus.
+                                </p>
+                            </div>
+                        </div>
+                        
+                        <div style="background:#fef2f2; padding:12px; border-radius:10px; margin-bottom:10px;">
+                            <p style="margin:0; font-weight:bold; color:#dc2626;">⚠️ La réalité</p>
+                            <p style="margin:6px 0 0 0; font-size:0.9rem;">
+                                Comme dans la vraie vie, tu dois gérer des taxes et des frais imprévus. 
+                                Si tu n'as pas assez de liquidités, tu peux emprunter, mais chaque euro emprunté 
+                                devra être remboursé avec des intérêts.
+                            </p>
+                        </div>
+                        
+                        <div style="background:#dcfce7; padding:12px; border-radius:10px; margin-bottom:10px;">
+                            <p style="margin:0; font-weight:bold; color:#059669;">🏆 Gagner</p>
+                            <p style="margin:6px 0 0 0; font-size:0.9rem;">
+                                Tu gagnes la partie si, à la fin, ton ménage est stable et si tu as construit 
+                                le monde idéal que tu souhaitais.
+                            </p>
+                        </div>
+                        
+                        <div style="background:#f3f4f6; padding:12px; border-radius:10px; margin-bottom:10px; border-left:4px solid #6b7280;">
+                            <p style="margin:0; font-size:0.9rem; font-style:italic; color:#374151;">
+                                💬 Ce jeu ne récompense pas celui qui écrase les autres. Il montre que chaque choix 
+                                économique a des conséquences, pour toi et pour les autres joueurs. 
+                                <strong>Anticipe ou subis.</strong> 🎲
+                            </p>
+                        </div>
+                        
+                        <div class="modal-buttons">
+                            <button class="btn btn-primary" style="width:100%; padding:14px; font-size:1.1rem;" 
+                                onclick="closeModal(); window.__introCallback && window.__introCallback();">
+                                ✅ J'ai compris, c'est parti !
+                            </button>
+                        </div>
+                    </div>
+                </div>`;
+            window.__introCallback = callback;
+        }
         
         // Modal de choix du profil économique
         function showProfilChoiceModal(callback) {
@@ -4210,8 +4387,8 @@ activiteId: actId
 if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); return; }
             if (playersSnap.numChildren() >= 6) { showError('Partie complète (6 joueurs max) !'); return; }
             
-            // Demander le profil avant de rejoindre
-            showProfilChoiceModal(async (profil) => {
+            // Afficher l'intro puis demander le profil avant de rejoindre
+            showIntroModal(() => showProfilChoiceModal(async (profil) => {
                 currentGameCode = code;
                 isHost = false;
                 myPlayerId = 'p_' + Date.now() + '_' + Math.floor(Math.random()*1000);
@@ -4251,7 +4428,7 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                 document.getElementById('waitingMessage').classList.remove('hidden');
                 
                 sendSystemMessage(`${myName} (${profil === 'creatif' ? '🎨 Créatif' : '🏛️ Contributif'}) a rejoint !`);
-            });
+            }));
         }
         
         // ========== ABONNEMENT FIREBASE ==========
@@ -4347,6 +4524,9 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             
             // Écouter les négociations entrantes
             listenForNegotiations();
+            
+            // Activer les toasts live après chargement initial des messages
+            enableLiveToasts();
         }
         
         // ========== CHAT ==========
@@ -4381,6 +4561,51 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                 : `<span class="sender">${msg.avatar} ${msg.sender}:</span> ${msg.message}`;
             chatBox.appendChild(div);
             chatBox.scrollTop = chatBox.scrollHeight;
+            
+            // ═══ TOAST LIVE — actions des autres joueurs ═══
+            if (msg.isSystem && liveToastsReady) {
+                // Vérifier si c'est l'action d'un AUTRE joueur (pas moi)
+                const text = msg.message || '';
+                const myNameStr = myName || '';
+                // Si le message ne contient PAS mon nom → c'est un autre joueur → toast
+                // Exception: messages génériques (phase, partie) → aussi afficher
+                if (myNameStr && !text.includes(myNameStr)) {
+                    showLiveToast(text);
+                }
+            }
+        }
+        
+        // ═══ TOASTS LIVE (notifications style TikTok) ═══
+        let liveToastsReady = false;
+        const MAX_TOASTS = 4;
+        
+        function showLiveToast(text) {
+            const container = document.getElementById('liveToastContainer');
+            if (!container) return;
+            
+            // Strip HTML tags (ex: LOGO_AAA SVG) pour texte pur
+            const cleanText = text.replace(/<[^>]*>/g, '').trim();
+            if (!cleanText) return;
+            
+            // Limiter le nombre de toasts visibles
+            while (container.children.length >= MAX_TOASTS) {
+                container.removeChild(container.firstChild);
+            }
+            
+            const toast = document.createElement('div');
+            toast.className = 'live-toast';
+            toast.textContent = cleanText;
+            container.appendChild(toast);
+            
+            // Supprimer après animation (3.2s visible + 0.6s fade)
+            setTimeout(() => {
+                if (toast.parentNode) toast.parentNode.removeChild(toast);
+            }, 3900);
+        }
+        
+        // Activer les toasts après le chargement initial des messages
+        function enableLiveToasts() {
+            setTimeout(() => { liveToastsReady = true; }, 2500);
         }
         
         // ========== UI JOUEURS ==========
@@ -4420,10 +4645,10 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                         <span style="width: 12px; height: 12px; border-radius: 50%; background: ${PLAYER_COLORS[idx]}; flex-shrink: 0;"></span>
                         <span class="player-avatar">${p.avatar}</span>
                         <div class="player-info">
-                            <div class="player-name">${p.name} ${isMembre ? '💚' : ''} ${p.isBot ? '<span class="bot-badge">ROBOT</span>' : ''}</div>
+                            <div class="player-name">${p.name} ${isMembre ? LOGO_AAA : ''} ${p.isBot ? '<span class="bot-badge">ROBOT</span>' : ''}</div>
                             <div class="player-stats">
                                 💰${fmt(euroActuel)}€ 
-                                💚${fmt(espoyrActuel)}# 
+                                ${LOGO_AAA}${fmt(espoyrActuel)}# 
                                 ${empruntActuel > 0 ? `<span style="color:#ef4444">📋${fmt(empruntActuel)}€</span>` : ''}
                             </div>
                         </div>
@@ -4431,6 +4656,7 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                     </div>
                 `}).join('');
             }
+            updateMyBalance(); // MAJ barre solde au-dessus du dé
         }
         
         // ========== LANCEMENT PARTIE ==========
@@ -4758,7 +4984,7 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             await syncComptabiliteToFirebase();
             
             const profilIcon = botEcoProfil === 'creatif' ? '🎨' : '🏛️';
-            sendSystemMessage(`🤖 ${botName} (${profil.nom} ${profilIcon}) a rejoint !${profil.membreAAA ? ' 💚 Membre AAA' : ''}`);
+            sendSystemMessage(`🤖 ${botName} (${profil.nom} ${profilIcon}) a rejoint !${profil.membreAAA ? ' ' + LOGO_AAA + ' Membre AAA' : ''}`);
         }
         
         // ========== UI JEU ==========
@@ -4862,7 +5088,7 @@ if (isMyTurn) {
                 
                 
                 document.getElementById('diceMessage').textContent = 
-                    isMyTurn ? 'Lance le dé !' : `${currentPlayer.name} joue...`;
+                    isMyTurn ? `🎲 ${myName}, c'est ton tour ! Tu as ${fmt(COMPTABILITE?.caisseJoueurs?.[myPlayerId]?.euro || 0)}€ et ${fmt(COMPTABILITE?.caisseJoueurs?.[myPlayerId]?.espoyr || 0)}#` : `${currentPlayer.name} joue...`;
                 
                 // Robot joue avec le timing configurable (seulement si pas en mode replay)
               if (isBot && isHost && !replayMode) {
@@ -5151,6 +5377,12 @@ function getOrderedPlayers() {
 
 async function rollDice() {
     if (!gameState || !gameRef) return;
+    
+    // ── Protection anti-double-lancer ──
+    if (turnActionInProgress) {
+        console.log('🛑 rollDice bloqué: action en cours');
+        return;
+    }
 
     const listeJoueurs = getOrderedPlayers()
     const indexActuel = gameState.currentPlayerIndex || 0;
@@ -5163,7 +5395,8 @@ async function rollDice() {
     const estTourBot = !!joueurActuel.isBot;
     if (!estMonTour && !(isHost && estTourBot)) return;
 
-    // Désactiver le bouton pendant le traitement
+    // Verrouiller le tour
+    turnActionInProgress = true;
     const btnLancer = document.getElementById('rollDiceBtn');
     if (btnLancer) btnLancer.disabled = true;
 
@@ -5192,6 +5425,7 @@ async function rollDice() {
                 ${(caisseSk.euro || 0) < 0 ? `<p style="color:#dc2626;font-size:0.9rem;">📉 Intérêts découvert 3% appliqués</p>` : ''}
             `, `<button class="btn btn-primary" onclick="closeModal(); nextTurn();">OK</button>`);
             if (btnLancer) btnLancer.disabled = false;
+            // turnActionInProgress reste true → sera reset par nextTurn()
             return;
         }
 
@@ -5231,8 +5465,9 @@ async function rollDice() {
                     </p>
                 `, `<button class="btn btn-primary" onclick="closeModal()">🤝 Compris</button>`);
                 sendSystemMessage(`🤝 PHASE 2 déclenchée par la solidarité ! Les actions contributives sont disponibles.`);
-                // Attendre que le modal soit fermé avant de continuer
+                // Le joueur doit relancer → déverrouiller
                 if (btnLancer) btnLancer.disabled = false;
+                turnActionInProgress = false;
                 return; // Le joueur relancera après avoir fermé le modal
             }
         } else {
@@ -5253,8 +5488,9 @@ async function rollDice() {
             // MODE PHYSIQUE : l'hôte encode la valeur via modal graphique
             valeurDe = await demanderValeurDePhysique(joueurActuel.name);
             if (valeurDe === null) {
-                // Annulé → réactiver le bouton
+                // Annulé → réactiver
                 if (btnLancer) btnLancer.disabled = false;
+                turnActionInProgress = false;
                 return;
             }
         } else if (modeDe === 'PHYSIQUE' && !isHost) {
@@ -5268,6 +5504,7 @@ async function rollDice() {
             document.getElementById('diceMessage').textContent =
                 `⏳ En attente de l'hôte pour le dé de ${joueurActuel.name}...`;
             if (btnLancer) btnLancer.disabled = false;
+            turnActionInProgress = false;
             return;
         } else {
             // MODE AUTO : dé virtuel automatique
@@ -5279,7 +5516,12 @@ async function rollDice() {
         document.getElementById('diceMessage').textContent =
             `${joueurActuel.avatar} ${joueurActuel.name} : ${emojiDe(valeurDe)} (${valeurDe})`;
 
-      
+        // ── BONUS AAA : Si le joueur est membre, +50# créés dans le Pot AAA ──
+        const isMembreAAA = COMPTABILITE.potAAA.membres?.includes(joueurActuel.id);
+        if (isMembreAAA) {
+            const bonusCree = await comptaBonusAAALancer(joueurActuel.id);
+            sendSystemMessage(`${LOGO_AAA} +${bonusCree}# créés dans le Pot AAA (${joueurActuel.name} membre)`);
+        }
 
         // ── Déplacement normal ──
         const sens = getSensJoueur(joueurActuel.id);
@@ -5288,9 +5530,11 @@ async function rollDice() {
     } catch (err) {
         console.error('❌ Erreur rollDice:', err);
         sendSystemMessage(`⚠️ Erreur lors du lancer: ${err.message}`);
-    } finally {
+        // Erreur → déverrouiller pour permettre de retenter
+        turnActionInProgress = false;
         if (btnLancer) btnLancer.disabled = false;
     }
+    // Pas de finally: le bouton reste verrouillé jusqu'à nextTurn()
 }
 
 // ============================================================
@@ -5354,7 +5598,7 @@ function choisirSens(joueur, valeurDe) {
                         <div onclick="document.querySelectorAll('#avatarGrid .av-btn').forEach(b=>b.style.border='2px solid #ccc'); this.style.border='3px solid #3b82f6'; window.__avatarChoisi='${a}';"
                             class="av-btn"
                             style="font-size: 1.8rem; cursor: pointer; padding: 6px 10px; border-radius: 8px;
-                            border: ${a === avatarChoisi ? '3px solid #3b82f6' : '2px solid #ccc'}; background: white;">
+                            border: 2px solid #ccc; background: white;">
                             ${a}
                         </div>
                     `).join('')}
@@ -5372,7 +5616,7 @@ function choisirSens(joueur, valeurDe) {
                         transition: all 0.2s;"
                     onmouseover="this.style.transform='scale(1.03)'"
                     onmouseout="this.style.transform='scale(1)'">
-                    <p style="font-size: 1.5rem; margin: 0;">➡️</p>>
+                    <p style="font-size: 1.5rem; margin: 0;">➡️</p>
                     <p style="font-weight: bold; margin: 6px 0 2px 0;">Horaire</p>
                     <p style="font-size: 0.8rem; color: #6b7280;">
                         → case ${caseHoraire} : ${CASES[caseHoraire]?.icon || ''} ${nomHoraire}
@@ -5394,7 +5638,7 @@ function choisirSens(joueur, valeurDe) {
             </div>
         `, '');
 
-        window.__avatarChoisi = avatarChoisi;
+        window.__avatarChoisi = null; // Forcer le joueur à cliquer sur un avatar
         // Callback global pour le modal
        window.__callbackChoixSens = (sens) => {
             closeModal();
@@ -5949,7 +6193,7 @@ function initSystemeDe() {
                     contexte: 'potAAA'
                 });
                 
-                sendSystemMessage(`💚 ${myName} rembourse ${fmt(detteAAA)}# au Pot AAA`);
+                sendSystemMessage(`${LOGO_AAA} ${myName} rembourse ${fmt(detteAAA)}# au Pot AAA`);
             }
             
             // ========== 6. REMBOURSEMENT DETTES ENTRE JOUEURS ==========
@@ -5979,7 +6223,7 @@ function initSystemeDe() {
             
             // Message système avec complément AAA
             if (complementAAA > 0) {
-                sendSystemMessage(`💰 ${myName} ${profilIcon} reçoit ${fmt(salaire)}€ + 💚${fmt(complementAAA)}# (complément AAA)`);
+                sendSystemMessage(`💰 ${myName} ${profilIcon} reçoit ${fmt(salaire)}€ + ${LOGO_AAA}${fmt(complementAAA)}# (complément AAA)`);
             } else {
                 sendSystemMessage(`💰 ${myName} ${profilIcon} reçoit ${fmt(salaire)}€ (${payeur})`);
             }
@@ -6057,7 +6301,7 @@ function initSystemeDe() {
                 modalHtml += `
                     <div style="background: ${aAssez ? '#d1fae5' : '#fef3c7'}; padding: 8px; border-radius: 8px; margin-bottom: 8px;">
                         <div style="display: flex; justify-content: space-between;">
-                            <span>💚 Crédit AAA (prêt relance)</span>
+                            <span>${LOGO_AAA} Crédit AAA (prêt relance)</span>
                             <span style="font-weight: 600;">${aAssez ? '✅ Remboursé -'+fmt(detteAAAPayee)+'#' : '⏳ '+fmt(detteAAA)+'# (pas assez de #)'}</span>
                         </div>
                         <p style="margin: 2px 0 0 0; font-size: 0.8rem; color: #6b7280;">Sans intérêts (0%)</p>
@@ -6069,7 +6313,7 @@ function initSystemeDe() {
                 modalHtml += `
                     <div style="background: #dcfce7; padding: 8px; border-radius: 8px; margin-bottom: 8px; border: 1px solid #86efac;">
                         <div style="display: flex; justify-content: space-between;">
-                            <span style="font-weight: bold; color: #059669;">💚 Complément AAA</span>
+                            <span style="font-weight: bold; color: #059669;">${LOGO_AAA} Complément AAA</span>
                             <span style="font-weight: bold; color: #059669;">+${fmt(complementAAA)}#</span>
                         </div>
                         <p style="margin: 2px 0 0 0; font-size: 0.8rem; color: #6b7280;">Solidarité : compensation de l'érosion</p>
@@ -6271,7 +6515,6 @@ function initSystemeDe() {
                     <p style="margin: 4px 0 0 0;">🏛️ État : ${facture.destinationEtat.toFixed(2)}€ (TVA + Droits)</p>
                     <p style="margin: 2px 0 0 0;">🌍 Export : ${facture.destinationExport.toFixed(2)}€ (TVA + Droits)</p>
                     <p style="margin: 2px 0 0 0;">🛰️ Hors circuit : ${partHorsCircuit.toFixed(2)}€ (économie spéculative / importation)</p>
-                    <p style="margin: 2px 0 0 0;">✨ Bonus : +${fmt(bonusHash)}# du Pot AAA</p>
                 </div>
                 
                 <p><strong>Facture/passage :</strong> ${fmt(calculerFactureActivite(c.id, []))}€ <span style="font-size:0.8rem; color:#6b7280;">(5% de ${fmt(c.prix)}€)</span></p>
@@ -6338,8 +6581,7 @@ function initSystemeDe() {
             await gameRef.child(`activites/${caseId}`).set(myPlayerId);
             await syncComptabiliteToFirebase();
             
-            const bonusHash = Math.floor(prix * 0.1);
-            sendSystemMessage(`🏪 ${myName} achète ${c.icon} (-${fmt(prix)}€ +${fmt(bonusHash)}#) → 🛰️ hors circuit ${fmt(result.partHorsCircuit || 0)}€`);
+            sendSystemMessage(`🏪 ${myName} achète ${c.icon} (-${fmt(prix)}€) → 🛰️ hors circuit ${fmt(result.partHorsCircuit || 0)}€`);
             
             // Vérifier si on peut équiper immédiatement
             const currentEuro = COMPTABILITE.caisseJoueurs[myPlayerId]?.euro || 0;
@@ -6364,29 +6606,49 @@ function initSystemeDe() {
             const bonusA = getBonusHash(c.id, 'A_FIRST');
             const coutB = getPrixB(c.id);
             
+            let buttonsHtml = '';
+            
+            // Bouton A — toujours visible
+            if (checkA.ok) {
+                buttonsHtml += `<button class="btn" style="background:#dcfce7; color:#059669; width:100%; padding:12px; margin-bottom:6px; text-align:left; border-radius:8px;" 
+                    onclick="buyEquipementA(${c.id})">
+                    <strong>🌿 A Écolo — ${fmt(coutA)}€</strong><br>
+                    <span style="font-size:0.85rem;">✨ +${fmt(bonusA)}# du pot AAA</span>
+                </button>`;
+            } else {
+                buttonsHtml += `<div style="background:#f3f4f6; padding:12px; border-radius:8px; margin-bottom:6px; opacity:0.6;">
+                    <strong>🌿 A Écolo — ${fmt(coutA)}€</strong><br>
+                    <span style="font-size:0.85rem; color:#dc2626;">❌ ${checkA.raison}</span>
+                </div>`;
+            }
+            
+            // Bouton B
+            if (checkB.ok) {
+                buttonsHtml += `<button class="btn" style="background:#fee2e2; color:#dc2626; width:100%; padding:12px; margin-bottom:6px; text-align:left; border-radius:8px;" 
+                    onclick="buyEquipementB(${c.id})">
+                    <strong>❄️ B Classique — ${fmt(coutB)}€</strong><br>
+                    <span style="font-size:0.85rem;">Pas de bonus #</span>
+                </button>`;
+            } else {
+                buttonsHtml += `<div style="background:#f3f4f6; padding:12px; border-radius:8px; margin-bottom:6px; opacity:0.6;">
+                    <strong>❄️ B Classique — ${fmt(coutB)}€</strong><br>
+                    <span style="font-size:0.85rem; color:#dc2626;">❌ ${checkB.raison}</span>
+                </div>`;
+            }
+            
             showModal(`
                 <div id="modalTimer" style="text-align: center; margin-bottom: 10px;"></div>
                 <h3>✅ ${c.icon} ${c.name} acheté !</h3>
-                <p style="margin-bottom: 15px;">Tu as <strong>${fmt(currentEuro)}€</strong> restants.</p>
+                <p style="margin-bottom: 10px;">Tu as <strong>${fmt(currentEuro)}€</strong> restants.</p>
                 
-                <div style="background: #f0fdf4; padding: 12px; border-radius: 8px; margin-bottom: 10px;">
+                <div style="background: #f0fdf4; padding: 10px; border-radius: 8px; margin-bottom: 10px;">
                     <p style="margin: 0; font-weight: bold; color: #059669;">
                         💡 Tu peux équiper immédiatement !
                     </p>
                 </div>
                 
-                ${phase >= 2 ? `<div style="background: ${checkA.ok ? '#dcfce7' : '#f3f4f6'}; padding: 10px; border-radius: 8px; margin-bottom: 8px; opacity:${checkA.ok ? 1 : 0.6};">
-                    <p style="margin: 0;"><strong>🌿 A Écolo</strong> — ${fmt(coutA)}€</p>
-                    <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: ${checkA.ok ? '#059669' : '#dc2626'};">${checkA.ok ? `✨ +${fmt(bonusA)}# du pot AAA` : `❌ ${checkA.raison}`}</p>
-                </div>` : ''}
-                
-                <div style="background: ${checkB.ok ? '#fee2e2' : '#f3f4f6'}; padding: 10px; border-radius: 8px; opacity:${checkB.ok ? 1 : 0.6};">
-                    <p style="margin: 0;"><strong>❄️ B Classique</strong> — ${fmt(coutB)}€</p>
-                    <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: ${checkB.ok ? '#6b7280' : '#dc2626'};">${checkB.ok ? 'Pas de bonus #' : `❌ ${checkB.raison}`}</p>
-                </div>
+                ${buttonsHtml}
             `, `
-                ${checkA.ok ? `<button class="btn" style="background: #dcfce7; color: #059669;" onclick="buyEquipementA(${c.id})">🌿 A (${fmt(coutA)}€)</button>` : ''}
-                ${checkB.ok ? `<button class="btn" style="background: #fee2e2; color: #dc2626;" onclick="buyEquipementB(${c.id})">❄️ B (${fmt(coutB)}€)</button>` : ''}
                 <button class="btn" style="background:#fef3c7;color:#b45309;" onclick="closeModal(); showQuickEmprunter();">💰 Emprunter</button>
                 <button class="btn btn-primary" onclick="safeNextTurn();">Suivant ➡️</button>
             `);
@@ -6535,40 +6797,54 @@ function initSystemeDe() {
             // Afficher l'état actuel
             const equipDisplay = total === 0 ? 'Aucun' : equipList.join('');
             
-            let optionsHtml = '';
+            let buttonsHtml = '';
             
-            // Option A (Phase 2+)
-            if (phase >= 2) {
-                const coutA = checkA.ok ? checkA.cout : getCoutEquipement(c.id, 'A', nbA);
-                const bonusA = nbA === 0 ? getBonusHash(c.id, 'A_FIRST') : getBonusHash(c.id, 'A_ADDITIONAL');
-                optionsHtml += `<div style="background: ${checkA.ok ? '#dcfce7' : '#f3f4f6'}; padding: 10px; border-radius: 8px; margin-bottom: 6px; opacity: ${checkA.ok ? 1 : 0.6};">
-                    <p style="margin: 0;"><strong>🌿 Acheter A</strong> — ${fmt(coutA)}€ → État | +${fmt(bonusA)}# du pot AAA</p>
-                    <p style="margin: 2px 0 0 0; font-size: 0.8rem; color: ${checkA.ok ? '#059669' : '#dc2626'};">
-                        ${checkA.ok ? `✅ Disponible` : `❌ ${checkA.raison}`}
-                    </p>
+            // Bouton A — toujours visible
+            const coutA = checkA.ok ? checkA.cout : getCoutEquipement(c.id, 'A', nbA);
+            const bonusA = nbA === 0 ? getBonusHash(c.id, 'A_FIRST') : getBonusHash(c.id, 'A_ADDITIONAL');
+            if (checkA.ok) {
+                buttonsHtml += `<button class="btn" style="background:#dcfce7; color:#059669; width:100%; padding:12px; margin-bottom:6px; text-align:left; border-radius:8px;" 
+                    onclick="buyEquipementA(${c.id})">
+                    <strong>🌿 A Écolo — ${fmt(coutA)}€</strong><br>
+                    <span style="font-size:0.85rem;">✨ +${fmt(bonusA)}# du pot AAA</span>
+                </button>`;
+            } else {
+                buttonsHtml += `<div style="background:#f3f4f6; padding:12px; border-radius:8px; margin-bottom:6px; opacity:0.6;">
+                    <strong>🌿 A Écolo — ${fmt(coutA)}€</strong><br>
+                    <span style="font-size:0.85rem; color:#dc2626;">❌ ${checkA.raison}</span>
                 </div>`;
-                
-                // Option conversion B→A
-                if (nbB > 0) {
-                    const coutConv = getDifferenceAB(c.id);
-                    const bonusConv = getBonusHash(c.id, 'B_TO_A');
-                    optionsHtml += `<div style="background: ${checkConv.ok ? '#fef3c7' : '#f3f4f6'}; padding: 10px; border-radius: 8px; margin-bottom: 6px; opacity: ${checkConv.ok ? 1 : 0.6};">
-                        <p style="margin: 0;"><strong>🔄 Convertir B→A</strong> — ${fmt(coutConv)}€ → État | +${fmt(bonusConv)}# (50%)</p>
-                        <p style="margin: 2px 0 0 0; font-size: 0.8rem; color: ${checkConv.ok ? '#059669' : '#dc2626'};">
-                            ${checkConv.ok ? `✅ Disponible` : `❌ ${checkConv.raison}`}
-                        </p>
+            }
+            
+            // Bouton conversion B→A
+            if (nbB > 0) {
+                const coutConv = getDifferenceAB(c.id);
+                const bonusConv = getBonusHash(c.id, 'B_TO_A');
+                if (checkConv.ok) {
+                    buttonsHtml += `<button class="btn" style="background:#fef3c7; color:#92400e; width:100%; padding:12px; margin-bottom:6px; text-align:left; border-radius:8px;" 
+                        onclick="convertirBtoA(${c.id})">
+                        <strong>🔄 Convertir B→A — ${fmt(coutConv)}€</strong><br>
+                        <span style="font-size:0.85rem;">✨ +${fmt(bonusConv)}# (50%)</span>
+                    </button>`;
+                } else {
+                    buttonsHtml += `<div style="background:#f3f4f6; padding:12px; border-radius:8px; margin-bottom:6px; opacity:0.6;">
+                        <strong>🔄 Convertir B→A — ${fmt(coutConv)}€</strong><br>
+                        <span style="font-size:0.85rem; color:#dc2626;">❌ ${checkConv.raison}</span>
                     </div>`;
                 }
             }
             
-            // Option B
-            if (phase < 2 || checkB.ok) {
-                const coutB = getPrixB(c.id);
-                optionsHtml += `<div style="background: ${checkB.ok ? '#fee2e2' : '#f3f4f6'}; padding: 10px; border-radius: 8px; margin-bottom: 6px; opacity: ${checkB.ok ? 1 : 0.6};">
-                    <p style="margin: 0;"><strong>❄️ Acheter B</strong> — ${fmt(coutB)}€ → État | Pas de bonus #</p>
-                    <p style="margin: 2px 0 0 0; font-size: 0.8rem; color: ${checkB.ok ? '#6b7280' : '#dc2626'};">
-                        ${checkB.ok ? `Augmente la facture` : `❌ ${checkB.raison}`}
-                    </p>
+            // Bouton B
+            const coutB = getPrixB(c.id);
+            if (checkB.ok) {
+                buttonsHtml += `<button class="btn" style="background:#fee2e2; color:#dc2626; width:100%; padding:12px; margin-bottom:6px; text-align:left; border-radius:8px;" 
+                    onclick="buyEquipementB(${c.id})">
+                    <strong>❄️ B Classique — ${fmt(coutB)}€</strong><br>
+                    <span style="font-size:0.85rem;">Pas de bonus #</span>
+                </button>`;
+            } else {
+                buttonsHtml += `<div style="background:#f3f4f6; padding:12px; border-radius:8px; margin-bottom:6px; opacity:0.6;">
+                    <strong>❄️ B Classique — ${fmt(coutB)}€</strong><br>
+                    <span style="font-size:0.85rem; color:#dc2626;">❌ ${checkB.raison}</span>
                 </div>`;
             }
             
@@ -6579,11 +6855,9 @@ function initSystemeDe() {
                 <p><strong>Facture actuelle :</strong> ${fmt(factureActuelle)}€ <span style="font-size:0.8rem; color:#6b7280;">(5% de ${fmt(Math.floor(factureActuelle / 0.05))}€ investi)</span></p>
                 <p>Tu as : <strong>${fmt(currentEuro)}€</strong></p>
                 <hr style="margin: 10px 0;">
-                ${optionsHtml}
+                ${buttonsHtml}
             `, `
-                ${checkA.ok ? `<button class="btn" style="background:#dcfce7; color:#059669;" onclick="buyEquipementA(${c.id})">🌿 A (${fmt(checkA.cout)}€)</button>` : ''}
-                ${checkConv.ok ? `<button class="btn" style="background:#fef3c7; color:#92400e;" onclick="convertirBtoA(${c.id})">🔄 B→A (${fmt(checkConv.cout)}€)</button>` : ''}
-                ${checkB.ok ? `<button class="btn" style="background:#fee2e2; color:#dc2626;" onclick="buyEquipementB(${c.id})">❄️ B (${fmt(checkB.cout)}€)</button>` : ''}
+                <button class="btn" style="background:#fef3c7;color:#b45309;" onclick="closeModal(); showQuickEmprunter();">💰 Emprunter</button>
                 <button class="btn btn-secondary" onclick="passerTour()">⏭️ Passer</button>
             `);
             
@@ -6769,7 +7043,7 @@ function initSystemeDe() {
             const equipDisplay = [...Array(nbA).fill('A'), ...Array(nbB).fill('B')].join('');
             
             showModal(`
-                <h3>💚 Vendre équipement au Pot AAA</h3>
+                <h3>${LOGO_AAA} Vendre équipement au Pot AAA</h3>
                 <p><strong>${c.icon} ${c.name}</strong> [${equipDisplay}]</p>
                 <hr style="margin: 10px 0;">
                 <p>Le Pot AAA rachète à <strong>75%</strong> du prix d'achat</p>
@@ -6781,7 +7055,7 @@ function initSystemeDe() {
                     (Prix achat: ${fmt(prixAchat)}€ × 75% = ${prixRachat}#)
                 </p>
             `, `
-                <button class="btn btn-primary" onclick="vendreEquipementAAA(${actId})">💚 Vendre ${typeVendu}</button>
+                <button class="btn btn-primary" onclick="vendreEquipementAAA(${actId})">${LOGO_AAA} Vendre ${typeVendu}</button>
                 <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
             `);
         }
@@ -6802,7 +7076,7 @@ function initSystemeDe() {
             await gameRef.child(`equipementTypes/${actId}`).set(types);
             await syncComptabiliteToFirebase();
             
-            sendSystemMessage(`💚 ${myName} vend 1 équipement ${result.typeVendu} de ${c.icon} au Pot AAA (+${fmt(result.prixRachat)}#)`);
+            sendSystemMessage(`${LOGO_AAA} ${myName} vend 1 équipement ${result.typeVendu} de ${c.icon} au Pot AAA (+${fmt(result.prixRachat)}#)`);
             
             showModal(`
                 <h3>✅ Équipement ${result.typeVendu} vendu !</h3>
@@ -7207,7 +7481,7 @@ function initSystemeDe() {
                     <p><strong>Dette :</strong> ${fmt(status.emprunt)}€</p>
                     <hr style="margin: 10px 0;">
                     <div style="background: #dcfce7; padding: 10px; border-radius: 8px;">
-                        <p style="margin: 0; font-weight: bold;">💚 Intervention du Pot AAA</p>
+                        <p style="margin: 0; font-weight: bold;">${LOGO_AAA} Intervention du Pot AAA</p>
                         <p style="margin: 4px 0 0 0; font-size: 0.9rem;">
                             En tant que membre, tu bénéficies de :
                         </p>
@@ -7217,7 +7491,7 @@ function initSystemeDe() {
                         </ul>
                     </div>
                 `, `
-                    <button class="btn btn-primary" onclick="declarerFailliteAAA()">💚 Accepter l'aide AAA</button>
+                    <button class="btn btn-primary" onclick="declarerFailliteAAA()">${LOGO_AAA} Accepter l'aide AAA</button>
                     <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
                 `);
             } else {
@@ -7264,10 +7538,10 @@ function initSystemeDe() {
             });
             await syncComptabiliteToFirebase();
             
-            sendSystemMessage(`💚 ${myName} a été sauvé par le Pot AAA ! Dette annulée: ${fmt(result.detteAnnulee)}€, Prêt: +${fmt(result.pretRelance)}#`);
+            sendSystemMessage(`${LOGO_AAA} ${myName} a été sauvé par le Pot AAA ! Dette annulée: ${fmt(result.detteAnnulee)}€, Prêt: +${fmt(result.pretRelance)}#`);
             
             showModal(`
-                <h3>💚 Intervention AAA réussie !</h3>
+                <h3>${LOGO_AAA} Intervention AAA réussie !</h3>
                 <p><strong>Dette annulée :</strong> ${fmt(result.detteAnnulee)}€</p>
                 <p><strong>Prêt de relance :</strong> +${fmt(result.pretRelance)}#</p>
                 <p style="font-size: 0.85rem; color: #4338ca; margin-top: 8px;">
@@ -7276,7 +7550,7 @@ function initSystemeDe() {
                 <p style="font-size: 0.9rem; color: #059669; margin-top: 10px;">
                     Tu repars avec une nouvelle chance. Utilise-la bien !
                 </p>
-            `, `<button class="btn btn-primary" onclick="closeModal(); nextTurn();">Merci AAA ! 💚</button>`);
+            `, `<button class="btn btn-primary" onclick="closeModal(); nextTurn();">Merci AAA ! ${LOGO_AAA}</button>`);
         }
         
         // Déclarer faillite totale (non-membre AAA)
@@ -7409,7 +7683,7 @@ function initSystemeDe() {
             
             // Option 2: Payer en # (Phase 1+ et si assez de #)
             if (canPayHash && c.hash) {
-                buttons += `<button class="btn" style="background:#dcfce7;color:#059669;" onclick="payOwner(${c.id}, '${ownerId}', 0, ${facture})">💚 Payer ${facture}#</button>`;
+                buttons += `<button class="btn" style="background:#dcfce7;color:#059669;" onclick="payOwner(${c.id}, '${ownerId}', 0, ${facture})">${LOGO_AAA} Payer ${facture}#</button>`;
             }
             
             // Option 3: Paiement mixte (négociation)
@@ -8197,7 +8471,7 @@ function initSystemeDe() {
                 <div style="margin: 18px 0;">
                     <div style="display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 600; margin-bottom: 4px;">
                         <span>💶 100% €</span>
-                        <span>💚 100% #</span>
+                        <span>${LOGO_AAA} 100% #</span>
                     </div>
                     <input type="range" id="negoMixSlider" min="${minPctHash}" max="${maxPctHash}" value="${defaultPct}" 
                            oninput="updateMixDisplay(${facture})" style="width: 100%; accent-color: #059669;">
@@ -8227,7 +8501,7 @@ function initSystemeDe() {
             
             document.getElementById('negoMixResult').innerHTML = `
                 <p style="margin: 0; font-size: 1.2rem;">
-                    <strong>💶 ${fmt(euroAmount)}€</strong>  +  <strong style="color: #059669;">💚 ${fmt(hashAmount)}#</strong>
+                    <strong>💶 ${fmt(euroAmount)}€</strong>  +  <strong style="color: #059669;">${LOGO_AAA} ${fmt(hashAmount)}#</strong>
                 </p>
                 <p style="margin: 4px 0 0 0; font-size: 0.95rem; color: #374151;">
                     = ${fmt(euroAmount + hashAmount)} / ${fmt(facture)} ✅
@@ -8470,7 +8744,7 @@ function initSystemeDe() {
                 compteDebit: 501, compteCredit: 468, montantEspoyr: montantPaye, activiteId: caseId
             });
             
-            sendSystemMessage(`💚 ${myName} paie ${fmt(montantPaye)}# à ${ownerPlayer?.name} (${c.icon})`);
+            sendSystemMessage(`${LOGO_AAA} ${myName} paie ${fmt(montantPaye)}# à ${ownerPlayer?.name} (${c.icon})`);
             
             // 3. Si pas assez pour couvrir toute la facture, le reste va en découvert €
             let resteEnEuro = 0;
@@ -8491,7 +8765,7 @@ function initSystemeDe() {
                     await gameRef.child(`activites_hash/${actId}`).set(true);
                     CASES[actId].hash = true;
                 }
-                sendSystemMessage(`💚 ${myName} accepte le paiement mixte sur toutes ses activités`);
+                sendSystemMessage(`${LOGO_AAA} ${myName} accepte le paiement mixte sur toutes ses activités`);
             }
             
             // 5. Skip tour suivant
@@ -9046,10 +9320,10 @@ function initSystemeDe() {
             // Afficher le modal avec facture (obligatoire, pas d'annulation)
             showModal(`
                 <h3>${c.icon} ${c.name}</h3>
-                ${factureHTML}
-                <p style="font-size: 0.85rem; color: #6b7280; margin-top: 10px;">
-                    💡 100% versé à l'État (TVA + Services)
+                <p style="font-size: 0.9rem; color: #6b7280; font-style: italic; margin: 6px 0 10px 0;">
+                    ${c.description || ''}
                 </p>
+                ${factureHTML}
             `, `<button class="btn btn-primary" onclick="confirmerPaiementFrais('${c.id}', ${c.cout}, '${c.name}', '${c.icon}')">Payer ${c.cout}€</button>`);
         }
         
@@ -9075,12 +9349,12 @@ function initSystemeDe() {
                 soldeAfter: caisse.euro
             }, result.ledgerEntryIds || []);
             
-            sendSystemMessage(`${caseIcon} ${myName} paie ${fmt(cout)}€ (${caseName}) → 🏛️ État`);
+            sendSystemMessage(`${caseIcon} ${myName} paie ${fmt(cout)}€ de ${caseName}`);
             
             // Confirmation rapide
             showModal(`
                 <h3>✅ Paiement effectué</h3>
-                <p><strong>${fmt(cout)}€</strong> versés à l'État</p>
+                <p><strong>${fmt(cout)}€</strong> de ${caseName} payés</p>
                 <p style="font-size: 0.85rem; color: #6b7280;">
                     HT: ${result.facture.ht.toFixed(2)}€ | TVA: ${result.facture.tva.toFixed(2)}€
                 </p>
@@ -9131,75 +9405,71 @@ function initSystemeDe() {
                 return;
             }
             
-            showModal(`
-                <h3>🏛️ Case Taxe — Déclaration fiscale</h3>
-                <div style="background: #fef3c7; padding: 12px; border-radius: 8px; margin: 10px 0;">
-                    <p style="margin: 0; font-weight: bold;">📊 Détail de ton patrimoine :</p>
-                    ${detailHtml}
-                    <hr style="margin: 8px 0; border-color: #fbbf24;">
-                    <p style="margin: 4px 0;">Activités : <strong>${fmt(totalActivites)}€</strong></p>
-                    <p style="margin: 4px 0;">Équipements : <strong>${fmt(totalEquipements)}€</strong></p>
-                    <p style="margin: 4px 0; font-weight: bold; font-size: 1.05rem;">
-                        Total patrimoine : <strong>${fmt(patrimoine)}€</strong>
-                    </p>
-                    <p style="margin: 8px 0 0 0; text-align: center;">
-                        🏛️ Taxe estimée (10%) : <strong>${fmt(taxeEstimee)}€</strong>
-                    </p>
-                </div>
-                <div style="background: #fef2f2; padding: 10px; border-radius: 8px; margin: 8px 0;">
-                    <p style="margin: 0; text-align: center; font-size: 0.85rem; color: #92400e;">
-                        📋 <strong>Validez votre déclaration</strong> pour payer la taxe normale.<br>
-                        Si vous ne validez pas et franchissez la Ligne 3,<br>
-                        tirage de dé : 🎲 1,3,4,6 = <strong>pénalité +50%</strong> | 🎲 2,5 = <strong>réduction -20%</strong>
-                    </p>
-                </div>
-            `, `
-                <div style="display: flex; flex-direction: column; gap: 8px; width: 100%;">
-                    <button class="btn btn-primary" style="width: 100%;" 
-                        onclick="validerDeclarationFiscale();">
-                        ✅ Valider ma déclaration
-                    </button>
-                    <button class="btn" style="width: 100%; background: #f3f4f6; color: #6b7280;" 
-                        onclick="refuserDeclarationFiscale();">
-                        ❌ Passer (je prends le risque)
-                    </button>
-                </div>
-            `);
+            // Modal NON fermable par overlay (pas de onclick sur overlay)
+            document.getElementById('modalContainer').innerHTML = `
+                <div class="modal-overlay">
+                    <div class="modal">
+                        <h3>🏛️ Case Taxe — Déclaration fiscale</h3>
+                        <div style="background: #fef3c7; padding: 12px; border-radius: 8px; margin: 10px 0;">
+                            <p style="margin: 0; font-weight: bold;">📊 Détail de ton patrimoine :</p>
+                            ${detailHtml}
+                            <hr style="margin: 8px 0; border-color: #fbbf24;">
+                            <p style="margin: 4px 0;">Activités : <strong>${fmt(totalActivites)}€</strong></p>
+                            <p style="margin: 4px 0;">Équipements : <strong>${fmt(totalEquipements)}€</strong></p>
+                            <p style="margin: 4px 0; font-weight: bold; font-size: 1.05rem;">
+                                Total patrimoine : <strong>${fmt(patrimoine)}€</strong>
+                            </p>
+                            <p style="margin: 8px 0 0 0; text-align: center;">
+                                🏛️ Taxe estimée (10%) : <strong>${fmt(taxeEstimee)}€</strong>
+                            </p>
+                        </div>
+                        <div style="background: #fef2f2; padding: 10px; border-radius: 8px; margin: 8px 0;">
+                            <p style="margin: 0; text-align: center; font-size: 0.85rem; color: #92400e;">
+                                📋 <strong>Validez votre déclaration</strong> pour payer la taxe normale.<br>
+                                Si vous ne validez pas et franchissez la Ligne 3,<br>
+                                tirage de dé : 🎲 1,3,4,6 = <strong>pénalité +50%</strong> | 🎲 2,5 = <strong>réduction -20%</strong>
+                            </p>
+                        </div>
+                        <div class="modal-buttons">
+                            <div style="display: flex; flex-direction: column; gap: 8px; width: 100%;">
+                                <button class="btn btn-primary" style="width: 100%;" 
+                                    onclick="validerDeclarationFiscale();">
+                                    ✅ Valider ma déclaration
+                                </button>
+                                <button class="btn" style="width: 100%; background: #f3f4f6; color: #6b7280;" 
+                                    onclick="refuserDeclarationFiscale();">
+                                    ❌ Passer (je prends le risque)
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
         }
         
         async function validerDeclarationFiscale() {
-            // Sauvegarder dans Firebase
-            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/declarationFiscale`).set(true);
-            if (playersData[myPlayerId]) playersData[myPlayerId].declarationFiscale = true;
-            
             closeModal();
-            sendSystemMessage(`📋 ${myName} valide sa déclaration fiscale ✅`);
-            
-            showModal(`
-                <h3>✅ Déclaration validée</h3>
-                <p style="text-align: center;">Ta déclaration fiscale est enregistrée.</p>
-                <p style="text-align: center; font-size: 0.85rem; color: #059669;">
-                    Au franchissement de la Ligne 3, tu paieras la taxe normale (10%).
-                </p>
-            `, `<button class="btn btn-primary" onclick="safeNextTurn();">OK ✓</button>`);
+            try {
+                await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/declarationFiscale`).set(true);
+                if (playersData[myPlayerId]) playersData[myPlayerId].declarationFiscale = true;
+                sendSystemMessage(`📋 ${myName} valide sa déclaration fiscale ✅`);
+            } catch(e) {
+                console.error('Erreur validation fiscale:', e);
+            }
+            // Toujours passer au tour suivant
+            await nextTurn();
         }
         
         async function refuserDeclarationFiscale() {
-            // Marquer comme non validé
-            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/declarationFiscale`).set(false);
-            if (playersData[myPlayerId]) playersData[myPlayerId].declarationFiscale = false;
-            
             closeModal();
-            sendSystemMessage(`📋 ${myName} refuse de valider sa déclaration fiscale ⚠️`);
-            
-            showModal(`
-                <h3>⚠️ Déclaration non validée</h3>
-                <p style="text-align: center;">Tu prends le risque !</p>
-                <p style="text-align: center; font-size: 0.85rem; color: #dc2626;">
-                    Au franchissement de la Ligne 3, tirage de dé :<br>
-                    🎲 1,3,4,6 = pénalité +50% | 🎲 2,5 = réduction -20%
-                </p>
-            `, `<button class="btn btn-primary" onclick="safeNextTurn();">OK ✓</button>`);
+            try {
+                await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/declarationFiscale`).set(false);
+                if (playersData[myPlayerId]) playersData[myPlayerId].declarationFiscale = false;
+                sendSystemMessage(`📋 ${myName} refuse de valider sa déclaration fiscale ⚠️`);
+            } catch(e) {
+                console.error('Erreur refus fiscal:', e);
+            }
+            // Toujours passer au tour suivant
+            await nextTurn();
         }
         
         // ========== LIGNE 3 : Taxe 10% patrimoine au franchissement ==========
@@ -9376,7 +9646,7 @@ function initSystemeDe() {
                 }
                 
                 const soldeBefore = COMPTABILITE.caisseJoueurs[p.id].euro;
-                const result = await comptaFrais(p.id, c.cout, 'Culture');
+                const result = await comptaFrais(p.id, c.cout, c.name);
                 if (result?.ledgerEntryIds) ledgerEntryIds.push(...result.ledgerEntryIds);
                 
                 const soldeAfter = COMPTABILITE.caisseJoueurs[p.id].euro;
@@ -9395,12 +9665,15 @@ function initSystemeDe() {
                 effects: playerEffects
             }, ledgerEntryIds);
             
-            sendSystemMessage(`📚 Culture ! Tout le monde paie ${fmt(c.cout)}€`);
+            sendSystemMessage(`${c.icon} ${c.name} ! Tout le monde paie ${fmt(c.cout)}€`);
             
             // Afficher le modal avec un timer qui passe au tour suivant automatiquement
             let countdown = 3;
             showModal(`
-                <h3>📚 Culture</h3>
+                <h3>${c.icon} ${c.name}</h3>
+                <p style="font-size: 0.9rem; color: #6b7280; font-style: italic; margin: 4px 0 8px 0;">
+                    ${c.description || ''}
+                </p>
                 <p>Tous les joueurs paient <strong>${fmt(c.cout)}€</strong></p>
                 <div style="background: #fef3c7; padding: 10px; border-radius: 8px; margin: 10px 0;">
                     ${playerEffects.map(e => `<p style="margin: 3px 0;">${playersData[e.playerId]?.avatar || '👤'} ${e.name}: ${fmt(e.before)}€ → ${fmt(e.after)}€</p>`).join('')}
@@ -9425,6 +9698,7 @@ function initSystemeDe() {
         
         // ========== TOUR SUIVANT ==========
         let nextTurnInProgress = false;
+        let turnActionInProgress = false; // Protection anti-double-lancer
         
         async function nextTurn() {
             // Protection contre les appels multiples avec timeout de sécurité
@@ -9438,6 +9712,7 @@ function initSystemeDe() {
             const safetyTimeout = setTimeout(() => {
                 console.warn('⚠️ nextTurn timeout - reset forcé');
                 nextTurnInProgress = false;
+                turnActionInProgress = false;
             }, 10000);
             
             try {
@@ -9484,6 +9759,7 @@ function initSystemeDe() {
             } finally {
                 clearTimeout(safetyTimeout);
                 nextTurnInProgress = false;
+                turnActionInProgress = false; // Déverrouiller pour le prochain joueur
             }
         }
         
@@ -9840,7 +10116,7 @@ function initSystemeDe() {
             const isMembre = COMPTABILITE.potAAA.membres?.includes(bot.id) || bot.membreAAA;
             if (isMembre) {
                 await comptaBonusAAALancer(bot.id);
-                sendSystemMessage(`💚 +50# créés dans le Pot AAA (${bot.name} membre)`);
+                sendSystemMessage(`${LOGO_AAA} +50# créés dans le Pot AAA (${bot.name} membre)`);
             }
             
             // *** ANIMATION : Passer sur chaque case ***
@@ -10015,7 +10291,7 @@ function initSystemeDe() {
                             contexte: 'potAAA'
                         });
                         
-                        sendSystemMessage(`💚 ${bot.name} rembourse ${fmt(detteAAABot)}# au Pot AAA`);
+                        sendSystemMessage(`${LOGO_AAA} ${bot.name} rembourse ${fmt(detteAAABot)}# au Pot AAA`);
                     } else {
                         sendSystemMessage(`⏳ ${bot.name} : créance AAA ${fmt(detteAAABot)}# en attente (pas assez de #)`);
                     }
@@ -10067,7 +10343,7 @@ function initSystemeDe() {
                 await syncComptabiliteToFirebase();
                 
                 if (complementAAA > 0) {
-                    sendSystemMessage(`💰 ${bot.name} reçoit ${fmt(salaire)}€ + 💚${fmt(complementAAA)}# (complément AAA)`);
+                    sendSystemMessage(`💰 ${bot.name} reçoit ${fmt(salaire)}€ + ${LOGO_AAA}${fmt(complementAAA)}# (complément AAA)`);
                 } else {
                     sendSystemMessage(`💰 ${bot.name} reçoit ${fmt(salaire)}€${phase >= 2 ? ' (érosion)' : ''}`);
                 }
@@ -10547,7 +10823,7 @@ function initSystemeDe() {
             `).join('');
             
             showModal(`
-                <h3>📋 Relevé de Compte</h3>
+                <h3>📋 Relevé détaillé</h3>
                 <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;">${selectJoueur}</div>
                 
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
@@ -10704,7 +10980,7 @@ function initSystemeDe() {
             
             const bilanAAA = `
                 <tr>
-                    <td colspan="6" style="background:#dcfce7;"><strong>💚 Pot AAA (${bilan.bilanAAA.membres} membres)</strong></td>
+                    <td colspan="6" style="background:#dcfce7;"><strong>${LOGO_AAA} Pot AAA (${bilan.bilanAAA.membres} membres)</strong></td>
                 </tr>
                 <tr>
                     <td>Solde</td>
@@ -10896,37 +11172,6 @@ function initSystemeDe() {
             const limiteEmprunt = Math.max(750, Math.floor(masseMonetaire / nbJoueurs));
             const capaciteEmprunt = Math.max(0, limiteEmprunt - empruntBanque);
             
-            // ═══════════════════════════════════════════════════════════════
-            // Journal — Correction des champs (euro/espoyr au lieu de montantEuro/montantEspoyr)
-            // ═══════════════════════════════════════════════════════════════
-            const journalJoueur = (COMPTABILITE.parJoueur?.[joueurId]?.journal || []).slice(-10).reverse();
-            const journalHtml = journalJoueur.length > 0 ? 
-                journalJoueur.map(e => {
-                    // Essayer plusieurs formats de champs possibles
-                    const euroDebit = e.debit?.euro || e.debit?.montantEuro || 0;
-                    const euroCredit = e.credit?.euro || e.credit?.montantEuro || 0;
-                    const espoyrDebit = e.debit?.espoyr || e.debit?.montantEspoyr || 0;
-                    const espoyrCredit = e.credit?.espoyr || e.credit?.montantEspoyr || 0;
-                    
-                    const euroVal = euroDebit || euroCredit || 0;
-                    const espoyrVal = espoyrDebit || espoyrCredit || 0;
-                    const euroSign = euroDebit > 0 ? '+' : '-';
-                    const espoyrSign = espoyrDebit > 0 ? '+' : '-';
-                    
-                    return `
-                    <tr style="font-size:0.7rem;">
-                        <td>#${e.id || '?'}</td>
-                        <td>${e.libelle || ''}</td>
-                        <td style="text-align:right; color:${euroDebit > 0 ? '#059669' : '#dc2626'}">
-                            ${euroVal > 0 ? euroSign + euroVal + '€' : ''}
-                        </td>
-                        <td style="text-align:right; color:#7c3aed;">
-                            ${espoyrVal > 0 ? espoyrSign + espoyrVal + '#' : ''}
-                        </td>
-                    </tr>
-                `}).join('') :
-                '<tr><td colspan="4" style="font-size:0.75rem; color:#9ca3af;">Aucune écriture</td></tr>';
-            
             // Liste des activités
             const activitesHtml = activites.length > 0 ?
                 activites.map(([actId, act]) => {
@@ -10944,8 +11189,53 @@ function initSystemeDe() {
                 <p style="font-size:0.85rem; color:#6b7280; margin-bottom:10px;">
                     Profil: <strong>${player.profil || 'contributif'}</strong> 
                     ${player.isBot ? '🤖 Robot' : ''} 
-                    ${isMembre ? '💚 Membre AAA' : ''}
+                    ${isMembre ? LOGO_AAA + ' Membre AAA' : ''}
                 </p>
+                
+                <!-- ══════════════════════════════════════════════════════ -->
+                <!-- BOUTON RELEVÉ DÉTAILLÉ                                -->
+                <!-- ══════════════════════════════════════════════════════ -->
+                <div style="text-align:center; margin-bottom:12px;">
+                    <button class="btn" style="background:#dbeafe; color:#2563eb; width:100%; padding:10px; font-size:0.95rem;" 
+                        onclick="closeModal(); showReleveCompteModal('${joueurId}');">
+                        📋 Relevé détaillé
+                    </button>
+                </div>
+                
+                <!-- ══════════════════════════════════════════════════════ -->
+                <!-- ACTIVITÉS POSSÉDÉES                                   -->
+                <!-- ══════════════════════════════════════════════════════ -->
+                <div style="background:#e0e7ff; padding:10px; border-radius:8px; margin-bottom:10px;">
+                    <p style="margin:0 0 5px 0; font-weight:bold;">🏪 Activités possédées (${activites.length})</p>
+                    <div style="display:flex; flex-wrap:wrap; gap:4px;">
+                        ${activitesHtml}
+                    </div>
+                </div>
+                
+                <!-- ══════════════════════════════════════════════════════ -->
+                <!-- CUMULES (Rentrées & Sorties)                          -->
+                <!-- ══════════════════════════════════════════════════════ -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                    <div style="background:#f0fdf4; padding:8px; border-radius:6px;">
+                        <p style="margin:0; font-size:0.8rem; font-weight:bold; color:#059669;">📥 Rentrées</p>
+                        <p style="margin:4px 0 0 0; font-size:0.8rem;">Salaires: ${fmt(caisse.salairesRecus || 0)}€</p>
+                        <p style="margin:2px 0 0 0; font-size:0.8rem;">Factures reçues: ${fmt(caisse.facturesRecues || 0)}€</p>
+                        <p style="margin:2px 0 0 0; font-size:0.8rem;">Apports activités: ${fmt(caisse.apportsActivites || 0)}€</p>
+                    </div>
+                    <div style="background:#fef2f2; padding:8px; border-radius:6px;">
+                        <p style="margin:0; font-size:0.8rem; font-weight:bold; color:#dc2626;">📤 Sorties</p>
+                        <p style="margin:4px 0 0 0; font-size:0.8rem;">Factures payées: ${fmt(caisse.facturesPayees || 0)}€</p>
+                        <p style="margin:2px 0 0 0; font-size:0.8rem;">Intérêts payés: ${fmt(caisse.interetsPayes || 0)}€</p>
+                        <p style="margin:2px 0 0 0; font-size:0.8rem;">Taxes payées: ${fmt(caisse.taxesPayees || 0)}€</p>
+                    </div>
+                </div>
+                
+                <!-- ══════════════════════════════════════════════════════ -->
+                <!-- CAPACITÉ D'EMPRUNT                                    -->
+                <!-- ══════════════════════════════════════════════════════ -->
+                <div style="background:#fef3c7; padding:8px 12px; border-radius:8px; margin-bottom:10px; text-align:center;">
+                    🏦 <strong>Capacité emprunt:</strong> ${fmt(capaciteEmprunt)}€ disponible sur ${fmt(limiteEmprunt)}€ max
+                </div>
                 
                 <!-- ══════════════════════════════════════════════════════ -->
                 <!-- BILAN € (Euros)                                       -->
@@ -10960,11 +11250,11 @@ function initSystemeDe() {
                         <div style="background:white; padding:10px; border-radius:8px 0 0 8px; border-right:2px solid #10b981;">
                             <p style="margin:0 0 8px 0; font-weight:bold; color:#059669; text-align:center;">ACTIF €</p>
                             <table style="width:100%; font-size:0.85rem;">
-                                <tr><td>500 - Caisse €</td><td style="text-align:right;">${actifEuro_500.toFixed(0)}€</td></tr>
-                                <tr><td>200 - Activités</td><td style="text-align:right;">${actifEuro_200.toFixed(0)}€</td></tr>
+                                <tr><td>500 - Caisse €</td><td style="text-align:right;">${fmt(actifEuro_500)}€</td></tr>
+                                <tr><td>200 - Activités</td><td style="text-align:right;">${fmt(actifEuro_200)}€</td></tr>
                                 <tr style="border-top:2px solid #059669;">
                                     <td><strong>TOTAL ACTIF</strong></td>
-                                    <td style="text-align:right;"><strong>${totalActifEuro.toFixed(0)}€</strong></td>
+                                    <td style="text-align:right;"><strong>${fmt(totalActifEuro)}€</strong></td>
                                 </tr>
                             </table>
                         </div>
@@ -10973,17 +11263,17 @@ function initSystemeDe() {
                         <div style="background:white; padding:10px; border-radius:0 8px 8px 0;">
                             <p style="margin:0 0 8px 0; font-weight:bold; color:#dc2626; text-align:center;">PASSIF €</p>
                             <table style="width:100%; font-size:0.85rem;">
-                                <tr><td>101 - Capital initial</td><td style="text-align:right;">${passifEuro_101.toFixed(0)}€</td></tr>
+                                <tr><td>101 - Capital initial</td><td style="text-align:right;">${fmt(passifEuro_101)}€</td></tr>
                                 <tr>
                                     <td>109 - Résultat</td>
                                     <td style="text-align:right; color:${resultatEuro_109 >= 0 ? '#059669' : '#dc2626'};">
-                                        ${resultatEuro_109 >= 0 ? '+' : ''}${resultatEuro_109.toFixed(0)}€
+                                        ${resultatEuro_109 >= 0 ? '+' : ''}${fmt(resultatEuro_109)}€
                                     </td>
                                 </tr>
-                                <tr><td>165 - Emprunt banque</td><td style="text-align:right;">${passifEuro_165.toFixed(0)}€</td></tr>
+                                <tr><td>165 - Emprunt banque</td><td style="text-align:right;">${fmt(passifEuro_165)}€</td></tr>
                                 <tr style="border-top:2px solid #dc2626;">
                                     <td><strong>TOTAL PASSIF</strong></td>
-                                    <td style="text-align:right;"><strong>${totalPassifEuro.toFixed(0)}€</strong></td>
+                                    <td style="text-align:right;"><strong>${fmt(totalPassifEuro)}€</strong></td>
                                 </tr>
                             </table>
                         </div>
@@ -10994,7 +11284,7 @@ function initSystemeDe() {
                             ${bilanEuroEquilibre ? '✅ Équilibré' : '⚠️ Déséquilibré'}
                         </div>
                         <div style="background:#f0fdf4; padding:6px 12px; border-radius:6px;">
-                            <strong>Patrimoine net €:</strong> ${patrimoineNetEuro >= 0 ? '+' : ''}${patrimoineNetEuro.toFixed(0)}€
+                            <strong>Patrimoine net €:</strong> ${patrimoineNetEuro >= 0 ? '+' : ''}${fmt(patrimoineNetEuro)}€
                         </div>
                     </div>
                 </div>
@@ -11012,10 +11302,10 @@ function initSystemeDe() {
                         <div style="background:white; padding:10px; border-radius:8px 0 0 8px; border-right:2px solid #8b5cf6;">
                             <p style="margin:0 0 8px 0; font-weight:bold; color:#7c3aed; text-align:center;">ACTIF #</p>
                             <table style="width:100%; font-size:0.85rem;">
-                                <tr><td>501 - Caisse #</td><td style="text-align:right;">${actifEspoyr_501.toFixed(0)}#</td></tr>
+                                <tr><td>501 - Caisse #</td><td style="text-align:right;">${fmt(actifEspoyr_501)}#</td></tr>
                                 <tr style="border-top:2px solid #7c3aed;">
                                     <td><strong>TOTAL ACTIF</strong></td>
-                                    <td style="text-align:right;"><strong>${totalActifEspoyr.toFixed(0)}#</strong></td>
+                                    <td style="text-align:right;"><strong>${fmt(totalActifEspoyr)}#</strong></td>
                                 </tr>
                             </table>
                         </div>
@@ -11024,16 +11314,16 @@ function initSystemeDe() {
                         <div style="background:white; padding:10px; border-radius:0 8px 8px 0;">
                             <p style="margin:0 0 8px 0; font-weight:bold; color:#dc2626; text-align:center;">PASSIF #</p>
                             <table style="width:100%; font-size:0.85rem;">
-                                ${passifEspoyr_166 > 0 ? `<tr><td>166 - Créance AAA</td><td style="text-align:right;">${passifEspoyr_166.toFixed(0)}#</td></tr>` : ''}
+                                ${passifEspoyr_166 > 0 ? `<tr><td>166 - Créance AAA</td><td style="text-align:right;">${fmt(passifEspoyr_166)}#</td></tr>` : ''}
                                 <tr>
                                     <td>109 - Résultat</td>
                                     <td style="text-align:right; color:${resultatEspoyr_109 >= 0 ? '#059669' : '#dc2626'};">
-                                        ${resultatEspoyr_109 >= 0 ? '+' : ''}${resultatEspoyr_109.toFixed(0)}#
+                                        ${resultatEspoyr_109 >= 0 ? '+' : ''}${fmt(resultatEspoyr_109)}#
                                     </td>
                                 </tr>
                                 <tr style="border-top:2px solid #dc2626;">
                                     <td><strong>TOTAL PASSIF</strong></td>
-                                    <td style="text-align:right;"><strong>${totalPassifEspoyr.toFixed(0)}#</strong></td>
+                                    <td style="text-align:right;"><strong>${fmt(totalPassifEspoyr)}#</strong></td>
                                 </tr>
                             </table>
                         </div>
@@ -11044,61 +11334,8 @@ function initSystemeDe() {
                             ${bilanEspoyrEquilibre ? '✅ Équilibré' : '⚠️ Déséquilibré'}
                         </div>
                         <div style="background:#f5f3ff; padding:6px 12px; border-radius:6px;">
-                            <strong>Patrimoine net #:</strong> ${patrimoineNetEspoyr >= 0 ? '+' : ''}${patrimoineNetEspoyr.toFixed(0)}#
+                            <strong>Patrimoine net #:</strong> ${patrimoineNetEspoyr >= 0 ? '+' : ''}${fmt(patrimoineNetEspoyr)}#
                         </div>
-                    </div>
-                </div>
-                
-                <!-- ══════════════════════════════════════════════════════ -->
-                <!-- CAPACITÉ D'EMPRUNT                                    -->
-                <!-- ══════════════════════════════════════════════════════ -->
-                <div style="background:#fef3c7; padding:8px 12px; border-radius:8px; margin-bottom:10px; text-align:center;">
-                    🏦 <strong>Capacité emprunt:</strong> ${fmt(capaciteEmprunt)}€ disponible sur ${fmt(limiteEmprunt)}€ max
-                </div>
-                
-                <!-- ══════════════════════════════════════════════════════ -->
-                <!-- ACTIVITÉS POSSÉDÉES                                   -->
-                <!-- ══════════════════════════════════════════════════════ -->
-                <div style="background:#e0e7ff; padding:10px; border-radius:8px; margin-bottom:10px;">
-                    <p style="margin:0 0 5px 0; font-weight:bold;">🏪 Activités possédées (${activites.length})</p>
-                    <div style="display:flex; flex-wrap:wrap; gap:4px;">
-                        ${activitesHtml}
-                    </div>
-                </div>
-                
-                <!-- ══════════════════════════════════════════════════════ -->
-                <!-- CUMULES (Flux historiques)                            -->
-                <!-- ══════════════════════════════════════════════════════ -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
-                    <div style="background:#f0fdf4; padding:8px; border-radius:6px;">
-                        <p style="margin:0; font-size:0.8rem; font-weight:bold; color:#059669;">📥 Cumulés (reçus)</p>
-                        <p style="margin:4px 0 0 0; font-size:0.8rem;">Salaires: ${(caisse.salairesRecus || 0).toFixed(0)}€</p>
-                        <p style="margin:2px 0 0 0; font-size:0.8rem;">Factures reçues: ${(caisse.facturesRecues || 0).toFixed(0)}€</p>
-                        <p style="margin:2px 0 0 0; font-size:0.8rem;">Apports activités: ${(caisse.apportsActivites || 0).toFixed(0)}€</p>
-                    </div>
-                    <div style="background:#fef2f2; padding:8px; border-radius:6px;">
-                        <p style="margin:0; font-size:0.8rem; font-weight:bold; color:#dc2626;">📤 Cumulés (payés)</p>
-                        <p style="margin:4px 0 0 0; font-size:0.8rem;">Factures payées: ${(caisse.facturesPayees || 0).toFixed(0)}€</p>
-                        <p style="margin:2px 0 0 0; font-size:0.8rem;">Intérêts payés: ${(caisse.interetsPayes || 0).toFixed(0)}€</p>
-                        <p style="margin:2px 0 0 0; font-size:0.8rem;">Taxes payées: ${(caisse.taxesPayees || 0).toFixed(0)}€</p>
-                    </div>
-                </div>
-                
-                <!-- ══════════════════════════════════════════════════════ -->
-                <!-- JOURNAL                                               -->
-                <!-- ══════════════════════════════════════════════════════ -->
-                <div style="background:#f3f4f6; padding:10px; border-radius:8px;">
-                    <p style="margin:0 0 5px 0; font-weight:bold;">📒 Journal (10 dernières écritures)</p>
-                    <div style="max-height:150px; overflow-y:auto;">
-                        <table style="width:100%; border-collapse:collapse;">
-                            <tr style="font-size:0.7rem; background:#e5e7eb; position:sticky; top:0;">
-                                <th style="text-align:left; padding:2px;">ID</th>
-                                <th style="text-align:left; padding:2px;">Libellé</th>
-                                <th style="text-align:right; padding:2px;">€</th>
-                                <th style="text-align:right; padding:2px;">#</th>
-                            </tr>
-                            ${journalHtml}
-                        </table>
                     </div>
                 </div>
             `, `
@@ -11804,7 +12041,7 @@ function initSystemeDe() {
             const totalCreances = creances.reduce((s, [_, v]) => s + v, 0);
             
             showModal(`
-                <h3>💚 Pot AAA (Aide Amicale Autonome)</h3>
+                <h3>${LOGO_AAA} Pot AAA (Aide Amicale Autonome)</h3>
                 
                 <div style="background:#dcfce7; padding:10px; border-radius:8px; margin-bottom:10px;">
                     <p style="margin:0; font-weight:bold;">📊 Bilan du Pot AAA</p>
@@ -11839,25 +12076,28 @@ function initSystemeDe() {
                 
                 <hr style="margin: 10px 0;">
                 ${!isMembre ? `
-                    <p>❌ Tu n'es pas membre.</p>
-                    <p style="font-size:0.9rem;">Adhère pour :</p>
-                    <ul style="font-size:0.85rem; margin:5px 0;">
-                        <li>Cotiser des # et recevoir des bonus</li>
-                        <li>Emprunter des # sans intérêts</li>
-                        <li>Bénéficier de l'aide en cas de faillite</li>
-                    </ul>
+                    <p>❌ Tu n'es pas encore membre.</p>
+                    <div style="background:#fffbeb; padding:10px; border-radius:8px; margin:8px 0; font-size:0.85rem; line-height:1.4; color:#78350f;">
+                        <p style="margin:0; font-style:italic;">"Tout humain, par le simple fait de son existence, crée une même masse de valeur d'échange."</p>
+                        <p style="margin:6px 0 0 0;">Les # financent ce que la communauté considère comme utile : eau, nourriture, soins, école, justice, culture…</p>
+                        <p style="margin:4px 0 0 0; font-size:0.8rem;">🌐 <a href="https://espoyr.com" target="_blank" style="color:#2563eb;">espoyr.com</a></p>
+                    </div>
                 ` : `
                     <p>✅ <strong>Tu es membre</strong></p>
                     <p>Ton solde # : <strong>${fmt(myEspoyr)}#</strong></p>
                     ${maCreance > 0 ? `<p style="color:var(--orange);">Crédit en cours : ${fmt(maCreance)}#</p>` : ''}
+                    <div style="background:#fffbeb;padding:8px;border-radius:6px;margin:8px 0;font-size:0.85rem;">
+                        <p style="margin:0;">💡 Les crédits sont soumis au <strong>vote des membres</strong>.</p>
+                        <p style="margin:4px 0 0 0;">Pot disponible : <strong>${fmt(potAAA.solde || 0)}#</strong></p>
+                    </div>
                     <div style="display: flex; gap: 10px; margin: 10px 0;">
-                        <input type="number" id="aaaAmount" min="1" max="100" value="10" placeholder="Montant #">
+                        <input type="number" id="aaaAmount" min="1" max="${potAAA.solde || 0}" value="10" placeholder="Montant #">
                     </div>
                 `}
             `, `
-                ${!isMembre ? `<button class="btn btn-primary" onclick="joinAAA()">💚 Adhérer</button>` : `
+                ${!isMembre ? `<button class="btn btn-primary" onclick="joinAAA()">${LOGO_AAA} Devenir membre</button>` : `
                     <button class="btn btn-primary" onclick="contributeAAA()">⬆️ Cotiser</button>
-                    <button class="btn btn-secondary" onclick="creditAAA()">⬇️ Emprunter</button>
+                    <button class="btn btn-secondary" onclick="creditAAA()">🗳️ Demander crédit</button>
                 `}
                 <button class="btn" style="background:#f3f4f6;" onclick="closeModal()">Fermer</button>
             `);
@@ -11872,7 +12112,7 @@ function initSystemeDe() {
             await syncComptabiliteToFirebase();
             
             closeModal();
-            sendSystemMessage(`💚 ${myName} rejoint le Pot AAA !`);
+            sendSystemMessage(`${LOGO_AAA} ${myName} rejoint le Pot AAA !`);
             showAAAModal();
         }
         
@@ -11892,7 +12132,7 @@ function initSystemeDe() {
             await syncComptabiliteToFirebase();
             
             closeModal();
-            sendSystemMessage(`💚 ${myName} cotise ${fmt(amount)}# au Pot AAA`);
+            sendSystemMessage(`${LOGO_AAA} ${myName} cotise ${fmt(amount)}# au Pot AAA`);
             showAAAModal();
         }
         
@@ -11901,19 +12141,108 @@ function initSystemeDe() {
             if (amount <= 0) return;
             
             if (COMPTABILITE.potAAA.solde < amount) {
-                alert('Pas assez dans le pot !');
+                alert(`Pas assez dans le pot ! Disponible : ${fmt(COMPTABILITE.potAAA.solde)}#`);
                 return;
             }
             
+            // Les autres membres doivent valider la demande de crédit
+            closeModal();
+            await lancerVoteCreditAAA(amount);
+        }
+        
+        // Vote des membres AAA pour valider un crédit
+        async function lancerVoteCreditAAA(amount) {
+            const membres = COMPTABILITE.potAAA.membres || [];
+            const autresMembres = membres.filter(id => id !== myPlayerId);
+            
+            // Si seul membre, crédit auto-accordé
+            if (autresMembres.length === 0) {
+                await executerCreditAAA(amount);
+                return;
+            }
+            
+            const players = getOrderedPlayers();
+            const votes = [];
+            let nbPour = 1; // Le demandeur vote pour
+            let nbContre = 0;
+            
+            votes.push({ name: playersData[myPlayerId]?.name || 'Moi', vote: '✅', detail: 'Demandeur' });
+            
+            for (const membreId of autresMembres) {
+                const p = playersData[membreId];
+                if (!p) continue;
+                
+                if (p.isBot) {
+                    const profil = PROFILS_IA[p.botProfil] || PROFILS_IA.EQUILIBRE;
+                    // Bots coopératifs/solidaires acceptent, prédateurs refusent, autres selon montant
+                    let accepte = false;
+                    if (['COOPERATIF', 'SOLIDAIRE'].includes(profil.id)) {
+                        accepte = true;
+                    } else if (['EQUILIBRE', 'PRUDENT'].includes(profil.id)) {
+                        // Accepte si montant raisonnable (< 30% du pot)
+                        accepte = amount <= COMPTABILITE.potAAA.solde * 0.3;
+                    } else {
+                        // PREDATEUR, INVESTISSEUR: refuse
+                        accepte = false;
+                    }
+                    votes.push({ name: p.name, vote: accepte ? '✅' : '❌' });
+                    if (accepte) nbPour++; else nbContre++;
+                } else {
+                    // Joueur humain — auto-accepté pour simplifier (en multijoueur réel, système Firebase)
+                    votes.push({ name: p.name, vote: '✅', detail: 'Humain' });
+                    nbPour++;
+                }
+            }
+            
+            // Majorité simple (> 50% des membres)
+            const totalVotants = nbPour + nbContre;
+            const accepte = nbPour > totalVotants / 2;
+            
+            let votesHtml = votes.map(v => `<p style="margin:2px 0;">${v.vote} ${v.name}</p>`).join('');
+            
+            if (accepte) {
+                await executerCreditAAA(amount);
+                
+                showModal(`
+                    <h3>✅ Crédit AAA approuvé !</h3>
+                    <div style="background:#dcfce7;padding:10px;border-radius:8px;margin:10px 0;">
+                        <p style="margin:0;font-weight:bold;">Votes des membres :</p>
+                        ${votesHtml}
+                    </div>
+                    <p style="font-weight:bold;color:#059669;">
+                        ${fmt(amount)}# accordés à ${myName}
+                    </p>
+                    <p style="font-size:0.85rem;color:#6b7280;">
+                        Pot restant : ${fmt(COMPTABILITE.potAAA.solde)}#
+                    </p>
+                `, `<button class="btn btn-primary" onclick="closeModal()">OK</button>`);
+            } else {
+                sendSystemMessage(`${LOGO_AAA} Demande de crédit de ${fmt(amount)}# refusée par les membres (${nbPour}/${totalVotants})`);
+                
+                showModal(`
+                    <h3>❌ Crédit refusé</h3>
+                    <div style="background:#fee2e2;padding:10px;border-radius:8px;margin:10px 0;">
+                        <p style="margin:0;font-weight:bold;">Votes des membres :</p>
+                        ${votesHtml}
+                    </div>
+                    <p style="color:#dc2626;">
+                        La majorité des membres n'a pas approuvé le crédit de ${fmt(amount)}#.
+                    </p>
+                `, `
+                    <button class="btn btn-secondary" onclick="showAAAModal()">⬅️ Retour</button>
+                `);
+            }
+        }
+        
+        // Exécuter le crédit après approbation
+        async function executerCreditAAA(amount) {
             await comptaCreditAAA(myPlayerId, amount);
             
             const caisse = COMPTABILITE.caisseJoueurs[myPlayerId];
             await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/espoyr`).set(caisse.espoyr);
             await syncComptabiliteToFirebase();
             
-            closeModal();
-            sendSystemMessage(`💚 ${myName} emprunte ${fmt(amount)}# au Pot AAA`);
-            showAAAModal();
+            sendSystemMessage(`${LOGO_AAA} ${myName} emprunte ${fmt(amount)}# au Pot AAA (approuvé par les membres)`);
         }
         
         // ========== BANQUE ==========
@@ -12293,7 +12622,7 @@ function initSystemeDe() {
                 // Bouton vente équipement
                 if (nbEquip > 0) {
                     buttons = `
-                        <button class="btn" style="background:#dcfce7;color:#059669;" onclick="closeModal(); showVenteEquipementModal(${caseId});">💚 Vendre équipement</button>
+                        <button class="btn" style="background:#dcfce7;color:#059669;" onclick="closeModal(); showVenteEquipementModal(${caseId});">${LOGO_AAA} Vendre équipement</button>
                         ${buttons}
                     `;
                 }
@@ -12729,33 +13058,46 @@ function initSystemeDe() {
         
         // ========== ACTIONS RAPIDES ==========
         
-        // Action rapide : Adhérer au Pot AAA
+        // Action rapide : Devenir membre AAA
         function showQuickAdhererAAA() {
             const isMembre = COMPTABILITE.potAAA.membres?.includes(myPlayerId);
             
             if (isMembre) {
                 showModal(`
-                    <h3>💚 Déjà membre du Pot AAA</h3>
-                    <p>Tu es déjà membre du Pot AAA !</p>
-                    <p>Avantages actifs :</p>
+                    <h3>${LOGO_AAA} Tu es membre AAA</h3>
+                    <p>Tes avantages actifs :</p>
                     <ul style="font-size: 0.9rem;">
                         <li>+50# créés dans le Pot à chaque lancer de dé</li>
-                        <li>Emprunter en # sans intérêts</li>
+                        <li>Demander un crédit en # (0%, validé par les membres)</li>
+                        <li>Complément de salaire en # si érosion (Phase 2+)</li>
                         <li>Aide en cas de faillite</li>
                     </ul>
                 `, `<button class="btn btn-primary" onclick="closeModal()">OK</button>`);
             } else {
                 showModal(`
-                    <h3>💚 Adhérer au Pot AAA</h3>
-                    <p>Devenir membre te donne accès à :</p>
-                    <ul style="font-size: 0.9rem;">
-                        <li>✨ +50# créés dans le Pot à chaque lancer de dé</li>
-                        <li>💵 Emprunter en # sans intérêts</li>
-                        <li>🛟 Aide en cas de faillite (dette annulée + 250#)</li>
-                    </ul>
-                    <p style="margin-top: 10px; color: #059669; font-weight: bold;">Adhésion gratuite !</p>
+                    <h3>${LOGO_AAA} Devenir membre AAA</h3>
+                    <div style="background:#fffbeb; padding:12px; border-radius:10px; margin:10px 0; font-size:0.88rem; line-height:1.5; color:#78350f;">
+                        <p style="margin:0;">Les membres AAA sont des citoyens qui pensent que la création de valeur d'échange doit répondre à une <strong>loi universelle</strong> :</p>
+                        <p style="margin:8px 0; font-style:italic; font-weight:bold; color:#92400e;">
+                            "Tout humain, par le simple fait de son existence, crée une même masse de valeur d'échange."
+                        </p>
+                        <p style="margin:0;">Ici, ces <strong>#</strong> ne peuvent servir qu'à financer les <strong>actions AAA</strong> : tout ce que chaque communauté considère comme utile à la collectivité pour satisfaire les besoins de base les plus élevés — eau, nourriture, sécurité, soins, école, justice, information, culture…</p>
+                        <p style="margin:8px 0 0 0; font-size:0.8rem;">
+                            🌐 En savoir plus : <a href="https://espoyr.com" target="_blank" style="color:#2563eb;">espoyr.com</a>
+                        </p>
+                    </div>
+                    <div style="background:#f0fdf4; padding:10px; border-radius:8px; margin-top:10px;">
+                        <p style="margin:0 0 6px 0; font-weight:bold; color:#059669;">✨ En pratique dans le jeu :</p>
+                        <ul style="font-size:0.85rem; margin:0; padding-left:20px;">
+                            <li>+50# créés dans le Pot AAA à chaque lancer de dé</li>
+                            <li>Demander un crédit en # (0%, validé par les membres)</li>
+                            <li>Complément de salaire en # si érosion (Phase 2+)</li>
+                            <li>Aide en cas de faillite (dette annulée + prêt de relance)</li>
+                        </ul>
+                        <p style="margin:8px 0 0 0; color:#059669; font-weight:bold;">Adhésion gratuite et libre !</p>
+                    </div>
                 `, `
-                    <button class="btn btn-primary" onclick="adhererPotAAA()">💚 Adhérer maintenant</button>
+                    <button class="btn btn-primary" onclick="adhererPotAAA()">${LOGO_AAA} Devenir membre</button>
                     <button class="btn btn-secondary" onclick="closeModal()">Plus tard</button>
                 `);
             }
@@ -12771,8 +13113,8 @@ function initSystemeDe() {
                 
                 logEvent('JOIN_AAA', myPlayerId, {});
                 
-                sendSystemMessage(`💚 ${myName} a rejoint le Pot AAA !`);
-                showModal(`<h3>🎉 Bienvenue !</h3><p>Tu es maintenant membre du Pot AAA.</p>`,
+                sendSystemMessage(`${LOGO_AAA} ${myName} est devenu membre AAA !`);
+                showModal(`<h3>🎉 Bienvenue !</h3><p>Tu es maintenant membre AAA. À chaque lancer de dé, <strong>+50#</strong> seront créés dans le Pot !</p>`,
                     `<button class="btn btn-primary" onclick="closeModal()">Super !</button>`);
             }
         }
@@ -12836,21 +13178,21 @@ function initSystemeDe() {
                 
                 ${isMembre ? `
                 <div style="background: #dcfce7; padding: 10px; border-radius: 8px;">
-                    <p style="margin: 0; font-weight: bold;">💚 Pot AAA (en #)</p>
+                    <p style="margin: 0; font-weight: bold;">${LOGO_AAA} Pot AAA (en #)</p>
                     <p style="margin: 4px 0 0 0;">Solde du Pot : ${fmt(potSolde)}# | Ta dette AAA : ${fmt(detteAAA)}#</p>
                     <p style="margin: 4px 0 0 0; color: #059669; font-weight: bold;">✨ Sans intérêts !</p>
                     ${potSolde > 0 ? `
                         <input type="number" id="empruntHashMontant" value="${Math.min(100, potSolde)}" min="10" max="${potSolde}" step="10" style="width: 100%; padding: 8px; margin-top: 8px;">
                         <button class="btn" style="background: #059669; color: white; width: 100%; margin-top: 6px; padding: 10px;" onclick="executeEmprunterHash()">
-                            💚 Emprunter au Pot AAA
+                            ${LOGO_AAA} Emprunter au Pot AAA
                         </button>
                     ` : '<p style="color: #6b7280; margin-top: 6px;">Le Pot est vide</p>'}
                 </div>
                 ` : `
                 <div style="background: #f0fdf4; padding: 10px; border-radius: 8px; border: 1px dashed #059669;">
-                    <p style="margin: 0; color: #059669;">💡 <strong>Astuce :</strong> Adhère au Pot AAA pour emprunter en # <strong>sans intérêts</strong> !</p>
+                    <p style="margin: 0; color: #059669;">💡 <strong>Astuce :</strong> Deviens membre AAA pour emprunter en # <strong>sans intérêts</strong> !</p>
                     <button class="btn" style="background: #dcfce7; color: #059669; width: 100%; margin-top: 8px;" onclick="closeModal(); showQuickAdhererAAA();">
-                        💚 Adhérer maintenant
+                        ${LOGO_AAA} Devenir membre
                     </button>
                 </div>
                 `}
@@ -12921,7 +13263,7 @@ function initSystemeDe() {
                 nouvelleDetteAAA: COMPTABILITE.potAAA.creances?.[myPlayerId] || 0
             }, ecriture?.ledgerEntryId ? [ecriture.ledgerEntryId] : []);
             
-            sendSystemMessage(`💚 ${myName} emprunte ${fmt(montant)}# au Pot AAA (sans intérêts)`);
+            sendSystemMessage(`${LOGO_AAA} ${myName} emprunte ${fmt(montant)}# au Pot AAA (sans intérêts)`);
         }
         
         // Action rapide : Équiper
@@ -13042,7 +13384,7 @@ function initSystemeDe() {
                 
                 ${detteAAA > 0 ? `
                 <div style="background: #dcfce7; padding: 10px; border-radius: 8px;">
-                    <p style="margin: 0; font-weight: bold;">💚 Dette AAA : ${fmt(detteAAA)}#</p>
+                    <p style="margin: 0; font-weight: bold;">${LOGO_AAA} Dette AAA : ${fmt(detteAAA)}#</p>
                     <input type="number" id="remboursHashMontant" value="${Math.min(detteAAA, currentHash)}" min="0" max="${Math.min(detteAAA, currentHash)}" step="10" style="width: 100%; padding: 6px; margin-top: 8px;">
                     <button class="btn" style="background: #dcfce7; color: #059669; width: 100%; margin-top: 6px;" onclick="executeRemboursHash()">Rembourser #</button>
                 </div>
@@ -13087,7 +13429,7 @@ function initSystemeDe() {
                 detteRestante: COMPTABILITE.potAAA.creances?.[myPlayerId] || 0
             }, ecriture?.ledgerEntryId ? [ecriture.ledgerEntryId] : []);
             
-            sendSystemMessage(`💚 ${myName} rembourse ${fmt(montant)}# au Pot AAA`);
+            sendSystemMessage(`${LOGO_AAA} ${myName} rembourse ${fmt(montant)}# au Pot AAA`);
         }
         
         // Afficher le modal d'analyse de sauvegarde
@@ -13745,10 +14087,10 @@ function initSystemeDe() {
                 'CHANCE_CARD': '🍀',
                 'MALCHANCE_CARD': '👨‍👩‍👧‍👦',
                 'BANK_LOAN': '🏦',
-                'AAA_LOAN': '💚',
+                'AAA_LOAN': LOGO_AAA,
                 'REPAY_LOAN': '💳',
-                'REPAY_AAA': '💚',
-                'JOIN_AAA': '💚',
+                'REPAY_AAA': LOGO_AAA,
+                'JOIN_AAA': LOGO_AAA,
                 'NEW_ROUND': '🔄',
                 'AUCTION_START': '🔨',
                 'AUCTION_BID': '💰',
