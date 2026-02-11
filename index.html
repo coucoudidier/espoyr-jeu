@@ -500,10 +500,9 @@
     <div id="modalContainer"></div>
     <div class="live-toast-container" id="liveToastContainer"></div>
     
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
-
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     
     <script>
         // ========== VÉRIFICATION FIREBASE ==========
@@ -526,30 +525,26 @@
             throw new Error('Firebase SDK non chargé — vérifiez votre connexion internet');
         }
         
-  // ========== FIREBASE CONFIG ==========
-const firebaseConfig = {
-  apiKey: "AIzaSyC5hPhmhgQNY1qrFQ63XOIFNXhdy5EsDMM",
-  authDomain: "espoyr--game.firebaseapp.com",
-  databaseURL: "https://espoyr--game-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "espoyr--game",
-  storageBucket: "espoyr--game.firebasestorage.app",
-  messagingSenderId: "689112154741",
-  appId: "1:689112154741:web:a471dadae9becbaf3ca3eb"
-};
-
-firebase.initializeApp(firebaseConfig);
-
-// 🔐 Connexion anonyme (nécessaire si règles = auth != null)
-firebase.auth().signInAnonymously()
-  .then(() => {
-    console.log("✅ Connecté anonymement à Firebase");
-  })
-  .catch((error) => {
-    console.error("❌ Erreur connexion anonyme :", error);
-  });
-
-const db = firebase.database();
-
+        // ========== FIREBASE CONFIG ==========
+        const firebaseConfig = {
+            apiKey: "AIzaSyC5hPhmhgQNY1qrFQ63XOIFNXhdy5EsDMM",
+            authDomain: "espoyr--game.firebaseapp.com",
+            databaseURL: "https://espoyr--game-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "espoyr--game",
+            storageBucket: "espoyr--game.firebasestorage.app",
+            messagingSenderId: "689112154741",
+            appId: "1:689112154741:web:a471dadae9becbaf3ca3eb"
+        };
+        firebase.initializeApp(firebaseConfig);
+        // 🔐 Connexion anonyme (nécessaire si règles = auth != null)
+        firebase.auth().signInAnonymously()
+          .then(() => {
+            console.log("✅ Connecté anonymement à Firebase");
+          })
+          .catch((error) => {
+            console.error("❌ Erreur connexion anonyme :", error);
+          });
+        const db = firebase.database();
         
         // ========== PLAN COMPTABLE ==========
         const PLAN_COMPTABLE = {
@@ -1638,6 +1633,56 @@ function isAbsent(player) {
             if (!COMPTABILITE.dettesEntreJoueurs) COMPTABILITE.dettesEntreJoueurs = [];
             // Smart Contracts (prêts entre joueurs, Phase 3)
             if (!COMPTABILITE.smartContracts) COMPTABILITE.smartContracts = [];
+            
+            // Réconcilier les soldes caisse avec le journal (source de vérité)
+            reconcilierSoldes();
+        }
+        
+        // ═══ RÉCONCILIATION : recalcule les soldes caisse à partir du journal ═══
+        // Le journal comptable (double écriture) est la SEULE source de vérité.
+        // Cette fonction corrige toute désynchronisation de caisseJoueurs.
+        function reconcilierSoldes() {
+            if (!COMPTABILITE.journal || COMPTABILITE.journal.length === 0) return;
+            
+            // Recalculer les soldes de chaque joueur à partir du journal
+            const soldesRecalcules = {}; // { joueurId: { euro, espoyr } }
+            
+            for (const e of COMPTABILITE.journal) {
+                if (!e.joueurId) continue;
+                if (!soldesRecalcules[e.joueurId]) soldesRecalcules[e.joueurId] = { euro: 0, espoyr: 0 };
+                
+                const s = soldesRecalcules[e.joueurId];
+                
+                // € : compte 500 (Caisse €) — Débit = entrée, Crédit = sortie
+                if (e.debit?.compte === 500 && e.debit?.euro > 0) s.euro += e.debit.euro;
+                if (e.credit?.compte === 500 && e.credit?.euro > 0) s.euro -= e.credit.euro;
+                
+                // # : compte 501 (Caisse #) — Débit = entrée, Crédit = sortie
+                if (e.debit?.compte === 501 && e.debit?.espoyr > 0) s.espoyr += e.debit.espoyr;
+                if (e.credit?.compte === 501 && e.credit?.espoyr > 0) s.espoyr -= e.credit.espoyr;
+            }
+            
+            // Comparer et corriger
+            let corrections = 0;
+            for (const [joueurId, soldeJournal] of Object.entries(soldesRecalcules)) {
+                if (!COMPTABILITE.caisseJoueurs[joueurId]) continue;
+                const caisse = COMPTABILITE.caisseJoueurs[joueurId];
+                
+                const ecartEuro = arrondir2(soldeJournal.euro) - arrondir2(caisse.euro || 0);
+                const ecartHash = arrondir2(soldeJournal.espoyr) - arrondir2(caisse.espoyr || 0);
+                
+                if (Math.abs(ecartEuro) > 0.01 || Math.abs(ecartHash) > 0.01) {
+                    const nom = playersData[joueurId]?.name || joueurId;
+                    console.warn(`⚠️ RÉCONCILIATION ${nom}: caisse=${fmt(caisse.euro)}€/${fmt(caisse.espoyr || 0)}# → journal=${fmt(soldeJournal.euro)}€/${fmt(soldeJournal.espoyr)}# (écart: ${fmt(ecartEuro)}€/${fmt(ecartHash)}#)`);
+                    caisse.euro = arrondir2(soldeJournal.euro);
+                    caisse.espoyr = arrondir2(soldeJournal.espoyr);
+                    corrections++;
+                }
+            }
+            
+            if (corrections > 0) {
+                console.warn(`🔧 ${corrections} solde(s) corrigé(s) par réconciliation journal`);
+            }
         }
         
         // ========== FONCTIONS COMPTABLES ==========
@@ -3907,7 +3952,20 @@ activiteId: actId
             // Au lieu d'écraser tout, on fait une mise à jour intelligente
             // pour éviter les conflits entre joueurs
             try {
+                reconcilierSoldes(); // Toujours réconcilier avant de pousser
                 await gameRef.child('comptabilite').set(COMPTABILITE);
+                
+                // Synchroniser aussi les soldes joueurs dans Firebase (pour cohérence)
+                const updates = {};
+                for (const [pid, caisse] of Object.entries(COMPTABILITE.caisseJoueurs)) {
+                    updates[`players/${pid}/euro`] = caisse.euro || 0;
+                    updates[`players/${pid}/espoyr`] = caisse.espoyr || 0;
+                    updates[`players/${pid}/emprunt`] = caisse.emprunt || 0;
+                }
+                if (Object.keys(updates).length > 0) {
+                    await gameRef.update(updates);
+                }
+                
                 console.log('✅ Comptabilité synchronisée');
                 updateMyBalance(); // MAJ affichage solde
             } catch (err) {
