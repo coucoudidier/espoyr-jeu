@@ -421,8 +421,10 @@
     
     <div id="modalContainer"></div>
     
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
     
     <script>
         // ========== VÉRIFICATION FIREBASE ==========
@@ -445,18 +447,30 @@
             throw new Error('Firebase SDK non chargé — vérifiez votre connexion internet');
         }
         
-        // ========== FIREBASE CONFIG ==========
-        const firebaseConfig = {
-            apiKey: "AIzaSyC5hPhmhgQNY1qrFQ63XOIFNXhdy5EsDMM",
-            authDomain: "espoyr--game.firebaseapp.com",
-            databaseURL: "https://espoyr--game-default-rtdb.europe-west1.firebasedatabase.app",
-            projectId: "espoyr--game",
-            storageBucket: "espoyr--game.firebasestorage.app",
-            messagingSenderId: "689112154741",
-            appId: "1:689112154741:web:a471dadae9becbaf3ca3eb"
-        };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
+      // ========== FIREBASE CONFIG ==========
+const firebaseConfig = {
+    apiKey: "AIzaSyC5hPhmhgQNY1qrFQ63XOIFNXhdy5EsDMM",
+    authDomain: "espoyr--game.firebaseapp.com",
+    databaseURL: "https://espoyr--game-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "espoyr--game",
+    storageBucket: "espoyr--game.firebasestorage.app",
+    messagingSenderId: "689112154741",
+    appId: "1:689112154741:web:a471dadae9becbaf3ca3eb"
+};
+
+firebase.initializeApp(firebaseConfig);
+
+// 🔐 Connexion anonyme obligatoire si règles = auth != null
+firebase.auth().signInAnonymously()
+    .then(() => {
+        console.log("✅ Connecté anonymement à Firebase");
+    })
+    .catch((error) => {
+        console.error("❌ Erreur connexion anonyme :", error);
+    });
+
+const db = firebase.database();
+
         
         // ========== PLAN COMPTABLE ==========
         const PLAN_COMPTABLE = {
