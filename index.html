@@ -1634,54 +1634,65 @@ function isAbsent(player) {
             // Smart Contracts (prêts entre joueurs, Phase 3)
             if (!COMPTABILITE.smartContracts) COMPTABILITE.smartContracts = [];
             
-            // Réconcilier les soldes caisse avec le journal (source de vérité)
-            reconcilierSoldes();
+            // Convertir journal objet→array si Firebase l'a transformé
+            if (COMPTABILITE.journal && !Array.isArray(COMPTABILITE.journal)) {
+                COMPTABILITE.journal = Object.values(COMPTABILITE.journal);
+            }
         }
         
         // ═══ RÉCONCILIATION : recalcule les soldes caisse à partir du journal ═══
         // Le journal comptable (double écriture) est la SEULE source de vérité.
         // Cette fonction corrige toute désynchronisation de caisseJoueurs.
         function reconcilierSoldes() {
-            if (!COMPTABILITE.journal || COMPTABILITE.journal.length === 0) return;
-            
-            // Recalculer les soldes de chaque joueur à partir du journal
-            const soldesRecalcules = {}; // { joueurId: { euro, espoyr } }
-            
-            for (const e of COMPTABILITE.journal) {
-                if (!e.joueurId) continue;
-                if (!soldesRecalcules[e.joueurId]) soldesRecalcules[e.joueurId] = { euro: 0, espoyr: 0 };
-                
-                const s = soldesRecalcules[e.joueurId];
-                
-                // € : compte 500 (Caisse €) — Débit = entrée, Crédit = sortie
-                if (e.debit?.compte === 500 && e.debit?.euro > 0) s.euro += e.debit.euro;
-                if (e.credit?.compte === 500 && e.credit?.euro > 0) s.euro -= e.credit.euro;
-                
-                // # : compte 501 (Caisse #) — Débit = entrée, Crédit = sortie
-                if (e.debit?.compte === 501 && e.debit?.espoyr > 0) s.espoyr += e.debit.espoyr;
-                if (e.credit?.compte === 501 && e.credit?.espoyr > 0) s.espoyr -= e.credit.espoyr;
+            if (!COMPTABILITE.journal) return;
+            // Convertir objet→array si nécessaire (Firebase peut transformer les arrays)
+            if (!Array.isArray(COMPTABILITE.journal)) {
+                COMPTABILITE.journal = Object.values(COMPTABILITE.journal);
             }
+            if (COMPTABILITE.journal.length === 0) return;
             
-            // Comparer et corriger
-            let corrections = 0;
-            for (const [joueurId, soldeJournal] of Object.entries(soldesRecalcules)) {
-                if (!COMPTABILITE.caisseJoueurs[joueurId]) continue;
-                const caisse = COMPTABILITE.caisseJoueurs[joueurId];
+            try {
+                // Recalculer les soldes de chaque joueur à partir du journal
+                const soldesRecalcules = {}; // { joueurId: { euro, espoyr } }
                 
-                const ecartEuro = arrondir2(soldeJournal.euro) - arrondir2(caisse.euro || 0);
-                const ecartHash = arrondir2(soldeJournal.espoyr) - arrondir2(caisse.espoyr || 0);
-                
-                if (Math.abs(ecartEuro) > 0.01 || Math.abs(ecartHash) > 0.01) {
-                    const nom = playersData[joueurId]?.name || joueurId;
-                    console.warn(`⚠️ RÉCONCILIATION ${nom}: caisse=${fmt(caisse.euro)}€/${fmt(caisse.espoyr || 0)}# → journal=${fmt(soldeJournal.euro)}€/${fmt(soldeJournal.espoyr)}# (écart: ${fmt(ecartEuro)}€/${fmt(ecartHash)}#)`);
-                    caisse.euro = arrondir2(soldeJournal.euro);
-                    caisse.espoyr = arrondir2(soldeJournal.espoyr);
-                    corrections++;
+                for (const e of COMPTABILITE.journal) {
+                    if (!e || !e.joueurId) continue;
+                    if (!soldesRecalcules[e.joueurId]) soldesRecalcules[e.joueurId] = { euro: 0, espoyr: 0 };
+                    
+                    const s = soldesRecalcules[e.joueurId];
+                    
+                    // € : compte 500 (Caisse €) — Débit = entrée, Crédit = sortie
+                    if (e.debit?.compte === 500 && e.debit?.euro > 0) s.euro += e.debit.euro;
+                    if (e.credit?.compte === 500 && e.credit?.euro > 0) s.euro -= e.credit.euro;
+                    
+                    // # : compte 501 (Caisse #) — Débit = entrée, Crédit = sortie
+                    if (e.debit?.compte === 501 && e.debit?.espoyr > 0) s.espoyr += e.debit.espoyr;
+                    if (e.credit?.compte === 501 && e.credit?.espoyr > 0) s.espoyr -= e.credit.espoyr;
                 }
-            }
-            
-            if (corrections > 0) {
-                console.warn(`🔧 ${corrections} solde(s) corrigé(s) par réconciliation journal`);
+                
+                // Comparer et corriger
+                let corrections = 0;
+                for (const [joueurId, soldeJournal] of Object.entries(soldesRecalcules)) {
+                    if (!COMPTABILITE.caisseJoueurs[joueurId]) continue;
+                    const caisse = COMPTABILITE.caisseJoueurs[joueurId];
+                    
+                    const ecartEuro = arrondir2(soldeJournal.euro) - arrondir2(caisse.euro || 0);
+                    const ecartHash = arrondir2(soldeJournal.espoyr) - arrondir2(caisse.espoyr || 0);
+                    
+                    if (Math.abs(ecartEuro) > 0.01 || Math.abs(ecartHash) > 0.01) {
+                        const nom = playersData[joueurId]?.name || joueurId;
+                        console.warn(`⚠️ RÉCONCILIATION ${nom}: caisse=${fmt(caisse.euro)}€/${fmt(caisse.espoyr || 0)}# → journal=${fmt(soldeJournal.euro)}€/${fmt(soldeJournal.espoyr)}# (écart: ${fmt(ecartEuro)}€/${fmt(ecartHash)}#)`);
+                        caisse.euro = arrondir2(soldeJournal.euro);
+                        caisse.espoyr = arrondir2(soldeJournal.espoyr);
+                        corrections++;
+                    }
+                }
+                
+                if (corrections > 0) {
+                    console.warn(`🔧 ${corrections} solde(s) corrigé(s) par réconciliation journal`);
+                }
+            } catch (err) {
+                console.error('❌ Erreur réconciliation:', err);
             }
         }
         
@@ -3954,18 +3965,6 @@ activiteId: actId
             try {
                 reconcilierSoldes(); // Toujours réconcilier avant de pousser
                 await gameRef.child('comptabilite').set(COMPTABILITE);
-                
-                // Synchroniser aussi les soldes joueurs dans Firebase (pour cohérence)
-                const updates = {};
-                for (const [pid, caisse] of Object.entries(COMPTABILITE.caisseJoueurs)) {
-                    updates[`players/${pid}/euro`] = caisse.euro || 0;
-                    updates[`players/${pid}/espoyr`] = caisse.espoyr || 0;
-                    updates[`players/${pid}/emprunt`] = caisse.emprunt || 0;
-                }
-                if (Object.keys(updates).length > 0) {
-                    await gameRef.update(updates);
-                }
-                
                 console.log('✅ Comptabilité synchronisée');
                 updateMyBalance(); // MAJ affichage solde
             } catch (err) {
@@ -10422,7 +10421,13 @@ function initSystemeDe() {
             }
             
             // Gérer case
-            await handleBotLanding(bot.id, newPosition, profil);
+            try {
+                await handleBotLanding(bot.id, newPosition, profil);
+            } catch (err) {
+                console.error(`🤖❌ Erreur handleBotLanding ${bot.name}:`, err);
+                sendSystemMessage(`⚠️ ${bot.name}: erreur traitement case, tour passé`);
+                setTimeout(() => nextTurn(), 500);
+            }
         }
         
         async function handleBotLanding(botId, position, profil) {
