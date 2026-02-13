@@ -1153,15 +1153,20 @@ function isAbsent(player) {
             heartbeatTimer = setInterval(beat, 15000);
         }
 
-        window.addEventListener('beforeunload', () => {
+        window.addEventListener('beforeunload', (e) => {
             try {
                 if (gameRef && myPlayerId) {
+                    // Demander confirmation si une partie est en cours
+                    if (gameState?.started) {
+                        e.preventDefault();
+                        e.returnValue = ''; // Nécessaire pour Chrome/Edge
+                    }
                     gameRef.child(`players/${myPlayerId}`).update({
                         isConnected: false,
                         lastSeen: firebase.database.ServerValue.TIMESTAMP
                     });
                 }
-            } catch(e) {}
+            } catch(ex) {}
         });
 
 
@@ -1173,6 +1178,7 @@ function isAbsent(player) {
         let replayMode = false;
         let _botTimeout = null;  // Track bot setTimeout to prevent duplicates
         let _botScheduledIdx = -1;  // Which playerIndex the bot timeout is for
+        let _botPlaying = false;  // true pendant qu'un bot exécute son tour
         let currentEventIndex = -1;  // -1 = temps réel
         
         // ========== SYSTÈME DE SAUVEGARDE AUDIT + REPLAY ==========
@@ -4821,8 +4827,16 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
         }
         
         function leaveGame() {
+            if (gameState?.started) {
+                if (!confirm('⚠️ Une partie est en cours !\n\nTu pourras revenir avec ton ticket de reprise.\n\nQuitter quand même ?')) {
+                    return;
+                }
+            }
             if (gameRef && myPlayerId) {
-                gameRef.child(`players/${myPlayerId}`).remove();
+                gameRef.child(`players/${myPlayerId}`).update({
+                    isConnected: false,
+                    lastSeen: firebase.database.ServerValue.TIMESTAMP
+                });
             }
             showScreen('homeScreen');
         }
@@ -5163,9 +5177,9 @@ if (isMyTurn) {
                 
                 // Robot joue avec le timing configurable (seulement si pas en mode replay)
               if (isBot && isHost && !replayMode) {
-    // Éviter les doublons: si un timeout est déjà programmé pour ce même index, ne rien faire
-    if (_botScheduledIdx === currentIdx) {
-        console.log(`🤖 Bot timeout déjà programmé pour index ${currentIdx}, ignoré`);
+    // Éviter les doublons: si un timeout est déjà programmé, ou un bot joue déjà
+    if (_botScheduledIdx === currentIdx || _botPlaying) {
+        // Ne rien faire — bot déjà en cours ou programmé
     } else {
         // Annuler tout timeout bot précédent (changement de tour)
         if (_botTimeout) {
@@ -5177,19 +5191,24 @@ if (isMyTurn) {
         const expectedIdx = currentIdx;
         _botTimeout = setTimeout(async () => {
             _botTimeout = null;
-            _botScheduledIdx = -1;
+            // NE PAS reset _botScheduledIdx ici — le garder verrouillé pendant l'exécution
             // Guard: vérifier que l'index n'a pas changé entre-temps
             const actualIdx = gameState?.currentPlayerIndex || 0;
             if (actualIdx !== expectedIdx) {
                 console.log(`🤖 Bot annulé: index changé (${expectedIdx} → ${actualIdx})`);
+                _botScheduledIdx = -1;
                 return;
             }
+            _botPlaying = true;
             try {
                 await playBotTurn(currentPlayer);
             } catch(e) {
                 console.error('🤖 Bot bloqué:', e);
                 sendSystemMessage(`⚠️ ${currentPlayer.name} est bloqué, tour passé`);
-                nextTurn();
+                await nextTurn();
+            } finally {
+                _botPlaying = false;
+                _botScheduledIdx = -1;  // Reset APRÈS exécution complète
             }
         }, delaiBot);
     }
@@ -10426,7 +10445,7 @@ function initSystemeDe() {
             } catch (err) {
                 console.error(`🤖❌ Erreur handleBotLanding ${bot.name}:`, err);
                 sendSystemMessage(`⚠️ ${bot.name}: erreur traitement case, tour passé`);
-                setTimeout(() => nextTurn(), 500);
+                await nextTurn();
             }
         }
         
@@ -10789,7 +10808,9 @@ function initSystemeDe() {
                 sendSystemMessage(`👨‍👩‍👧‍👦 ${bot.name} acquiert ${bien.icon} ${bien.nom} (${fmt(bien.mensualite)}€/tour)`);
             }
             
-            setTimeout(() => nextTurn(), 1000);
+            // Petit délai visuel puis passage de tour (dans la chaîne async)
+            await new Promise(r => setTimeout(r, 500));
+            await nextTurn();
         }
         
         // ========== MODALS COMPTABILITÉ ==========
