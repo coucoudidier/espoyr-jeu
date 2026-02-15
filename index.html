@@ -277,6 +277,14 @@
             from { opacity: 1; transform: translateY(0) scale(1); }
             to { opacity: 0; transform: translateY(-15px) scale(0.95); }
         }
+        @keyframes forceNextBlink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+        .force-next-btn { transition: all 0.3s ease; }
+        .force-next-btn.level-normal { background: #f3f4f6; color: #6b7280; }
+        .force-next-btn.level-warning { background: #fef3c7; color: #92400e; }
+        .force-next-btn.level-urgent { background: #fee2e2; color: #dc2626; animation: forceNextBlink 1s infinite; }
         .chat-input { display: flex; gap: 8px; }
         .chat-input input { flex: 1; margin-bottom: 0; font-size: 0.85rem; padding: 8px 10px; }
         
@@ -416,7 +424,7 @@
                 <div class="turn-indicator" id="turnIndicator">🎯 ...</div>
                 <div>📊 Phase <strong id="phaseNumber">1</strong></div>
                 <div id="sensIndicator" style="font-size: 0.8rem;">➡️</div>
-                <button id="forceNextBtn" class="btn" style="padding: 4px 8px; font-size: 0.7rem; background: #fef3c7; display: none;" onclick="forceNextTurn()" title="Forcer tour suivant (si bloqué)">⏭️</button>
+                <button id="forceNextBtn" class="btn force-next-btn level-normal" style="padding: 4px 10px; font-size: 0.75rem; display: none;" onclick="confirmForceNextTurn()" title="Forcer le tour suivant">⏭️ Forcer</button>
                 <button class="btn" style="padding: 4px 8px; font-size: 0.7rem; background: #f3f4f6;" onclick="saveGame()">💾</button>
             </div>
             
@@ -999,6 +1007,10 @@
         // ========== REPRISE / TICKET JOUEUR (A+B) ==========
         const RESUME_KEY_PREFIX = 'ESPOYR_RESUME_';
         const ABSENT_AFTER_MS = 90 * 1000; // 90s : un joueur est considéré "absent" si lastSeen est trop ancien
+        const FORCE_WARNING_MS = 60 * 1000;  // 60s : bouton force passe en jaune
+        const FORCE_URGENT_MS = 90 * 1000;   // 90s : bouton force passe en rouge clignotant
+        let turnStartTimestamp = Date.now();  // Quand le tour actuel a commencé
+        let forceNextInterval = null;         // Interval pour mettre à jour l'état du bouton
 
         function getResumeKey(code) { return `${RESUME_KEY_PREFIX}${code}`; }
 
@@ -1180,6 +1192,7 @@ function isAbsent(player) {
         let _botTimeout = null;  // Track bot setTimeout to prevent duplicates
         let _botScheduledIdx = -1;  // Which playerIndex the bot timeout is for
         let _botPlaying = false;  // true pendant qu'un bot exécute son tour
+        let _comptaSyncLocked = false;  // Empêche le listener Firebase d'écraser COMPTABILITE pendant un tour bot
         let currentEventIndex = -1;  // -1 = temps réel
         
         // ========== SYSTÈME DE SAUVEGARDE AUDIT + REPLAY ==========
@@ -4557,7 +4570,7 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             
             // Comptabilité (sync)
             gameRef.child('comptabilite').on('value', (snap) => {
-                if (snap.exists()) {
+                if (snap.exists() && !_comptaSyncLocked) {
                     COMPTABILITE = snap.val();
                     normalizeComptabilite();
                     updatePlayersUI();  // Mettre à jour l'UI après sync
@@ -5098,21 +5111,30 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                 configBtn.style.display = isHost ? 'block' : 'none';
             }
             
-            // Afficher le bouton Force Next pour l'hôte
+            // Afficher le bouton Force Next pour l'hôte (3 niveaux visuels)
             const forceNextBtn = document.getElementById('forceNextBtn');
             if (forceNextBtn) {
-                // Visible uniquement pour l'hôte ET uniquement si le joueur dont c'est le tour est absent
                 let show = false;
                 try {
                     const players = getOrderedPlayers();
                     const idx = gameState.currentPlayerIndex || 0;
                     const current = players[idx];
-                    show = !!isHost && !!current && isAbsent(current);
+                    // Visible si : hôte + partie démarrée + ce n'est pas le tour de l'hôte
+                    show = !!isHost && !!gameState?.started && !!current && current.id !== myPlayerId;
                     if (show) {
-                        forceNextBtn.title = `Passer le tour (joueur absent : ${current.name || current.id})`;
+                        forceNextBtn.title = `Forcer le passage du tour de ${current.name || current.id}`;
                     }
                 } catch(e) {}
                 forceNextBtn.style.display = show ? 'inline-block' : 'none';
+                
+                // Démarrer/arrêter l'intervalle de mise à jour visuelle
+                if (show && !forceNextInterval) {
+                    updateForceNextLevel();
+                    forceNextInterval = setInterval(updateForceNextLevel, 5000);
+                } else if (!show && forceNextInterval) {
+                    clearInterval(forceNextInterval);
+                    forceNextInterval = null;
+                }
             }
             
             // Afficher les contrôles de temps et mettre à jour la position
@@ -5200,16 +5222,25 @@ if (isMyTurn) {
                 _botScheduledIdx = -1;
                 return;
             }
+            _comptaSyncLocked = true;
             _botPlaying = true;
             try {
                 await playBotTurn(currentPlayer);
             } catch(e) {
                 console.error('🤖 Bot bloqué:', e);
                 sendSystemMessage(`⚠️ ${currentPlayer.name} est bloqué, tour passé`);
+                _comptaSyncLocked = false;
                 await nextTurn();
             } finally {
                 _botPlaying = false;
+                _comptaSyncLocked = false;
                 _botScheduledIdx = -1;  // Reset APRÈS exécution complète
+                // Fix blocage bots consécutifs: re-déclencher la vérification après reset des flags
+                setTimeout(() => {
+                    if (!_botPlaying && gameState?.started && isHost) {
+                        updateGameUI();
+                    }
+                }, 300);
             }
         }, delaiBot);
     }
@@ -6327,7 +6358,7 @@ function initSystemeDe() {
             const soldeFinalHash = caisse.espoyr || 0;
             
             // ========== MODALE RÉCAPITULATIF PASSAGE LIGNE 1 ==========
-            let modalHtml = `<h3>📋 Passage Ligne 1</h3>`;
+            let modalHtml = `<div id="modalTimer" style="text-align: center; margin-bottom: 10px;"></div><h3>📋 Passage Ligne 1</h3>`;
             
             // --- Salaire ---
             modalHtml += `
@@ -6499,7 +6530,14 @@ function initSystemeDe() {
                     </div>
                 </div>`;
             
-            showModal(modalHtml, `<button class="btn btn-primary" onclick="closeModal(); ${landingPosition !== undefined ? 'handleLanding(' + landingPosition + ')' : ''}">✅ OK</button>`);
+            showModal(modalHtml, `<button class="btn btn-primary" onclick="closeModal(); stopDecisionTimer(); ${landingPosition !== undefined ? 'handleLanding(' + landingPosition + ')' : ''}">✅ OK</button>`);
+            
+            // Timer 90s — auto-continue si le joueur ne valide pas
+            startDecisionTimer(90, () => {
+                closeModal();
+                sendSystemMessage(`⏱️ Temps écoulé — ${myName} continue automatiquement`);
+                if (landingPosition !== undefined) handleLanding(landingPosition);
+            });
         }
         
         // ========== PHASES ==========
@@ -9851,6 +9889,7 @@ function initSystemeDe() {
                 clearTimeout(safetyTimeout);
                 nextTurnInProgress = false;
                 turnActionInProgress = false; // Déverrouiller pour le prochain joueur
+                turnStartTimestamp = Date.now(); // Reset chrono pour le bouton force
             }
         }
         
@@ -10122,16 +10161,108 @@ function initSystemeDe() {
             });
         }
         
-        // Force le passage au tour suivant (bouton de debug/déblocage)
+        // ========== FORCER TOUR SUIVANT (HÔTE) ==========
+        
+        // Met à jour le niveau visuel du bouton force (appelé toutes les 5s)
+        function updateForceNextLevel() {
+            const btn = document.getElementById('forceNextBtn');
+            if (!btn || btn.style.display === 'none') return;
+            
+            const elapsed = Date.now() - turnStartTimestamp;
+            const players = getOrderedPlayers();
+            const idx = gameState?.currentPlayerIndex || 0;
+            const current = players[idx];
+            const absent = current ? isAbsent(current) : false;
+            
+            btn.classList.remove('level-normal', 'level-warning', 'level-urgent');
+            
+            if (absent || elapsed >= FORCE_URGENT_MS) {
+                btn.classList.add('level-urgent');
+                btn.innerHTML = '⏭️ Forcer';
+                btn.title = absent 
+                    ? `${current?.name || '?'} est absent(e) — cliquer pour passer son tour`
+                    : `${current?.name || '?'} inactif depuis ${Math.floor(elapsed/1000)}s — cliquer pour passer son tour`;
+            } else if (elapsed >= FORCE_WARNING_MS) {
+                btn.classList.add('level-warning');
+                btn.innerHTML = '⏭️ Forcer';
+                btn.title = `${current?.name || '?'} met du temps (${Math.floor(elapsed/1000)}s)`;
+            } else {
+                btn.classList.add('level-normal');
+                btn.innerHTML = '⏭️';
+                btn.title = `Forcer le passage du tour de ${current?.name || '?'}`;
+            }
+        }
+        
+        // Confirmation avant de forcer
+        function confirmForceNextTurn() {
+            if (!isHost) return;
+            
+            const players = getOrderedPlayers();
+            const idx = gameState?.currentPlayerIndex || 0;
+            const current = players[idx];
+            const elapsed = Math.floor((Date.now() - turnStartTimestamp) / 1000);
+            const absent = current ? isAbsent(current) : false;
+            
+            const statusText = absent 
+                ? `<span style="color:#dc2626;font-weight:bold;">🔴 Absent(e) (déconnecté)</span>`
+                : current?.isBot 
+                    ? `<span style="color:#f59e0b;font-weight:bold;">🤖 Robot bloqué (${elapsed}s)</span>`
+                    : `<span style="color:#f59e0b;">🟡 Inactif depuis ${elapsed}s</span>`;
+            
+            showModal(`
+                <h3>⏭️ Forcer le tour suivant ?</h3>
+                <div style="background:#fef3c7;padding:10px;border-radius:8px;margin:10px 0;">
+                    <p style="margin:0;">Joueur : <strong>${current?.avatar || ''} ${current?.name || '?'}</strong></p>
+                    <p style="margin:4px 0 0 0;">Statut : ${statusText}</p>
+                </div>
+                <p style="font-size:0.9rem;color:#6b7280;">
+                    ⚠️ Son action en cours sera annulée et le tour passera au joueur suivant.
+                </p>
+            `, `
+                <button class="btn" style="background:#dc2626;color:white;" onclick="forceNextTurn()">⏭️ Confirmer — Passer le tour</button>
+                <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+            `);
+        }
+        
+        // Exécution du forcement de tour (après confirmation)
         async function forceNextTurn() {
             if (!isHost) {
                 sendSystemMessage(`⚠️ Seul l'hôte peut forcer le tour suivant`);
                 return;
             }
             
+            const players = getOrderedPlayers();
+            const idx = gameState?.currentPlayerIndex || 0;
+            const current = players[idx];
+            
             closeModal();
             stopDecisionTimer();
-            sendSystemMessage(`⏭️ Tour forcé par l'hôte`);
+            
+            // Nettoyer les flags de verrouillage
+            turnActionInProgress = false;
+            nextTurnInProgress = false;
+            
+            // Nettoyer les flags bot (si un bot est bloqué)
+            _botPlaying = false;
+            _comptaSyncLocked = false;
+            _botScheduledIdx = -1;
+            if (_botTimeout) {
+                clearTimeout(_botTimeout);
+                _botTimeout = null;
+            }
+            
+            // Nettoyer une enchère en cours si applicable
+            if (enchereEnCours && !enchereEnCours.termine) {
+                enchereEnCours.termine = true;
+                try { await gameRef.child('enchere').remove(); } catch(e) {}
+                enchereEnCours = null;
+            }
+            
+            sendSystemMessage(`⏭️ L'hôte a passé le tour de ${current?.avatar || ''} ${current?.name || '?'}`);
+            
+            // Reset le timestamp pour le prochain tour
+            turnStartTimestamp = Date.now();
+            
             await nextTurn();
         }
         
@@ -14224,4 +14355,4 @@ function initSystemeDe() {
         
     </script>
 </body>
-</html>
+</html>0
