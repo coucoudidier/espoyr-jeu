@@ -5589,6 +5589,17 @@ async function rollDice() {
     turnActionInProgress = true;
     const btnLancer = document.getElementById('rollDiceBtn');
     if (btnLancer) btnLancer.disabled = true;
+    
+    // Timeout de sécurité — déverrouille si bloqué > 15s
+    if (window._turnActionTimeout) clearTimeout(window._turnActionTimeout);
+    window._turnActionTimeout = setTimeout(() => {
+        if (turnActionInProgress) {
+            console.warn('⚠️ turnActionInProgress bloqué > 15s — reset forcé');
+            turnActionInProgress = false;
+            const btn = document.getElementById('rollDiceBtn');
+            if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+        }
+    }, 15000);
 
     try {
         // ── SKIP TOUR : Action Contributive → passe son tour ──
@@ -5721,6 +5732,7 @@ async function rollDice() {
         console.error('❌ Erreur rollDice:', err);
         sendSystemMessage(`⚠️ Erreur lors du lancer: ${err.message}`);
         // Erreur → déverrouiller pour permettre de retenter
+        if (window._turnActionTimeout) clearTimeout(window._turnActionTimeout);
         turnActionInProgress = false;
         if (btnLancer) btnLancer.disabled = false;
     }
@@ -9959,6 +9971,7 @@ function initSystemeDe() {
                 console.error('Erreur dans nextTurn:', err);
             } finally {
                 clearTimeout(safetyTimeout);
+                if (window._turnActionTimeout) clearTimeout(window._turnActionTimeout);
                 nextTurnInProgress = false;
                 turnActionInProgress = false; // Déverrouiller pour le prochain joueur
                 turnStartTimestamp = Date.now(); // Reset chrono pour le bouton force
@@ -10311,6 +10324,7 @@ function initSystemeDe() {
             stopDecisionTimer();
             
             // Nettoyer les flags de verrouillage
+            if (window._turnActionTimeout) clearTimeout(window._turnActionTimeout);
             turnActionInProgress = false;
             nextTurnInProgress = false;
             
