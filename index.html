@@ -2344,15 +2344,43 @@ function isAbsent(player) {
         // Enregistrer le bilan du tour (pour historique)
         function enregistrerBilanTour() {
             const bilan = calculerBilan();
-            historiqueBilans.push(bilan);
+            
+            // Éviter les doublons pour le même tour
+            const existant = historiqueBilans.findIndex(b => b.tour === bilan.tour);
+            if (existant >= 0) {
+                historiqueBilans[existant] = bilan;
+            } else {
+                historiqueBilans.push(bilan);
+            }
             
             // Garder les 50 derniers bilans max
             if (historiqueBilans.length > 50) {
                 historiqueBilans = historiqueBilans.slice(-50);
             }
             
+            // Sauvegarder dans Firebase (hôte uniquement pour éviter conflits)
+            if (isHost && gameRef) {
+                gameRef.child('historiqueBilans').set(historiqueBilans).catch(e => 
+                    console.warn('⚠️ Sauvegarde historiqueBilans échouée:', e)
+                );
+            }
+            
             console.log(`📊 Bilan Tour ${bilan.tour} enregistré (score: ${bilan.scoreEconomique})`);
             return bilan;
+        }
+        
+        // Charger l'historique des bilans depuis Firebase
+        async function loadHistoriqueBilansFromFirebase() {
+            if (!gameRef) return;
+            try {
+                const snap = await gameRef.child('historiqueBilans').once('value');
+                if (snap.exists()) {
+                    historiqueBilans = snap.val() || [];
+                    console.log(`📊 Historique bilans chargé: ${historiqueBilans.length} tours`);
+                }
+            } catch(e) {
+                console.warn('⚠️ Chargement historiqueBilans échoué:', e);
+            }
         }
         
         // Comparer deux bilans
@@ -4068,6 +4096,7 @@ activiteId: actId
             const state = gameData?.state || gameData?.status;
             if (state?.started || gameData?.status === 'started') {
                 loadComptabiliteFromFirebase();
+                loadHistoriqueBilansFromFirebase();
                 showScreen('gameScreen');
             } else {
                 showScreen('lobbyScreen');
@@ -4182,6 +4211,7 @@ activiteId: actId
                 gameRef = db.ref(`parties/${code}`);
                 
                 // Initialiser GAME_SAVE pour audit + replay
+                historiqueBilans = [];
                 GAME_SAVE = {
                     schemaVersion: SCHEMA_VERSION,
                     gameId: `ESPOYR_${code}`,
@@ -4574,6 +4604,7 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                 
                 if (gameState?.started && document.getElementById('gameScreen').classList.contains('hidden')) {
                     loadComptabiliteFromFirebase();
+                    loadHistoriqueBilansFromFirebase();
                     showScreen('gameScreen');
                 }
               updateGameUI();
