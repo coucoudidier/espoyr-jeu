@@ -11410,18 +11410,21 @@ function initSystemeDe() {
         // ========== GRAPHIQUE ÉVOLUTION ÉCONOMIQUE ==========
         function showGraphiqueEvolution() {
             // S'assurer qu'on a le bilan actuel dans l'historique
-            if (historiqueBilans.length === 0 || historiqueBilans[historiqueBilans.length - 1].tour !== (gameState?.turn || 1)) {
+            const currentTour = gameState?.turn || 1;
+            if (historiqueBilans.length === 0 || historiqueBilans[historiqueBilans.length - 1].tour !== currentTour) {
                 enregistrerBilanTour();
             }
             
+            console.log(`📈 showGraphiqueEvolution: ${historiqueBilans.length} bilans disponibles`);
+            
             if (historiqueBilans.length < 2) {
-                showModal(`
+                showGraphModal(`
                     <h3>📈 Évolution Économique</h3>
                     <p style="color: var(--gray); text-align:center; padding: 20px;">
                         Pas assez de données (${historiqueBilans.length} tour enregistré).<br>
                         Le graphique apparaît à partir du tour 2.
                     </p>
-                `, `<button class="btn btn-secondary" onclick="showBilanModal()">← Retour</button>`);
+                `, `<button class="btn btn-secondary" onclick="closeGraphModal(); showBilanModal()">← Retour</button>`);
                 return;
             }
             
@@ -11474,10 +11477,13 @@ function initSystemeDe() {
             const gW = W - margin.left - margin.right;
             const gH = H - margin.top - margin.bottom;
             
-            // Échelles
+            // Échelles — basées sur les valeurs extrêmes réelles avec marge
             const allVals = series.flatMap(s => s.points.map(p => p.val));
-            const minVal = Math.min(0, ...allVals);
-            const maxVal = Math.max(100, ...allVals);
+            const rawMin = Math.min(...allVals);
+            const rawMax = Math.max(...allVals);
+            const padding = Math.max(50, Math.ceil((rawMax - rawMin) * 0.1));
+            const minVal = Math.min(0, rawMin) - padding;
+            const maxVal = rawMax + padding;
             const range = maxVal - minVal || 1;
             
             const tours = bilans.map(b => b.tour);
@@ -11491,15 +11497,16 @@ function initSystemeDe() {
             // Grille et axes
             let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;background:#fafafa;border-radius:8px;">`;
             
-            // Ligne zéro
-            if (minVal < 0) {
-                const y0 = y(0);
-                svg += `<line x1="${margin.left}" y1="${y0}" x2="${W - margin.right}" y2="${y0}" stroke="#9ca3af" stroke-width="1" stroke-dasharray="4,2"/>`;
-                svg += `<text x="${margin.left - 5}" y="${y0 + 4}" text-anchor="end" font-size="10" fill="#9ca3af">0€</text>`;
-            }
+            // Ligne zéro (toujours visible — repère de départ)
+            const y0 = y(0);
+            svg += `<line x1="${margin.left}" y1="${y0}" x2="${W - margin.right}" y2="${y0}" stroke="#374151" stroke-width="1.5" stroke-dasharray="4,2"/>`;
+            svg += `<text x="${margin.left - 5}" y="${y0 + 4}" text-anchor="end" font-size="10" fill="#374151" font-weight="bold">0€</text>`;
             
-            // Grille horizontale
-            const step = Math.pow(10, Math.floor(Math.log10(range / 4))) || 100;
+            // Grille horizontale — pas intelligent selon l'amplitude
+            const rawStep = (maxVal - minVal) / 6;
+            const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+            const normalized = rawStep / magnitude;
+            const step = magnitude * (normalized <= 1.5 ? 1 : normalized <= 3.5 ? 2 : normalized <= 7.5 ? 5 : 10);
             for (let v = Math.ceil(minVal / step) * step; v <= maxVal; v += step) {
                 const yv = y(v);
                 svg += `<line x1="${margin.left}" y1="${yv}" x2="${W - margin.right}" y2="${yv}" stroke="#e5e7eb" stroke-width="0.5"/>`;
