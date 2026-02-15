@@ -11463,9 +11463,8 @@ function initSystemeDe() {
             const bankSeries = bilans.map(b => ({ tour: b.tour, val: Math.round(b.bilanBanque?.interetsRecus || 0) }));
             series.push({ nom: '🏦 Banque (intérêts)', points: bankSeries, color: '#000000', dash: '6,3' });
             
-            // Série Hors circuit : fuite monétaire
-            const fuiteSeries = bilans.map(b => ({ tour: b.tour, val: Math.round(b.bilanHorsCircuit?.solde || 0) }));
-            series.push({ nom: '💸 Fuite hors circuit', points: fuiteSeries, color: '#6b7280', dash: '3,3' });
+            // Fuite hors circuit : exclue du graphique (écrase l'échelle)
+            // → reste visible dans l'analyse textuelle en dessous
             
             // Série État : dette publique
             const etatDetteSeries = bilans.map(b => ({ tour: b.tour, val: Math.round(b.bilanEtat?.dette || 0) }));
