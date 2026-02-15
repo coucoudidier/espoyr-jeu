@@ -4045,6 +4045,17 @@ activiteId: actId
             document.getElementById(screenId).classList.remove('hidden');
         }
         
+        function showLobbyOrGame(gameData) {
+            const state = gameData?.state || gameData?.status;
+            if (state?.started || gameData?.status === 'started') {
+                loadComptabiliteFromFirebase();
+                showScreen('gameScreen');
+            } else {
+                showScreen('lobbyScreen');
+                document.getElementById('lobbyCode').textContent = currentGameCode;
+            }
+        }
+        
         function showError(msg) {
             const el = document.getElementById('errorMessage');
             el.textContent = msg; el.style.display = 'block';
@@ -4442,6 +4453,13 @@ activiteId: actId
             // Compatibilité : reconnexion par nom si ancien joueur (sans ticket)
             const existingPlayer = Object.values(existingPlayers).find(p => p.name === myName);
             if (existingPlayer) {
+                // Protection : refuser si le joueur est encore connecté (heartbeat < 60s)
+                const lastSeen = existingPlayer.lastSeen || 0;
+                const elapsed = Date.now() - lastSeen;
+                if (elapsed < 60000 && existingPlayer.isConnected) {
+                    showError('Ce joueur est déjà connecté ! Utilisez un ticket de reprise.');
+                    return;
+                }
                 currentGameCode = code;
                 myPlayerId = existingPlayer.id;
                 myAvatar = existingPlayer.avatar;
@@ -9866,6 +9884,10 @@ function initSystemeDe() {
                     // Créer un snapshot à chaque fin de tour complet
                     createSnapshot();
                     console.log(`📸 Snapshot créé: Tour ${newTurn}`);
+                    
+                    // Capture automatique du bilan pour l'historique et les graphiques
+                    enregistrerBilanTour();
+                    console.log(`📊 Bilan auto-capturé: Tour ${newTurn}`);
                 }
                 
                 // Reset compteur actions contributives du joueur qui vient de jouer
@@ -11157,11 +11179,12 @@ function initSystemeDe() {
                 
                 return `
                     <tr>
-                        <td>${fmt(bilan.actif.caisseEuro)}€</td>
-                        <td>${fmt(bilan.actif.caisseEspoyr)}#</td>
-                        <td>${fmt(bilan.actif.activites)}€</td>
-                        <td>${fmt(bilan.passif.emprunts)}€</td>
-                        <td>${fmt(bilan.actif.total - bilan.passif.emprunts)}€</td>
+                        <td>${p.avatar || '⬜'} ${p.name}${p.isBot ? ' 🤖' : ''}</td>
+                        <td>${fmt(euro)}€</td>
+                        <td>${fmt(espoyr)}#</td>
+                        <td>${fmt(activites)}€</td>
+                        <td>${fmt(dette)}€</td>
+                        <td>${fmt(net)}€</td>
                     </tr>
                 `;
             }).join('');
@@ -11328,9 +11351,206 @@ function initSystemeDe() {
                 <p style="font-size: 0.75rem; color: #9ca3af;">${bilan.nbEcritures} écritures comptables</p>
             `, `
                 <button class="btn btn-primary" onclick="enregistrerBilanTour(); closeModal();">📸 Sauver</button>
+                <button class="btn" style="background:#dbeafe; color:#2563eb;" onclick="showGraphiqueEvolution()">📈 Évolution</button>
                 <button class="btn" style="background:#fef3c7; color:#92400e;" onclick="exportBilanCSV()">📥 CSV</button>
                 <button class="btn btn-secondary" onclick="closeModal()">Fermer</button>
             `);
+        }
+        
+        // ========== GRAPHIQUE ÉVOLUTION ÉCONOMIQUE ==========
+        function showGraphiqueEvolution() {
+            // S'assurer qu'on a le bilan actuel dans l'historique
+            if (historiqueBilans.length === 0 || historiqueBilans[historiqueBilans.length - 1].tour !== (gameState?.turn || 1)) {
+                enregistrerBilanTour();
+            }
+            
+            if (historiqueBilans.length < 2) {
+                showModal(`
+                    <h3>📈 Évolution Économique</h3>
+                    <p style="color: var(--gray); text-align:center; padding: 20px;">
+                        Pas assez de données (${historiqueBilans.length} tour enregistré).<br>
+                        Le graphique apparaît à partir du tour 2.
+                    </p>
+                `, `<button class="btn btn-secondary" onclick="showBilanModal()">← Retour</button>`);
+                return;
+            }
+            
+            const bilans = historiqueBilans;
+            const players = Object.values(playersData);
+            const capitalInit = CONFIG.capitalInitial || 450;
+            
+            // Préparer les séries de données
+            const series = [];
+            const couleurs = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899'];
+            
+            // Série par joueur : patrimoine net
+            players.forEach((p, i) => {
+                const points = bilans.map(b => {
+                    const bj = b.bilansJoueurs[p.id] || {};
+                    return { tour: b.tour, val: Math.round((bj.net || 0) - capitalInit) };
+                });
+                series.push({ nom: `${p.avatar || '⬜'} ${p.name}`, points, color: couleurs[i % couleurs.length], dash: '' });
+            });
+            
+            // Série Banque : intérêts cumulés (profit pur)
+            const bankSeries = bilans.map(b => ({ tour: b.tour, val: Math.round(b.bilanBanque?.interetsRecus || 0) }));
+            series.push({ nom: '🏦 Banque (intérêts)', points: bankSeries, color: '#000000', dash: '6,3' });
+            
+            // Série Hors circuit : fuite monétaire
+            const fuiteSeries = bilans.map(b => ({ tour: b.tour, val: Math.round(b.bilanHorsCircuit?.solde || 0) }));
+            series.push({ nom: '💸 Fuite hors circuit', points: fuiteSeries, color: '#6b7280', dash: '3,3' });
+            
+            // Dimensions SVG
+            const W = 600, H = 350;
+            const margin = { top: 20, right: 20, bottom: 40, left: 60 };
+            const gW = W - margin.left - margin.right;
+            const gH = H - margin.top - margin.bottom;
+            
+            // Échelles
+            const allVals = series.flatMap(s => s.points.map(p => p.val));
+            const minVal = Math.min(0, ...allVals);
+            const maxVal = Math.max(100, ...allVals);
+            const range = maxVal - minVal || 1;
+            
+            const tours = bilans.map(b => b.tour);
+            const minT = Math.min(...tours);
+            const maxT = Math.max(...tours);
+            const rangeT = maxT - minT || 1;
+            
+            function x(tour) { return margin.left + ((tour - minT) / rangeT) * gW; }
+            function y(val) { return margin.top + gH - ((val - minVal) / range) * gH; }
+            
+            // Grille et axes
+            let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;background:#fafafa;border-radius:8px;">`;
+            
+            // Ligne zéro
+            if (minVal < 0) {
+                const y0 = y(0);
+                svg += `<line x1="${margin.left}" y1="${y0}" x2="${W - margin.right}" y2="${y0}" stroke="#9ca3af" stroke-width="1" stroke-dasharray="4,2"/>`;
+                svg += `<text x="${margin.left - 5}" y="${y0 + 4}" text-anchor="end" font-size="10" fill="#9ca3af">0€</text>`;
+            }
+            
+            // Grille horizontale
+            const step = Math.pow(10, Math.floor(Math.log10(range / 4))) || 100;
+            for (let v = Math.ceil(minVal / step) * step; v <= maxVal; v += step) {
+                const yv = y(v);
+                svg += `<line x1="${margin.left}" y1="${yv}" x2="${W - margin.right}" y2="${yv}" stroke="#e5e7eb" stroke-width="0.5"/>`;
+                svg += `<text x="${margin.left - 5}" y="${yv + 4}" text-anchor="end" font-size="9" fill="#9ca3af">${v}€</text>`;
+            }
+            
+            // Axe X (tours)
+            tours.forEach(t => {
+                const xt = x(t);
+                svg += `<text x="${xt}" y="${H - 10}" text-anchor="middle" font-size="10" fill="#6b7280">T${t}</text>`;
+                svg += `<line x1="${xt}" y1="${margin.top}" x2="${xt}" y2="${H - margin.bottom}" stroke="#e5e7eb" stroke-width="0.5"/>`;
+            });
+            
+            // Courbes
+            series.forEach(s => {
+                if (s.points.length < 2) return;
+                const pathD = s.points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.tour).toFixed(1)},${y(p.val).toFixed(1)}`).join(' ');
+                const dashAttr = s.dash ? ` stroke-dasharray="${s.dash}"` : '';
+                svg += `<path d="${pathD}" fill="none" stroke="${s.color}" stroke-width="2.5"${dashAttr}/>`;
+                
+                // Points
+                s.points.forEach(p => {
+                    svg += `<circle cx="${x(p.tour).toFixed(1)}" cy="${y(p.val).toFixed(1)}" r="3" fill="${s.color}"/>`;
+                });
+                
+                // Valeur finale
+                const last = s.points[s.points.length - 1];
+                svg += `<text x="${x(last.tour) + 5}" y="${y(last.val) + 4}" font-size="9" fill="${s.color}" font-weight="bold">${last.val > 0 ? '+' : ''}${last.val}€</text>`;
+            });
+            
+            svg += '</svg>';
+            
+            // Légende
+            let legend = '<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; font-size:0.8rem;">';
+            series.forEach(s => {
+                const last = s.points[s.points.length - 1];
+                const val = last ? last.val : 0;
+                const style = s.dash ? `border-top:2px dashed ${s.color}` : `border-top:2px solid ${s.color}`;
+                legend += `<span style="display:inline-flex;align-items:center;gap:4px;">
+                    <span style="width:16px;${style};"></span>
+                    ${s.nom} <strong style="color:${s.color}">${val > 0 ? '+' : ''}${val}€</strong>
+                </span>`;
+            });
+            legend += '</div>';
+            
+            // Analyse textuelle
+            const lastBilan = bilans[bilans.length - 1];
+            const banqueProfit = Math.round(lastBilan.bilanBanque?.interetsRecus || 0);
+            const fuiteTotal = Math.round(lastBilan.bilanHorsCircuit?.solde || 0);
+            const masse = Math.round(lastBilan.bilanBanque?.passif?.masseMonetaire || 0);
+            const fuitePct = masse > 0 ? Math.round(fuiteTotal / masse * 100) : 0;
+            
+            const joueurNets = players.map(p => {
+                const bj = lastBilan.bilansJoueurs[p.id] || {};
+                return { nom: p.name, avatar: p.avatar, net: Math.round((bj.net || 0) - capitalInit) };
+            }).sort((a, b) => b.net - a.net);
+            
+            const meilleur = joueurNets[0];
+            const pire = joueurNets[joueurNets.length - 1];
+            const nbNegatifs = joueurNets.filter(j => j.net < 0).length;
+            
+            let analyse = `<div style="background:#f0fdf4;padding:10px;border-radius:8px;margin-top:10px;font-size:0.85rem;">`;
+            analyse += `<strong>💡 Analyse Tour ${lastBilan.tour}</strong><br>`;
+            analyse += `🏦 La banque a gagné <strong>${banqueProfit}€</strong> d'intérêts sans rien produire.<br>`;
+            if (fuiteTotal > 0) analyse += `💸 <strong>${fuitePct}%</strong> de la monnaie (${fuiteTotal}€/${masse}€) a quitté le circuit local.<br>`;
+            if (nbNegatifs > 0) analyse += `📉 <strong>${nbNegatifs} joueur${nbNegatifs > 1 ? 's' : ''}</strong> ${nbNegatifs > 1 ? 'ont' : 'a'} perdu de la valeur depuis le départ.<br>`;
+            analyse += `🏆 Meilleur : ${meilleur.avatar} ${meilleur.nom} (${meilleur.net > 0 ? '+' : ''}${meilleur.net}€) — `;
+            analyse += `⚠️ Pire : ${pire.avatar} ${pire.nom} (${pire.net > 0 ? '+' : ''}${pire.net}€)<br>`;
+            analyse += `<em style="color:#6b7280;">Les joueurs se partagent les pertes, la banque encaisse les intérêts.</em>`;
+            analyse += `</div>`;
+            
+            showModal(`
+                <h3>📈 Évolution Économique (${bilans.length} tours)</h3>
+                <p style="font-size:0.8rem;color:#6b7280;margin:0 0 8px;">Patrimoine net par rapport au capital de départ (${capitalInit}€)</p>
+                ${svg}
+                ${legend}
+                ${analyse}
+            `, `
+                <button class="btn" style="background:#dbeafe; color:#2563eb;" onclick="envoyerAnalyseChat()">💬 Envoyer au chat</button>
+                <button class="btn btn-secondary" onclick="showBilanModal()">← Retour</button>
+            `);
+        }
+        
+        // Envoyer l'analyse dans le chat
+        function envoyerAnalyseChat() {
+            const bilans = historiqueBilans;
+            if (bilans.length === 0) return;
+            
+            const lastBilan = bilans[bilans.length - 1];
+            const capitalInit = CONFIG.capitalInitial || 450;
+            const players = Object.values(playersData);
+            
+            const banqueProfit = Math.round(lastBilan.bilanBanque?.interetsRecus || 0);
+            const fuiteTotal = Math.round(lastBilan.bilanHorsCircuit?.solde || 0);
+            const masse = Math.round(lastBilan.bilanBanque?.passif?.masseMonetaire || 0);
+            const fuitePct = masse > 0 ? Math.round(fuiteTotal / masse * 100) : 0;
+            
+            const joueurNets = players.map(p => {
+                const bj = lastBilan.bilansJoueurs[p.id] || {};
+                return { nom: p.name, avatar: p.avatar, net: Math.round((bj.net || 0) - capitalInit) };
+            }).sort((a, b) => b.net - a.net);
+            
+            sendSystemMessage(`📊 ANALYSE ÉCONOMIQUE — Tour ${lastBilan.tour}`);
+            
+            let msg = '👥 Évolution joueurs :';
+            joueurNets.forEach(j => {
+                const signe = j.net >= 0 ? '+' : '';
+                msg += ` | ${j.avatar} ${j.nom}: ${signe}${j.net}€`;
+            });
+            sendSystemMessage(msg);
+            
+            sendSystemMessage(`🏦 Banque : +${banqueProfit}€ d'intérêts encaissés (profit sans production)`);
+            
+            if (fuiteTotal > 0) {
+                sendSystemMessage(`💸 Fuite monétaire : ${fuitePct}% (${fuiteTotal}€ sur ${masse}€ créés) a quitté l'économie locale`);
+            }
+            
+            sendSystemMessage(`💡 Qui gagne vraiment dans ce système ?`);
+            closeModal();
         }
         
         // ========== COMPTE JOUEUR ==========
