@@ -10592,6 +10592,8 @@ function initSystemeDe() {
                 caisse.euro = bot.euro;
             }
             
+            const isMembre = COMPTABILITE.potAAA.membres?.includes(botId) || bot.membreAAA;
+            
             if (c.type === 'activite') {
                 const activitesSnap = await gameRef.child('activites').once('value');
                 const activites = activitesSnap.val() || {};
@@ -14355,4 +14357,4 @@ function initSystemeDe() {
         
     </script>
 </body>
-</html>0
+</html>
