@@ -6535,8 +6535,8 @@ function initSystemeDe() {
             // Utiliser la caisse comptable OU le solde Firebase comme fallback
             const caisse = COMPTABILITE.caisseJoueurs[myPlayerId] || {};
             const player = playersData[myPlayerId] || {};
-            const currentEuro = caisse.euro || player.euro || 0;
-            const currentEspoyr = caisse.espoyr || player.espoyr || 0;
+            const currentEuro = caisse.euro !== undefined ? caisse.euro : (player.euro ?? 0);
+            const currentEspoyr = caisse.espoyr !== undefined ? caisse.espoyr : (player.espoyr ?? 0);
             
             if (c.type === 'activite') {
                 const activitesSnap = await gameRef.child('activites').once('value');
@@ -6660,12 +6660,12 @@ function initSystemeDe() {
                 profil
             }, result.ledgerEntryIds || []);
             
-            // Firebase - mettre à jour tous les joueurs (redistribution)
-            for (const p of Object.values(playersData)) {
-                const caisse = COMPTABILITE.caisseJoueurs[p.id];
+            // Firebase - mettre à jour le joueur acheteur uniquement
+            {
+                const caisse = COMPTABILITE.caisseJoueurs[myPlayerId];
                 if (caisse) {
-                    await db.ref(`parties/${currentGameCode}/players/${p.id}/euro`).set(caisse.euro);
-                    await db.ref(`parties/${currentGameCode}/players/${p.id}/espoyr`).set(caisse.espoyr || 0);
+                    await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/euro`).set(caisse.euro);
+                    await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/espoyr`).set(caisse.espoyr || 0);
                 }
             }
             await gameRef.child(`activites/${caseId}`).set(myPlayerId);
@@ -6674,7 +6674,7 @@ function initSystemeDe() {
             sendSystemMessage(`🏪 ${myName} achète ${c.icon} (-${fmt(prix)}€) → 🛰️ hors circuit ${fmt(result.partHorsCircuit || 0)}€`);
             
             // Vérifier si on peut équiper immédiatement
-            const currentEuro = COMPTABILITE.caisseJoueurs[myPlayerId]?.euro || 0;
+            const currentEuro = COMPTABILITE.caisseJoueurs[myPlayerId]?.euro ?? 0;
             if (currentEuro >= getPrixB(caseId)) {
                 // Proposer d'équiper immédiatement
                 showEquipAfterBuyModal(c, currentEuro, profil);
