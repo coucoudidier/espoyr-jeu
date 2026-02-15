@@ -321,6 +321,23 @@
             background: white; border-radius: 16px; padding: 20px;
             max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto;
         }
+        .modal.modal-graph {
+            max-width: 95vw; width: 95vw; max-height: 95vh; padding: 12px;
+            border-radius: 10px;
+        }
+        .modal-graph-landscape {
+            position: fixed !important; top: 0 !important; left: 0 !important;
+            width: 100vw !important; max-width: 100vw !important;
+            height: 100vh !important; max-height: 100vh !important;
+            border-radius: 0 !important; margin: 0 !important;
+            padding: 8px !important; z-index: 1001;
+        }
+        @media (max-width: 600px) {
+            .modal.modal-graph { width: 98vw; max-width: 98vw; padding: 8px; }
+            .modal.modal-graph h3 { font-size: 0.95rem; margin-bottom: 6px; }
+            .modal.modal-graph .graph-legend { font-size: 0.7rem; gap: 4px; }
+            .modal.modal-graph .graph-analyse { font-size: 0.78rem; padding: 8px; }
+        }
         .modal h3 { color: var(--green-dark); margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
         .modal-buttons { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
         .modal-buttons .btn { flex: 1; min-width: 100px; }
@@ -2256,6 +2273,8 @@ function isAbsent(player) {
             // Bilan État
             const bilanEtat = {
                 actif: { tresor: COMPTABILITE.etat.tresor },
+                dette: COMPTABILITE.etat.dette?.capital || 0,
+                interetsCumules: COMPTABILITE.etat.dette?.interetsCumules || 0,
                 taxesRecues: COMPTABILITE.etat.taxesRecues,
                 salairesVerses: COMPTABILITE.etat.salairesVerses || 0
             };
@@ -11400,6 +11419,24 @@ function initSystemeDe() {
             const fuiteSeries = bilans.map(b => ({ tour: b.tour, val: Math.round(b.bilanHorsCircuit?.solde || 0) }));
             series.push({ nom: '💸 Fuite hors circuit', points: fuiteSeries, color: '#6b7280', dash: '3,3' });
             
+            // Série État : dette publique
+            const etatDetteSeries = bilans.map(b => ({ tour: b.tour, val: Math.round(b.bilanEtat?.dette || 0) }));
+            series.push({ nom: '🏛️ Dette État', points: etatDetteSeries, color: '#7c3aed', dash: '8,4' });
+            
+            // Série # en circulation (économie Espoyr)
+            const hashSeries = bilans.map(b => ({ tour: b.tour, val: Math.round(b.bilanAAA?.circulationHash || 0) }));
+            const hasHash = hashSeries.some(p => p.val > 0);
+            if (hasHash) {
+                series.push({ nom: '🌿 # en circulation', points: hashSeries, color: '#059669', dash: '4,2' });
+            }
+            
+            // Détecter les transitions de phase
+            let phase2Tour = null, phase3Tour = null;
+            for (let i = 1; i < bilans.length; i++) {
+                if (!phase2Tour && bilans[i].phase >= 2 && bilans[i-1].phase < 2) phase2Tour = bilans[i].tour;
+                if (!phase3Tour && bilans[i].phase >= 3 && bilans[i-1].phase < 3) phase3Tour = bilans[i].tour;
+            }
+            
             // Dimensions SVG
             const W = 600, H = 350;
             const margin = { top: 20, right: 20, bottom: 40, left: 60 };
@@ -11445,6 +11482,22 @@ function initSystemeDe() {
                 svg += `<line x1="${xt}" y1="${margin.top}" x2="${xt}" y2="${H - margin.bottom}" stroke="#e5e7eb" stroke-width="0.5"/>`;
             });
             
+            // Marqueurs de phase (lignes verticales)
+            if (phase2Tour !== null) {
+                const xp2 = x(phase2Tour);
+                svg += `<rect x="${xp2 - 1}" y="${margin.top}" width="${phase3Tour ? x(phase3Tour) - xp2 : W - margin.right - xp2}" height="${gH}" fill="#dcfce7" opacity="0.3"/>`;
+                svg += `<line x1="${xp2}" y1="${margin.top}" x2="${xp2}" y2="${H - margin.bottom}" stroke="#059669" stroke-width="2" stroke-dasharray="6,3"/>`;
+                svg += `<text x="${xp2 + 4}" y="${margin.top + 14}" font-size="10" fill="#059669" font-weight="bold">Phase 2 🌿</text>`;
+                svg += `<text x="${xp2 + 4}" y="${margin.top + 26}" font-size="8" fill="#059669">Espoyr # activés</text>`;
+            }
+            if (phase3Tour !== null) {
+                const xp3 = x(phase3Tour);
+                svg += `<rect x="${xp3}" y="${margin.top}" width="${W - margin.right - xp3}" height="${gH}" fill="#fee2e2" opacity="0.2"/>`;
+                svg += `<line x1="${xp3}" y1="${margin.top}" x2="${xp3}" y2="${H - margin.bottom}" stroke="#dc2626" stroke-width="2" stroke-dasharray="6,3"/>`;
+                svg += `<text x="${xp3 + 4}" y="${margin.top + 14}" font-size="10" fill="#dc2626" font-weight="bold">Phase 3 ⚠️</text>`;
+                svg += `<text x="${xp3 + 4}" y="${margin.top + 26}" font-size="8" fill="#dc2626">Crise économique</text>`;
+            }
+            
             // Courbes
             series.forEach(s => {
                 if (s.points.length < 2) return;
@@ -11465,7 +11518,7 @@ function initSystemeDe() {
             svg += '</svg>';
             
             // Légende
-            let legend = '<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; font-size:0.8rem;">';
+            let legend = '<div class="graph-legend" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; font-size:0.8rem;">';
             series.forEach(s => {
                 const last = s.points[s.points.length - 1];
                 const val = last ? last.val : 0;
@@ -11493,26 +11546,73 @@ function initSystemeDe() {
             const pire = joueurNets[joueurNets.length - 1];
             const nbNegatifs = joueurNets.filter(j => j.net < 0).length;
             
-            let analyse = `<div style="background:#f0fdf4;padding:10px;border-radius:8px;margin-top:10px;font-size:0.85rem;">`;
+            let analyse = `<div class="graph-analyse" style="background:#f0fdf4;padding:10px;border-radius:8px;margin-top:10px;font-size:0.85rem;">`;
             analyse += `<strong>💡 Analyse Tour ${lastBilan.tour}</strong><br>`;
             analyse += `🏦 La banque a gagné <strong>${banqueProfit}€</strong> d'intérêts sans rien produire.<br>`;
             if (fuiteTotal > 0) analyse += `💸 <strong>${fuitePct}%</strong> de la monnaie (${fuiteTotal}€/${masse}€) a quitté le circuit local.<br>`;
+            const detteEtat = Math.round(lastBilan.bilanEtat?.dette || 0);
+            const interetsEtat = Math.round(lastBilan.bilanEtat?.interetsCumules || 0);
+            if (detteEtat > 0) analyse += `🏛️ L'État est endetté de <strong>${detteEtat}€</strong> (intérêts cumulés: ${interetsEtat}€).<br>`;
+            const hashCirculation = Math.round(lastBilan.bilanAAA?.circulationHash || 0);
+            const nbMembres = lastBilan.bilanAAA?.membres || 0;
+            if (hashCirculation > 0) {
+                analyse += `🌿 <strong>${hashCirculation}#</strong> en circulation (${nbMembres} membre${nbMembres > 1 ? 's' : ''} AAA).<br>`;
+            }
+            if (lastBilan.phase >= 2) {
+                analyse += `📌 Phase ${lastBilan.phase} active${lastBilan.phase === 2 ? ' — la monnaie complémentaire peut changer la donne !' : ' — crise économique, les salaires s\'effondrent.'}.<br>`;
+            }
             if (nbNegatifs > 0) analyse += `📉 <strong>${nbNegatifs} joueur${nbNegatifs > 1 ? 's' : ''}</strong> ${nbNegatifs > 1 ? 'ont' : 'a'} perdu de la valeur depuis le départ.<br>`;
             analyse += `🏆 Meilleur : ${meilleur.avatar} ${meilleur.nom} (${meilleur.net > 0 ? '+' : ''}${meilleur.net}€) — `;
             analyse += `⚠️ Pire : ${pire.avatar} ${pire.nom} (${pire.net > 0 ? '+' : ''}${pire.net}€)<br>`;
             analyse += `<em style="color:#6b7280;">Les joueurs se partagent les pertes, la banque encaisse les intérêts.</em>`;
             analyse += `</div>`;
             
-            showModal(`
+            showGraphModal(`
                 <h3>📈 Évolution Économique (${bilans.length} tours)</h3>
                 <p style="font-size:0.8rem;color:#6b7280;margin:0 0 8px;">Patrimoine net par rapport au capital de départ (${capitalInit}€)</p>
                 ${svg}
                 ${legend}
                 ${analyse}
             `, `
-                <button class="btn" style="background:#dbeafe; color:#2563eb;" onclick="envoyerAnalyseChat()">💬 Envoyer au chat</button>
-                <button class="btn btn-secondary" onclick="showBilanModal()">← Retour</button>
+                <button class="btn" style="background:#dbeafe; color:#2563eb;" onclick="envoyerAnalyseChat()">💬 Chat</button>
+                <button class="btn" style="background:#fef3c7; color:#92400e;" onclick="toggleGraphLandscape()">🔄 Paysage</button>
+                <button class="btn btn-secondary" onclick="closeGraphModal(); showBilanModal()">← Retour</button>
             `);
+        }
+        
+        // Modal graphique plein écran
+        function showGraphModal(content, buttons) {
+            document.getElementById('modalContainer').innerHTML = `
+                <div class="modal-overlay" id="graphOverlay" onclick="if(event.target===this)closeGraphModal()">
+                    <div class="modal modal-graph" id="graphModal">
+                        ${content}
+                        ${buttons ? '<div class="modal-buttons">' + buttons + '</div>' : ''}
+                    </div>
+                </div>`;
+        }
+        
+        function closeGraphModal() {
+            const modal = document.getElementById('graphModal');
+            if (modal) modal.classList.remove('modal-graph-landscape');
+            document.getElementById('modalContainer').innerHTML = '';
+            // Forcer retour portrait si on était en paysage
+            if (screen.orientation?.unlock) try { screen.orientation.unlock(); } catch(e) {}
+        }
+        
+        function toggleGraphLandscape() {
+            const modal = document.getElementById('graphModal');
+            if (!modal) return;
+            const isLandscape = modal.classList.toggle('modal-graph-landscape');
+            if (isLandscape) {
+                // Tenter de forcer le paysage sur mobile
+                if (screen.orientation?.lock) {
+                    screen.orientation.lock('landscape').catch(() => {});
+                }
+            } else {
+                if (screen.orientation?.unlock) {
+                    try { screen.orientation.unlock(); } catch(e) {}
+                }
+            }
         }
         
         // Envoyer l'analyse dans le chat
@@ -11549,8 +11649,14 @@ function initSystemeDe() {
                 sendSystemMessage(`💸 Fuite monétaire : ${fuitePct}% (${fuiteTotal}€ sur ${masse}€ créés) a quitté l'économie locale`);
             }
             
+            const detteEtat = Math.round(lastBilan.bilanEtat?.dette || 0);
+            if (detteEtat > 0) {
+                const interetsEtat = Math.round(lastBilan.bilanEtat?.interetsCumules || 0);
+                sendSystemMessage(`🏛️ Dette publique : ${detteEtat}€ (intérêts cumulés: ${interetsEtat}€) — l'État emprunte pour payer ses intérêts`);
+            }
+            
             sendSystemMessage(`💡 Qui gagne vraiment dans ce système ?`);
-            closeModal();
+            closeGraphModal();
         }
         
         // ========== COMPTE JOUEUR ==========
