@@ -77,22 +77,7 @@
             50% { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); }
         }
         .player-avatar { font-size: 1.5rem; }
-        /* Robots: style distinct pour ne pas être confondus avec les humains */
-        .player-item.bot {
-            background: #f3f4f6;
-            border-color: #9ca3af;
-        }
-        .bot-badge {
-            display: inline-block;
-            margin-left: 6px;
-            padding: 2px 6px;
-            border-radius: 999px;
-            font-size: 0.7rem;
-            font-weight: 700;
-            background: #111827;
-            color: #ffffff;
-            vertical-align: middle;
-        }
+        /* Joueurs complémentaires : même style que les humains (anonymisation) */
         .player-info { flex: 1; }
         .player-name { font-weight: 600; color: #1f2937; }
         .player-stats { font-size: 0.8rem; color: var(--gray); }
@@ -423,7 +408,7 @@
             <div id="hostControls" class="hidden" style="margin-top: 15px;">
                 <button class="btn btn-primary btn-full" onclick="startGame()" id="startGameBtn" disabled>🚀 Lancer</button>
                 <div style="display: flex; gap: 8px; margin-top: 8px;">
-                    <button class="btn" style="flex:1; background: #dbeafe; color: #2563eb;" onclick="showAddBotModal()">🤖 Robot</button>
+                    <button class="btn" style="flex:1; background: #dbeafe; color: #2563eb;" onclick="showAddBotModal()">👥 Joueur complémentaire</button>
                     <button class="btn" style="flex:1; background: #fef3c7; color: #92400e;" onclick="showConfigModal()">⚙️ Config</button>
                 </div>
             </div>
@@ -505,6 +490,7 @@
                     </div>
                     <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;">
                         <button class="btn" id="configBtn" style="background: #e5e7eb; color: #374151; flex: 1; display: none;" onclick="showConfigModal()">⚙️ Config</button>
+                        <button class="btn" id="endGameBtn" style="background: #fee2e2; color: #dc2626; flex: 1; display: none;" onclick="showEndGameConfirm()">🏁 Fin de partie</button>
                     </div>
                 </div>
                 
@@ -898,6 +884,15 @@
             INVESTISSEUR: { id: 'INVESTISSEUR', nom: '📈 Investisseur', acheteToujours: true, equipeToujours: true },
             SOLIDAIRE: { id: 'SOLIDAIRE', nom: LOGO_AAA + ' Solidaire', membreAAA: true, equipeParfois: true }
         };
+        
+        // Prénoms pour les joueurs complémentaires (tirage aléatoire, exclusion des prénoms déjà pris)
+        const PRENOMS_COMPLEMENTAIRES = [
+            'Aymane','Maëlys','Eléaïs','Noélys','Azilis','Lydian','Maïwen','Soline','Yannis','Lioran',
+            'Elvina','Kélyan','Méline','Yoannn','Anouck','Eloanë','Siloam','Maëlan','Elouan','Lylian',
+            'Mélina','Camélë','Thalya','Nohann','Tizian','Milann','Naomie','Selyan','Lénora','Amalia',
+            'Maissa','Yliana','Elouen','Kylian','Soëlla','Lylane','Elyane','Romane','Maëlia','Iliana',
+            'Maëwen','Elyssa','Alizée','Ylisse','Liyann','Naliya','Sélina','Maëlen','Orélie'
+        ];
         
         // ========== TRAVAUX COOPÉRATIFS (Actions Contributives) ==========
         const TRAVAUX_COOP = [
@@ -4135,7 +4130,7 @@ activiteId: actId
 
                     </div>
                     <p style="font-size: 0.85rem; color: var(--gray); margin-top: 12px; text-align:center;rollDiceBtn">
-                        Les robots restent <strong>optionnels</strong> dans les deux modes.
+                        Les joueurs complémentaires restent <strong>optionnels</strong> dans les deux modes.
                     </p>
                 `, ``);
             });
@@ -4775,10 +4770,10 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             const lobbyEl = document.getElementById('lobbyPlayers');
             if (lobbyEl) {
                 lobbyEl.innerHTML = playerArray.map(p => `
-                    <div class="player-item ${p.id === myPlayerId ? 'me' : ''} ${p.isBot ? 'bot' : ''}">
+                    <div class="player-item ${p.id === myPlayerId ? 'me' : ''}">
                         <span class="player-avatar">${p.avatar}</span>
                         <div class="player-info">
-                            <div class="player-name">${p.name} ${p.isBot ? '<span class="bot-badge">ROBOT</span>' : ''}</div>
+                            <div class="player-name">${p.name}</div>
                             <div class="player-stats">${p.isHost ? '👑 Hôte' : 'Joueur'} - 💰${fmt(p.euro || CONFIG.capitalInitial)}€</div>
                         </div>
                         ${p.isHost ? '<span class="player-badge badge-host">HOST</span>' : ''}
@@ -4799,12 +4794,12 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                     const isMembre = COMPTABILITE?.potAAA?.membres?.includes(p.id) || p.membreAAA;
                     
                     return `
-                    <div class="player-item ${p.id === myPlayerId ? 'me' : ''} ${idx === currentIdx ? 'current-turn' : ''} ${p.isBot ? 'bot' : ''}" 
+                    <div class="player-item ${p.id === myPlayerId ? 'me' : ''} ${idx === currentIdx ? 'current-turn' : ''}" 
                          onclick="showCompteJoueur('${p.id}')" style="cursor: pointer;" title="Cliquer pour voir le compte">
                         <span style="width: 12px; height: 12px; border-radius: 50%; background: ${PLAYER_COLORS[idx]}; flex-shrink: 0;"></span>
                         <span class="player-avatar">${p.avatar}</span>
                         <div class="player-info">
-                            <div class="player-name">${p.name} ${isMembre ? LOGO_AAA : ''} ${p.isBot ? '<span class="bot-badge">ROBOT</span>' : ''}</div>
+                            <div class="player-name">${p.name} ${isMembre ? LOGO_AAA : ''}</div>
                             <div class="player-stats">
                                 💰${fmt(euroActuel)}€ 
                                 ${LOGO_AAA}${fmt(espoyrActuel)}# 
@@ -4931,7 +4926,12 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                 `<button class="btn" style="margin: 3px; font-size: 0.8rem;" onclick="addBot('${p.id}')">${p.nom}</button>`
             ).join('');
             
-            showModal(`<h3>🤖 Ajouter Robot</h3><div style="display:flex;flex-wrap:wrap;">${profilsList}</div>`,
+            showModal(`<h3>👥 Joueur complémentaire</h3>
+                <div style="margin-bottom:10px;">
+                    <button class="btn btn-primary" style="width:100%; margin-bottom:8px; font-size:0.95rem;" onclick="addBot('ALEATOIRE')">🎲 Aléatoire</button>
+                </div>
+                <p style="font-size:0.8rem; color:#6b7280; margin-bottom:6px;">Ou choisir un comportement :</p>
+                <div style="display:flex;flex-wrap:wrap;">${profilsList}</div>`,
                 `<button class="btn btn-secondary" onclick="closeModal()">Annuler</button>`);
         }
         
@@ -4983,9 +4983,9 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                     </div>
                     
                     <div>
-                        <label style="font-size: 0.85rem; font-weight: bold;">🤖 Délai robot (secondes)</label>
+                        <label style="font-size: 0.85rem; font-weight: bold;">⏱️ Délai joueur complémentaire (secondes)</label>
                         <input type="number" id="configTimingBot" value="${gameConfig.timingBot}" min="1" max="10" step="0.5" style="width: 100%; padding: 8px; margin-top: 4px;">
-                        <p style="font-size: 0.75rem; color: #6b7280;">Pause avant action des robots</p>
+                        <p style="font-size: 0.75rem; color: #6b7280;">Pause avant action des joueurs complémentaires</p>
                     </div>
                     
                     <div>
@@ -5114,23 +5114,47 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
         
         async function addBot(profilId) {
             closeModal();
+            
+            // Gestion du mode aléatoire
+            if (profilId === 'ALEATOIRE') {
+                const profilIds = Object.keys(PROFILS_IA);
+                profilId = profilIds[Math.floor(Math.random() * profilIds.length)];
+            }
+            
             const profil = PROFILS_IA[profilId];
             const botId = 'bot_' + Date.now();
-            const botNames = ['Robot-A', 'Robot-B', 'Robot-C', 'Robot-D', 'Robot-E', 'Robot-F'];
-            const botName = botNames[Object.keys(playersData).length - 1] || 'Robot';
-            // Avatars robots dédiés (différents des humains) pour éviter toute confusion
-            const botAvatars = ['🤖', '🦾', '🧠', '⚙️', '🛰️', '🔩'];
-            const botIndex = Object.values(playersData).filter(p => p && p.isBot).length;
-            const botAvatar = botAvatars[botIndex % botAvatars.length];
             
-            // Choisir un profil économique aléatoire pour le robot
-            const botEcoProfil = Math.random() > 0.5 ? 'creatif' : 'contributif';
+            // A1: Prénom aléatoire parmi la liste, en excluant ceux déjà pris
+            const nomsPris = Object.values(playersData).filter(p => p && p.name).map(p => p.name.toLowerCase());
+            const prenomsDispos = PRENOMS_COMPLEMENTAIRES.filter(n => !nomsPris.includes(n.toLowerCase()));
+            const botName = prenomsDispos.length > 0
+                ? prenomsDispos[Math.floor(Math.random() * prenomsDispos.length)]
+                : 'Joueur ' + (Object.keys(playersData).length + 1);
+            
+            // A2: Avatars humains — prendre parmi ceux non utilisés
+            const tousAvatars = ['🏠','🚗','⚡','🐢','🌿','👽','😺','🔧'];
+            const avatarsPris = Object.values(playersData).filter(p => p && p.avatar).map(p => p.avatar);
+            const avatarsDispos = tousAvatars.filter(a => !avatarsPris.includes(a));
+            const botAvatar = avatarsDispos.length > 0 
+                ? avatarsDispos[Math.floor(Math.random() * avatarsDispos.length)] 
+                : tousAvatars[Math.floor(Math.random() * tousAvatars.length)];
+            
+            // B1: Profil économique lié au profil IA
+            let botEcoProfil;
+            if (['PREDATEUR', 'INVESTISSEUR'].includes(profilId)) {
+                botEcoProfil = 'creatif';
+            } else if (['COOPERATIF', 'SOLIDAIRE', 'PRUDENT'].includes(profilId)) {
+                botEcoProfil = 'contributif';
+            } else {
+                // EQUILIBRE → aléatoire 50/50
+                botEcoProfil = Math.random() > 0.5 ? 'creatif' : 'contributif';
+            }
             
             await db.ref(`parties/${currentGameCode}/players/${botId}`).set({
                 id: botId, name: botName, avatar: botAvatar,
                 position: 0, euro: CONFIG.capitalInitial, espoyr: 0, emprunt: 0,
                 isHost: false, isBot: true, botProfil: profilId,
-                profil: botEcoProfil,  // Profil économique du robot
+                profil: botEcoProfil,
                 membreAAA: profil.membreAAA || false,
                 passagesDepart: 0, passagesDepuisPhase2: 0,
                 joinedAt: firebase.database.ServerValue.TIMESTAMP,
@@ -5150,8 +5174,9 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             await comptaCapitalInitial(botId, CONFIG.capitalInitial);
             await syncComptabiliteToFirebase();
             
-            const profilIcon = botEcoProfil === 'creatif' ? '🎨' : '🏛️';
-            sendSystemMessage(`🤖 ${botName} (${profil.nom} ${profilIcon}) a rejoint !${profil.membreAAA ? ' ' + LOGO_AAA + ' Membre AAA' : ''}`);
+            // A12: Message anonymisé (pas de profil IA visible)
+            const profilIcon = botEcoProfil === 'creatif' ? '🎨 Créatif' : '🏛️ Contributif';
+            sendSystemMessage(`${botName} (${profilIcon}) a rejoint !${profil.membreAAA ? ' ' + LOGO_AAA + ' Membre AAA' : ''}`);
         }
         
         // ========== UI JEU ==========
@@ -5177,6 +5202,11 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             const configBtn = document.getElementById('configBtn');
             if (configBtn) {
                 configBtn.style.display = isHost ? 'block' : 'none';
+            }
+            // Afficher/masquer le bouton Fin de partie pour l'host
+            const endGameBtn = document.getElementById('endGameBtn');
+            if (endGameBtn) {
+                endGameBtn.style.display = isHost ? 'block' : 'none';
             }
             
             // Afficher le bouton Force Next pour l'hôte (3 niveaux visuels)
@@ -5232,7 +5262,7 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                 const isBot = currentPlayer.isBot;
                 
                 document.getElementById('turnIndicator').textContent = 
-                    isMyTurn ? '🎯 TON TOUR !' : `⏳ ${currentPlayer.name}${isBot ? ' 🤖' : ''}`;
+                    isMyTurn ? '🎯 TON TOUR !' : `⏳ ${currentPlayer.name}`;
                 
                 const diceBtn = document.getElementById('rollDiceBtn');
                 diceBtn.disabled = !isMyTurn;
@@ -5960,6 +5990,20 @@ async function effectuerDeplacement(joueur, valeurDe, sens) {
     const iconeSens = sens === 1 ? '➡️' : '⬅️';
     document.getElementById('diceMessage').textContent =
         `${iconeSens} ${joueur.avatar} ${joueur.name} → ${infoCase?.icon || ''} ${infoCase?.name || 'Case ' + posArrivee}`;
+
+    // Message système de déplacement (même format pour humains et bots)
+    let msgDeplacement = `${joueur.name} fait ${valeurDe} ${iconeSens} ${infoCase?.name || 'Case ' + posArrivee}`;
+    if (infoCase?.type === 'activite') {
+        try {
+            const actSnapHuman = await gameRef.child(`activites/${posArrivee}`).once('value');
+            const ownerIdHuman = actSnapHuman.val();
+            if (ownerIdHuman && ownerIdHuman !== joueur.id) {
+                const ownerNameHuman = playersData[ownerIdHuman]?.name || 'inconnu';
+                msgDeplacement = `${joueur.name} fait ${valeurDe} ${iconeSens} est chez ${ownerNameHuman} (${infoCase?.icon || ''} ${infoCase?.name})`;
+            }
+        } catch(e) { /* fallback au message par défaut */ }
+    }
+    sendSystemMessage(msgDeplacement);
 
     if (passageDepart) {
         sendSystemMessage(`🏁 ${joueur.avatar} ${joueur.name} passe par la case Départ !`);
@@ -10291,7 +10335,7 @@ function initSystemeDe() {
             const statusText = absent 
                 ? `<span style="color:#dc2626;font-weight:bold;">🔴 Absent(e) (déconnecté)</span>`
                 : current?.isBot 
-                    ? `<span style="color:#f59e0b;font-weight:bold;">🤖 Robot bloqué (${elapsed}s)</span>`
+                    ? `<span style="color:#f59e0b;font-weight:bold;">⏳ ${current?.name || 'Joueur'} bloqué (${elapsed}s)</span>`
                     : `<span style="color:#f59e0b;">🟡 Inactif depuis ${elapsed}s</span>`;
             
             showModal(`
@@ -10374,10 +10418,10 @@ function initSystemeDe() {
                     const interetsDec = arrondir2(Math.abs(caisseSk.euro) * 0.03);
                     caisseSk.euro -= interetsDec;
                     await db.ref(`parties/${currentGameCode}/players/${bot.id}/euro`).set(caisseSk.euro);
-                    sendSystemMessage(`📉 🤖 ${bot.name} : intérêts découvert 3% = -${fmt(interetsDec)}€`);
+                    sendSystemMessage(`📉 ${bot.name} : intérêts découvert 3% = -${fmt(interetsDec)}€`);
                 }
                 await gameRef.child(`skipTurns/${bot.id}`).set(skipCount - 1);
-                sendSystemMessage(`⏭️ 🤖 ${bot.name} passe son tour (action contributive)`);
+                sendSystemMessage(`⏭️ ${bot.name} passe son tour (action contributive)`);
                 await syncComptabiliteToFirebase();
                 await nextTurn();
                 return;
@@ -10390,7 +10434,7 @@ function initSystemeDe() {
                 caisseBot.euro -= interetsDecBot;
                 await db.ref(`parties/${currentGameCode}/players/${bot.id}/euro`).set(caisseBot.euro);
                 await syncComptabiliteToFirebase();
-                sendSystemMessage(`📉 🤖 ${bot.name} : intérêts découvert 3% = -${fmt(interetsDecBot)}€ (solde: ${fmt(caisseBot.euro)}€)`);
+                sendSystemMessage(`📉 ${bot.name} : intérêts découvert 3% = -${fmt(interetsDecBot)}€ (solde: ${fmt(caisseBot.euro)}€)`);
             }
             const profil = PROFILS_IA[bot.botProfil] || PROFILS_IA.EQUILIBRE;
             
@@ -10403,7 +10447,7 @@ function initSystemeDe() {
                 sens = Math.random() > 0.5 ? 1 : -1;
                 await gameRef.child(`sensJoueurs/${bot.id}`).set(sens);
                 const sensText = sens === 1 ? '➡️ horaire' : '⬅️ anti-horaire';
-                sendSystemMessage(`🤖 ${bot.name} choisit le sens ${sensText}`);
+                sendSystemMessage(`${bot.name} choisit le sens ${sensText}`);
             }
             
             const dice = Math.floor(Math.random() * 6) + 1;
@@ -10433,7 +10477,18 @@ function initSystemeDe() {
             await db.ref(`parties/${currentGameCode}/players/${bot.id}/position`).set(newPosition);
             
             const sensIcon = sens === 1 ? '➡️' : '⬅️';
-            sendSystemMessage(`🤖 ${bot.name} fait ${dice} ${sensIcon} ${CASES[newPosition].name}`);
+            // Message de déplacement enrichi : "est chez [propriétaire]" si activité d'un autre joueur
+            const caseArrivee = CASES[newPosition];
+            let msgDeplacement = `${bot.name} fait ${dice} ${sensIcon} ${caseArrivee.name}`;
+            if (caseArrivee.type === 'activite') {
+                const actSnap = await gameRef.child(`activites/${newPosition}`).once('value');
+                const ownerId = actSnap.val();
+                if (ownerId && ownerId !== bot.id) {
+                    const ownerName = playersData[ownerId]?.name || 'inconnu';
+                    msgDeplacement = `${bot.name} fait ${dice} ${sensIcon} est chez ${ownerName} (${caseArrivee.icon} ${caseArrivee.name})`;
+                }
+            }
+            sendSystemMessage(msgDeplacement);
             
             // *** LIGNE 3 : Taxe 10% patrimoine au franchissement ***
             const passageLigne3Bot = aTraverseLaLigne3(bot.position, newPosition, sens);
@@ -10697,7 +10752,7 @@ function initSystemeDe() {
                         await gameRef.child(`activites/${position}`).set(botId);
                         await syncComptabiliteToFirebase();
                         
-                        sendSystemMessage(`🤖 ${bot.name} achète ${c.icon} ${c.name}`);
+                        sendSystemMessage(`${bot.name} achète ${c.icon} ${c.name}`);
                         
                         // ========== ÉQUIPER IMMÉDIATEMENT APRÈS ACHAT ==========
                         const euroApresAchat = newCaisse.euro || 0;
@@ -10736,7 +10791,7 @@ function initSystemeDe() {
                                         await gameRef.child(`equipementTypes/${position}`).set(types);
                                         equipementsCeTour[position] = gameState?.toursComplets || 0;
                                         await syncComptabiliteToFirebase();
-                                        sendSystemMessage(`🤖🌿 ${bot.name} équipe immédiatement ${c.icon} (A: ${fmt(resA.cout)}€) +${fmt(resA.bonusHash)}#`);
+                                        sendSystemMessage(`🌿 ${bot.name} équipe immédiatement ${c.icon} (A: ${fmt(resA.cout)}€) +${fmt(resA.bonusHash)}#`);
                                     } catch(e) { console.warn('⚠️ comptaEquipA bot:', e); }
                                 } else if (typeEquip === 'B') {
                                     try {
@@ -10749,7 +10804,7 @@ function initSystemeDe() {
                                         await gameRef.child(`equipementTypes/${position}`).set(types);
                                         equipementsCeTour[position] = gameState?.toursComplets || 0;
                                         await syncComptabiliteToFirebase();
-                                        sendSystemMessage(`🤖❄️ ${bot.name} équipe immédiatement ${c.icon} (B: ${fmt(resB.cout)}€)`);
+                                        sendSystemMessage(`❄️ ${bot.name} équipe immédiatement ${c.icon} (B: ${fmt(resB.cout)}€)`);
                                     } catch(e) { console.warn('⚠️ comptaEquipB bot:', e); }
                                 }
                             }
@@ -10770,9 +10825,9 @@ function initSystemeDe() {
                     const phase = gameState?.phase || 1;
                     
                     if (dejaEquipeCeTour) {
-                        sendSystemMessage(`🤖 ${bot.name} sur ${c.icon} - déjà équipé ce tour`);
+                        sendSystemMessage(`${bot.name} sur ${c.icon} - déjà équipé ce tour`);
                     } else if (total >= 3) {
-                        sendSystemMessage(`🤖 ${bot.name} sur ${c.icon} - déjà 3 équipements`);
+                        sendSystemMessage(`${bot.name} sur ${c.icon} - déjà 3 équipements`);
                     } else {
                         // Décision équipement selon profil
                         let shouldEquip = false;
@@ -10823,7 +10878,7 @@ function initSystemeDe() {
                                 await gameRef.child(`equipementTypes/${position}`).set(types);
                                 equipementsCeTour[position] = tourActuel;
                                 await syncComptabiliteToFirebase();
-                                sendSystemMessage(`🤖🌿 ${bot.name} achète A sur ${c.icon} (${fmt(result.cout)}€) +${fmt(result.bonusHash)}#`);
+                                sendSystemMessage(`🌿 ${bot.name} achète A sur ${c.icon} (${fmt(result.cout)}€) +${fmt(result.bonusHash)}#`);
                             } else if (action === 'B') {
                                 const result = await comptaAchatEquipementB(botId, position);
                                 const newCaisse = COMPTABILITE.caisseJoueurs[botId];
@@ -10834,7 +10889,7 @@ function initSystemeDe() {
                                 await gameRef.child(`equipementTypes/${position}`).set(types);
                                 equipementsCeTour[position] = tourActuel;
                                 await syncComptabiliteToFirebase();
-                                sendSystemMessage(`🤖❄️ ${bot.name} achète B sur ${c.icon} (${fmt(result.cout)}€)`);
+                                sendSystemMessage(`❄️ ${bot.name} achète B sur ${c.icon} (${fmt(result.cout)}€)`);
                             } else if (action === 'CONV') {
                                 const result = await comptaConversionBtoA(botId, position);
                                 const newCaisse = COMPTABILITE.caisseJoueurs[botId];
@@ -10845,12 +10900,12 @@ function initSystemeDe() {
                                 await gameRef.child(`equipementTypes/${position}`).set(types);
                                 equipementsCeTour[position] = tourActuel;
                                 await syncComptabiliteToFirebase();
-                                sendSystemMessage(`🤖🔄 ${bot.name} convertit B→A sur ${c.icon} (${fmt(result.cout)}€) +${fmt(result.bonusHash)}#`);
+                                sendSystemMessage(`🔄 ${bot.name} convertit B→A sur ${c.icon} (${fmt(result.cout)}€) +${fmt(result.bonusHash)}#`);
                             } else {
-                                sendSystemMessage(`🤖 ${bot.name} sur ${c.icon} - aucune option disponible`);
+                                sendSystemMessage(`${bot.name} sur ${c.icon} - aucune option disponible`);
                             }
                         } else {
-                            sendSystemMessage(`🤖 ${bot.name} sur ${c.icon} - décide de ne pas équiper`);
+                            sendSystemMessage(`${bot.name} sur ${c.icon} - décide de ne pas équiper`);
                         }
                     }
                 } else if (owner && owner !== botId) {
@@ -10864,11 +10919,11 @@ function initSystemeDe() {
                     if (botEuro >= facture) {
                         // Cas 1: Assez d'€
                         await comptaPaiementFacture(botId, owner, position, facture, 0);
-                        sendSystemMessage(`🤖 ${bot.name} paie ${fmt(facture)}€ à ${playersData[owner]?.name}`);
+                        sendSystemMessage(`${bot.name} paie ${fmt(facture)}€ à ${playersData[owner]?.name}`);
                     } else if (phase >= 2 && botHash >= facture && CASES[position]?.hash) {
                         // Cas 2: Payer en # (Phase 2+ et activité accepte #)
                         await comptaPaiementFacture(botId, owner, position, 0, facture);
-                        sendSystemMessage(`🤖 ${bot.name} paie ${fmt(facture)}# à ${playersData[owner]?.name}`);
+                        sendSystemMessage(`${bot.name} paie ${fmt(facture)}# à ${playersData[owner]?.name}`);
                     } else if (phase >= 2 && isMembre && (bot.actionContribCeTour || 0) < 2 && (COMPTABILITE.potAAA?.solde || 0) >= 190) {
                         // Cas 3: Action Contributive (Phase 2+, membre AAA)
                         const travail = TRAVAUX_COOP[Math.floor(Math.random() * TRAVAUX_COOP.length)];
@@ -10902,7 +10957,7 @@ function initSystemeDe() {
                             await db.ref(`parties/${currentGameCode}/players/${botId}/euro`).set(caisse.euro);
                             await db.ref(`parties/${currentGameCode}/players/${botId}/espoyr`).set(caisse.espoyr);
                             await db.ref(`parties/${currentGameCode}/players/${owner}/espoyr`).set(COMPTABILITE.caisseJoueurs[owner].espoyr);
-                            sendSystemMessage(`🤝 🤖 ${bot.name} : "${travail.nom}" (+${fmt(travail.gain)}#) → paie ${fmt(Math.min(travail.gain, facture))}# (passe prochain tour)`);
+                            sendSystemMessage(`🤝 ${bot.name} : "${travail.nom}" (+${fmt(travail.gain)}#) → paie ${fmt(Math.min(travail.gain, facture))}# (passe prochain tour)`);
                         }
                     } else {
                         // Cas 4: Emprunter si possible, sinon découvert (toujours payer la totalité)
@@ -10917,11 +10972,11 @@ function initSystemeDe() {
                         if (peutEmprunter) {
                             await comptaEmprunt(botId, manque);
                             await comptaPaiementFacture(botId, owner, position, facture, 0);
-                            sendSystemMessage(`🤖 ${bot.name} emprunte ${fmt(manque)}€ et paie ${fmt(facture)}€`);
+                            sendSystemMessage(`${bot.name} emprunte ${fmt(manque)}€ et paie ${fmt(facture)}€`);
                         } else {
                             // DÉCOUVERT : le bot paie la totalité, solde passe en négatif
                             await comptaPaiementFacture(botId, owner, position, facture, 0);
-                            sendSystemMessage(`🤖 ${bot.name} paie ${fmt(facture)}€ (découvert: ${fmt(caisse.euro)}€)`);
+                            sendSystemMessage(`${bot.name} paie ${fmt(facture)}€ (découvert: ${fmt(caisse.euro)}€)`);
                         }
                     }
                     
@@ -10950,7 +11005,7 @@ function initSystemeDe() {
                             
                             if (surplusBot >= 0.5) {
                                 await comptaSurplusEuroHash(botId, owner, position, surplusBot);
-                                sendSystemMessage(`💱 🤖 ${bot.name} surplus ${fmt(surplusBot)}€→${fmt(surplusBot)}# avec ${ownerPlayer.name}`);
+                                sendSystemMessage(`💱 ${bot.name} surplus ${fmt(surplusBot)}€→${fmt(surplusBot)}# avec ${ownerPlayer.name}`);
                             }
                         }
                     }
@@ -11243,7 +11298,7 @@ function initSystemeDe() {
                 
                 return `
                     <tr>
-                        <td>${p.avatar || '⬜'} ${p.name}${p.isBot ? ' 🤖' : ''}</td>
+                        <td>${p.avatar || '⬜'} ${p.name}</td>
                         <td>${fmt(euro)}€</td>
                         <td>${fmt(espoyr)}#</td>
                         <td>${fmt(activites)}€</td>
@@ -11797,7 +11852,7 @@ function initSystemeDe() {
                 <h3>${player.avatar} Compte de ${player.name} — Tour ${gameState.turn || 1}</h3>
                 <p style="font-size:0.85rem; color:#6b7280; margin-bottom:10px;">
                     Profil: <strong>${player.profil || 'contributif'}</strong> 
-                    ${player.isBot ? '🤖 Robot' : ''} 
+                    ${player.isBot ? '' : ''} 
                     ${isMembre ? LOGO_AAA + ' Membre AAA' : ''}
                 </p>
                 
@@ -14732,6 +14787,241 @@ function initSystemeDe() {
   
        
         
+        // ========== FIN DE PARTIE ==========
+        
+        // C1: Confirmation avant fin de partie
+        function showEndGameConfirm() {
+            if (!isHost) return;
+            const tourActuel = gameState?.turn || 1;
+            showModal(`
+                <h3>🏁 Terminer la partie ?</h3>
+                <p style="font-size: 0.9rem; color: var(--gray); margin-bottom: 12px;">
+                    La partie est au <strong>tour ${tourActuel}</strong>. 
+                    Voulez-vous vraiment terminer ?
+                </p>
+                <div style="background: #fef3c7; padding: 10px; border-radius: 8px; margin-bottom: 12px;">
+                    <p style="margin: 0; font-size: 0.85rem;">
+                        ⚠️ Cette action déclenchera :
+                    </p>
+                    <p style="margin: 4px 0 0 0; font-size: 0.85rem;">
+                        1. La révélation des joueurs complémentaires<br>
+                        2. La notation entre joueurs<br>
+                        3. Le bilan final
+                    </p>
+                </div>
+            `, `
+                <button class="btn btn-primary" style="background: #dc2626;" onclick="lancerFinDePartie()">🏁 Oui, terminer</button>
+                <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+            `);
+        }
+        
+        // Lancer le flux complet de fin de partie
+        async function lancerFinDePartie() {
+            closeModal();
+            sendSystemMessage(`🏁 L'hôte a décidé de terminer la partie au tour ${gameState?.turn || 1}.`);
+            
+            // Sauvegarder le bilan final
+            enregistrerBilanTour();
+            
+            // Étape 1: Révélation des joueurs complémentaires
+            showRevelationBots();
+        }
+        
+        // C2: Révélation des joueurs complémentaires
+        function showRevelationBots() {
+            const players = Object.values(playersData);
+            const bots = players.filter(p => p.isBot);
+            const humains = players.filter(p => !p.isBot);
+            
+            let revelationHtml = '';
+            if (bots.length === 0) {
+                revelationHtml = `
+                    <div style="background: #dcfce7; padding: 15px; border-radius: 10px; text-align: center;">
+                        <p style="font-size: 1.1rem; margin: 0;">🎉 Tous les joueurs étaient des humains !</p>
+                    </div>`;
+            } else {
+                const botsListHtml = bots.map(b => {
+                    const profilIA = PROFILS_IA[b.botProfil] || {};
+                    const profilEco = b.profil === 'creatif' ? '🎨 Créatif' : '🏛️ Contributif';
+                    return `
+                        <div style="background: #fef3c7; padding: 10px; border-radius: 8px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: 1.5rem;">${b.avatar}</span>
+                            <div>
+                                <strong>${b.name}</strong>
+                                <div style="font-size: 0.8rem; color: #6b7280;">
+                                    Comportement : ${profilIA.nom || 'Inconnu'} | Profil : ${profilEco}
+                                </div>
+                            </div>
+                        </div>`;
+                }).join('');
+                
+                revelationHtml = `
+                    <div style="margin-bottom: 12px;">
+                        <p style="font-size: 0.95rem; color: var(--gray); margin-bottom: 10px;">
+                            ${bots.length === 1 ? 'Un joueur était un joueur complémentaire :' : `${bots.length} joueurs étaient des joueurs complémentaires :`}
+                        </p>
+                        ${botsListHtml}
+                    </div>
+                    <div style="background: #dbeafe; padding: 10px; border-radius: 8px;">
+                        <p style="margin: 0; font-size: 0.85rem;">
+                            ℹ️ Les notes impliquant des joueurs complémentaires ne seront pas comptabilisées.
+                        </p>
+                    </div>`;
+            }
+            
+            showModal(`
+                <h3>🎭 Révélation</h3>
+                ${revelationHtml}
+            `, `
+                <button class="btn btn-primary" onclick="lancerNotation()">
+                    ${humains.length > 1 ? '👥 Passer à la notation' : '📊 Voir le bilan final'}
+                </button>
+            `);
+        }
+        
+        // C3: Notation des joueurs humains
+        function lancerNotation() {
+            closeModal();
+            const players = Object.values(playersData);
+            const humains = players.filter(p => !p.isBot && p.id !== myPlayerId);
+            
+            // Si le joueur actuel est un bot ou s'il n'y a pas d'humains à noter
+            if (!playersData[myPlayerId] || playersData[myPlayerId].isBot || humains.length === 0) {
+                showBilanFinal();
+                return;
+            }
+            
+            // Construire l'écran de notation pour tous les humains
+            const notationHtml = humains.map(h => `
+                <div id="notation-${h.id}" style="background: white; border: 2px solid #e5e7eb; padding: 12px; border-radius: 10px; margin-bottom: 10px;">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                        <span style="font-size: 1.3rem;">${h.avatar}</span>
+                        <strong>${h.name}</strong>
+                    </div>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button class="btn" style="flex: 1; min-width: 80px; background: #dcfce7; border: 2px solid #dcfce7;" 
+                                onclick="noterJoueur('${h.id}', '😊', this)" title="J'ai eu du plaisir à jouer avec toi">
+                            😊 Plaisir
+                        </button>
+                        <button class="btn" style="flex: 1; min-width: 80px; background: #dbeafe; border: 2px solid #dbeafe;" 
+                                onclick="noterJoueur('${h.id}', '🤝', this)" title="C'était correct">
+                            🤝 Correct
+                        </button>
+                        <button class="btn" style="flex: 1; min-width: 80px; background: #fef3c7; border: 2px solid #fef3c7;" 
+                                onclick="noterJoueur('${h.id}', '💬', this)" title="Je t'encourage à améliorer l'échange">
+                            💬 À améliorer
+                        </button>
+                    </div>
+                    <div id="notation-result-${h.id}" style="display: none; margin-top: 6px; font-size: 0.85rem; color: #059669; text-align: center;"></div>
+                </div>
+            `).join('');
+            
+            showModal(`
+                <h3>⭐ Notation des joueurs</h3>
+                <p style="font-size: 0.85rem; color: var(--gray); margin-bottom: 12px;">
+                    Évalue ton expérience avec chaque joueur. Les notes impliquant des joueurs complémentaires ne comptent pas.
+                </p>
+                ${notationHtml}
+            `, `
+                <button class="btn btn-primary" id="btnFinNotation" onclick="terminerNotation()" style="opacity: 0.5;" disabled>
+                    📊 Voir le bilan final
+                </button>
+                <p style="font-size: 0.75rem; color: #6b7280; text-align: center; margin-top: 4px;">
+                    Note tous les joueurs pour continuer
+                </p>
+            `);
+            
+            // Tracking des notes
+            window.__notesFinPartie = {};
+            window.__nbNotesAttendues = humains.length;
+        }
+        
+        // Enregistrer une note pour un joueur
+        function noterJoueur(joueurId, note, btnEl) {
+            // Marquer visuellement le choix
+            const container = document.getElementById(`notation-${joueurId}`);
+            if (container) {
+                container.querySelectorAll('.btn').forEach(b => {
+                    b.style.border = '2px solid transparent';
+                    b.style.opacity = '0.6';
+                });
+                btnEl.style.border = '2px solid #059669';
+                btnEl.style.opacity = '1';
+                btnEl.style.fontWeight = 'bold';
+            }
+            
+            // Stocker la note
+            const resultEl = document.getElementById(`notation-result-${joueurId}`);
+            const labels = { '😊': 'Plaisir', '🤝': 'Correct', '💬': 'À améliorer' };
+            if (resultEl) {
+                resultEl.style.display = 'block';
+                resultEl.textContent = `✅ ${labels[note]} noté`;
+            }
+            
+            window.__notesFinPartie = window.__notesFinPartie || {};
+            window.__notesFinPartie[joueurId] = note;
+            
+            // Vérifier si toutes les notes sont données
+            const nbNotes = Object.keys(window.__notesFinPartie).length;
+            const btnFin = document.getElementById('btnFinNotation');
+            if (btnFin && nbNotes >= (window.__nbNotesAttendues || 0)) {
+                btnFin.disabled = false;
+                btnFin.style.opacity = '1';
+            }
+        }
+        
+        // Sauvegarder les notes et passer au bilan
+        async function terminerNotation() {
+            closeModal();
+            
+            const notes = window.__notesFinPartie || {};
+            
+            // Stocker dans Firebase pour usage futur (système communautaire)
+            try {
+                const notationData = {
+                    noteurId: myPlayerId,
+                    noteurName: myName,
+                    timestamp: firebase.database.ServerValue.TIMESTAMP,
+                    tour: gameState?.turn || 1,
+                    notes: {}
+                };
+                
+                for (const [joueurId, note] of Object.entries(notes)) {
+                    const joueur = playersData[joueurId];
+                    notationData.notes[joueurId] = {
+                        note: note,
+                        joueurName: joueur?.name || 'Inconnu',
+                        estBot: joueur?.isBot || false
+                    };
+                }
+                
+                await db.ref(`parties/${currentGameCode}/notations/${myPlayerId}`).set(notationData);
+                console.log('✅ Notations sauvegardées dans Firebase:', notationData);
+            } catch (e) {
+                console.error('❌ Erreur sauvegarde notations:', e);
+            }
+            
+            // Message système
+            sendSystemMessage(`⭐ ${myName} a terminé ses notations.`);
+            
+            // Afficher le bilan final
+            showBilanFinal();
+        }
+        
+        // C4: Bilan final puis graphique
+        function showBilanFinal() {
+            closeModal();
+            
+            // Enregistrer le dernier bilan si pas fait
+            if (historiqueBilans.length === 0 || historiqueBilans[historiqueBilans.length - 1].tour !== (gameState?.turn || 1)) {
+                enregistrerBilanTour();
+            }
+            
+            // Afficher directement le graphique d'évolution
+            showGraphiqueEvolution();
+        }
+
+
     </script>
 </body>
 </html>
