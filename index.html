@@ -5160,7 +5160,7 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                 joinedAt: firebase.database.ServerValue.TIMESTAMP,
                     isConnected: true,
                     lastSeen: firebase.database.ServerValue.TIMESTAMP,
-                  secretHash: 'bot'
+                  secretHash: Array.from({length: 64}, () => '0123456789abcdef'[Math.floor(Math.random()*16)]).join('')
             });
             
             // Si le profil est membre AAA, l'ajouter à la liste comptable
@@ -9346,7 +9346,7 @@ function initSystemeDe() {
                     await executerSurplus(caseId, ownerId, facture, surplus);
                 } else {
                     closeModal();
-                    sendSystemMessage(`❌ ${ownerPlayer.name} (${PROFILS_IA[profilId]?.nom || profilId}) refuse l'échange €→#`);
+                    sendSystemMessage(`❌ ${ownerPlayer.name} refuse l'échange €→#`);
                     showPayOrNegotiateModal(CASES[caseId], ownerId, myEuro);
                 }
             } else {
