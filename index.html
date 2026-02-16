@@ -364,6 +364,22 @@
             <p class="subtitle">Jeu collaboratif d'économie - V3 Comptabilité complète</p>
             <div class="error-message" id="errorMessage"></div>
             
+            <!-- Message tutoiement (affiché une fois) -->
+            <div id="msgTutoiement" style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px; margin-bottom: 12px; text-align: center; font-size: 0.9rem; color: #065f46;">
+                🤝 Nous espérons que vous acceptez le tutoiement
+            </div>
+            
+            <!-- Message de bienvenue personnalisé (caché par défaut) -->
+            <div id="welcomeBack" style="display: none; background: #dbeafe; border-radius: 10px; padding: 12px; margin-bottom: 12px; text-align: center;">
+                <p id="welcomeBackMsg" style="margin: 0 0 8px 0; font-size: 0.95rem; color: #1e40af;"></p>
+                <div id="welcomeHumeur" style="display: flex; justify-content: center; gap: 12px;">
+                    <button class="btn" onclick="choisirHumeur('😊')" style="font-size: 1.5rem; padding: 8px 16px; background: #dcfce7;" title="Ça va bien !">😊</button>
+                    <button class="btn" onclick="choisirHumeur('😐')" style="font-size: 1.5rem; padding: 8px 16px; background: #fef3c7;" title="Bof...">😐</button>
+                    <button class="btn" onclick="choisirHumeur('😔')" style="font-size: 1.5rem; padding: 8px 16px; background: #fee2e2;" title="Pas terrible">😔</button>
+                </div>
+                <p id="welcomeCote" style="margin: 8px 0 0 0; font-size: 0.85rem; color: #6b7280;"></p>
+            </div>
+            
             <div style="margin-bottom: 15px; text-align: center;">
                 <a href="https://docs.google.com/document/d/1fTV-keDtwbxwTQPUuj4JCEN-sUBkqvRx/edit?usp=sharing&ouid=114447202650775631504&rtpof=true&sd=true" 
                    target="_blank" rel="noopener noreferrer"
@@ -372,17 +388,58 @@
                 </a>
             </div>
             
-            <div style="margin-bottom: 15px;">
+            <!-- Prénom -->
+            <div style="margin-bottom: 10px;">
                 <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 6px; font-size: 0.9rem;">Introduit ton Prénom :</label>
                 <input type="text" id="playerName" placeholder="Entre ton prénom..." maxlength="15">
             </div>
-           
+            
+            <!-- Email (optionnel) -->
+            <div style="margin-bottom: 10px;">
+                <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 6px; font-size: 0.9rem;">
+                    Email : <span style="font-weight: 400; color: #9ca3af; font-size: 0.85rem;">(optionnel)</span>
+                </label>
+                <input type="email" id="playerEmail" placeholder="ton.email@exemple.com" 
+                       style="margin-bottom: 0;" oninput="onEmailInput()">
+                <p id="emailIncitatif" style="font-size: 0.8rem; color: #059669; margin: 4px 0 0 0;">
+                    💡 Pour rejoindre des parties et être noté, deviens membre — c'est simple !
+                </p>
+            </div>
+            
+            <!-- Case RGPD (apparaît quand email rempli) -->
+            <div id="rgpdBlock" style="display: none; margin-bottom: 10px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px;">
+                <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 0.82rem; color: #374151;">
+                    <input type="checkbox" id="rgpdCheckbox" style="margin-top: 3px; flex-shrink: 0;">
+                    <span>J'accepte que l'ASBL Espoyr conserve mon email pour me permettre de rejoindre des parties et m'informer des activités d'Espoyr.
+                    <a href="#" onclick="showPolitiqueConfidentialite(); return false;" style="color: #2563eb;">Politique de confidentialité</a></span>
+                </label>
+            </div>
+            
+            <!-- Vérification email (apparaît après envoi du code) -->
+            <div id="verificationBlock" style="display: none; margin-bottom: 10px; background: #fef3c7; border-radius: 8px; padding: 12px; text-align: center;">
+                <p style="margin: 0 0 8px 0; font-size: 0.9rem; color: #92400e;">📧 Un code à 4 chiffres t'a été envoyé par email</p>
+                <input type="text" id="codeVerification" placeholder="Code 4 chiffres" maxlength="4" 
+                       style="text-align: center; font-size: 1.3rem; letter-spacing: 6px; width: 150px; margin: 0 auto 8px auto; display: block;">
+                <button class="btn btn-primary" onclick="verifierCodeEmail()" style="font-size: 0.9rem;">✅ Vérifier</button>
+                <p style="font-size: 0.75rem; color: #6b7280; margin: 6px 0 0 0;">Le code expire dans 10 minutes</p>
+            </div>
+            
+            <!-- Bouton Gérer mon compte (membres vérifiés) -->
+            <div id="btnGererCompte" style="display: none; margin-bottom: 12px;">
+                <button class="btn" onclick="showGererCompte()" style="width: 100%; background: #ede9fe; color: #6d28d9; font-size: 0.9rem;">
+                    👤 Gérer mon compte
+                </button>
+            </div>
             
             <button class="btn btn-primary btn-full" onclick="createGame()" style="margin-bottom: 12px;">
                 ➕ Créer une nouvelle partie
             </button>
             
-           
+            <!-- Liste des parties en attente (membres uniquement) -->
+            <div id="partiesEnAttente" style="display: none; margin-bottom: 12px;">
+                <h3 style="font-size: 0.9rem; color: #374151; margin-bottom: 8px;">🎮 Parties en attente</h3>
+                <div id="listeParties" style="max-height: 150px; overflow-y: auto;"></div>
+            </div>
             
             <div class="divider"><span>ou rejoindre</span></div>
             
@@ -1005,6 +1062,29 @@
         
         // Config modifiable par l'host
         let gameConfig = { ...CONFIG };
+        
+        // ========== API COMMUNAUTAIRE ==========
+        const API_URL = 'https://script.google.com/macros/s/AKfycbxcDkpL8XBex9OtX6DhJY6zRYYpzJxGUTbny7T64Qniy_blhwO2t7vYDPoUFSFnXYRi2Q/exec';
+        
+        // État communautaire du joueur
+        let membreEmail = '';         // Email du membre (vide = joueur anonyme)
+        let membreData = null;        // Données du membre (cote, compteur, etc.)
+        let membreVerifie = false;    // Email vérifié ?
+        
+        // Appel générique à l'API communautaire
+        async function apiCommunaute(data) {
+            try {
+                const resp = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: JSON.stringify(data)
+                });
+                return await resp.json();
+            } catch (err) {
+                console.error('❌ API communautaire:', err);
+                return { success: false, error: err.message };
+            }
+        }
         
         // ========== ÉTAT LOCAL ==========
         let myPlayerId = null;
@@ -4304,6 +4384,9 @@ activiteId: actId
                 document.getElementById('waitingMessage').classList.add('hidden');
                 
                 sendSystemMessage(`${myName} (${profil === 'creatif' ? '🎨 Créatif' : '🏛️ Contributif'}) a créé la partie !`);
+                
+                // Enregistrer dans le backend communautaire
+                enregistrerPartieCommunaute(code);
             }));
             });
         }
@@ -9236,6 +9319,23 @@ function initSystemeDe() {
             await syncComptabiliteToFirebase();
             
             sendSystemMessage(`🚪 ${myName} a abandonné la partie.`);
+            
+            // Pénalité communautaire : -2 😊
+            if (membreEmail && membreVerifie) {
+                const penResult = await apiCommunaute({
+                    action: 'penaliteAbandon',
+                    email: membreEmail,
+                    codePartie: currentGameCode
+                });
+                if (penResult.success) {
+                    sendSystemMessage(`📉 ${penResult.message}`);
+                    if (membreData) {
+                        membreData.compteurSmileys = penResult.nouveauCompteur;
+                        membreData.coteActuelle = penResult.nouvelleCote;
+                    }
+                }
+            }
+            
             nextTurn();
         }
         
@@ -14976,7 +15076,7 @@ function initSystemeDe() {
             
             const notes = window.__notesFinPartie || {};
             
-            // Stocker dans Firebase pour usage futur (système communautaire)
+            // Stocker dans Firebase
             try {
                 const notationData = {
                     noteurId: myPlayerId,
@@ -14998,7 +15098,53 @@ function initSystemeDe() {
                 await db.ref(`parties/${currentGameCode}/notations/${myPlayerId}`).set(notationData);
                 console.log('✅ Notations sauvegardées dans Firebase:', notationData);
             } catch (e) {
-                console.error('❌ Erreur sauvegarde notations:', e);
+                console.error('❌ Erreur sauvegarde notations Firebase:', e);
+            }
+            
+            // ══════ ENVOI AU BACKEND COMMUNAUTAIRE ══════
+            if (membreEmail && membreVerifie) {
+                try {
+                    const notesAPI = [];
+                    for (const [joueurId, note] of Object.entries(notes)) {
+                        const joueur = playersData[joueurId];
+                        // Chercher l'email du joueur noté (s'il est membre)
+                        // On stocke le joueurId pour l'identification, l'email sera '' pour les non-membres
+                        notesAPI.push({
+                            emailNote: joueur?._membreEmail || '',
+                            prenomNote: joueur?.name || 'Inconnu',
+                            note: note,
+                            estBot: joueur?.isBot || false
+                        });
+                    }
+                    
+                    const result = await apiCommunaute({
+                        action: 'enregistrerNotes',
+                        codePartie: currentGameCode,
+                        emailNoteur: membreEmail,
+                        prenomNoteur: myName,
+                        notes: notesAPI
+                    });
+                    
+                    if (result.success) {
+                        console.log('✅ Notes envoyées au backend communautaire:', result);
+                        // Afficher les messages de changement de cote
+                        if (result.resultats) {
+                            for (const r of result.resultats) {
+                                if (r.message && !r.autoRegulation) {
+                                    sendSystemMessage(`📊 ${r.joueur} : ${r.message}`);
+                                }
+                                if (r.autoRegulation) {
+                                    showModal(`
+                                        <h3>⚠️ Auto-régulation</h3>
+                                        <p style="font-size: 0.9rem; color: #92400e;">${r.message}</p>
+                                    `, `<button class="btn btn-secondary" onclick="closeModal()">Compris</button>`);
+                                }
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('❌ Erreur envoi notes communautaires:', e);
+                }
             }
             
             // Message système
@@ -15019,6 +15165,431 @@ function initSystemeDe() {
             
             // Afficher directement le graphique d'évolution
             showGraphiqueEvolution();
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        // ██  SYSTÈME COMMUNAUTAIRE — Fonctions UI & API             ██
+        // ══════════════════════════════════════════════════════════════
+
+        // ── Réaction au champ email ──
+        function onEmailInput() {
+            const email = document.getElementById('playerEmail').value.trim();
+            const rgpdBlock = document.getElementById('rgpdBlock');
+            const incitatif = document.getElementById('emailIncitatif');
+            const verBlock = document.getElementById('verificationBlock');
+            
+            if (email && email.includes('@')) {
+                rgpdBlock.style.display = 'block';
+                incitatif.style.display = 'none';
+                // Vérifier automatiquement si le membre est déjà connu
+                verifierMembreExistant(email);
+            } else {
+                rgpdBlock.style.display = 'none';
+                incitatif.style.display = 'block';
+                verBlock.style.display = 'none';
+                document.getElementById('welcomeBack').style.display = 'none';
+                document.getElementById('btnGererCompte').style.display = 'none';
+                document.getElementById('partiesEnAttente').style.display = 'none';
+                membreEmail = '';
+                membreData = null;
+                membreVerifie = false;
+            }
+        }
+        
+        // ── Vérifier si le membre existe déjà ──
+        let _checkMembreTimeout = null;
+        async function verifierMembreExistant(email) {
+            // Debounce pour éviter trop d'appels
+            clearTimeout(_checkMembreTimeout);
+            _checkMembreTimeout = setTimeout(async () => {
+                const result = await apiCommunaute({ action: 'getMembre', email });
+                if (result.success && result.membre) {
+                    membreData = result.membre;
+                    membreEmail = email;
+                    
+                    if (result.membre.statutVerifie) {
+                        // Membre reconnu et vérifié !
+                        membreVerifie = true;
+                        afficherBienvenue(result.membre);
+                    }
+                    // Si inscrit mais pas vérifié, on attend que l'utilisateur clique
+                }
+            }, 600);
+        }
+        
+        // ── Afficher le message de bienvenue pour un membre reconnu ──
+        function afficherBienvenue(membre) {
+            // Remplir le prénom si vide
+            const nameInput = document.getElementById('playerName');
+            if (!nameInput.value.trim()) {
+                nameInput.value = membre.prenom;
+            }
+            
+            // Message personnalisé
+            const welcomeDiv = document.getElementById('welcomeBack');
+            document.getElementById('welcomeBackMsg').innerHTML = 
+                `Bonjour <strong>${membre.prenom}</strong>, bienvenue ! Comment te sens-tu aujourd'hui ?`;
+            
+            // Cote
+            const coteEmoji = { 'AAA': '🌟', 'AA': '⭐', 'A': '👍', 'BB': '👀', 'C': '💪' };
+            const protege = membre.protege && membre.nbPartiesJouees < 3;
+            document.getElementById('welcomeCote').innerHTML = 
+                `Ta cote : <strong>${membre.coteActuelle}</strong> ${coteEmoji[membre.coteActuelle] || ''} — ${membre.compteurSmileys} 😊 cumulés`
+                + (protege ? ' <span style="color:#059669;">(statut protégé)</span>' : '')
+                + ` — ${membre.nbPartiesJouees} partie(s) jouée(s)`;
+            
+            welcomeDiv.style.display = 'block';
+            
+            // Cacher la case RGPD (déjà acceptée)
+            document.getElementById('rgpdBlock').style.display = 'none';
+            document.getElementById('verificationBlock').style.display = 'none';
+            document.getElementById('msgTutoiement').style.display = 'none';
+            
+            // Afficher bouton "Gérer mon compte"
+            document.getElementById('btnGererCompte').style.display = 'block';
+            
+            // Charger les parties en attente
+            chargerPartiesEnAttente();
+        }
+        
+        // ── Choisir l'humeur ──
+        async function choisirHumeur(humeur) {
+            // Feedback visuel
+            document.querySelectorAll('#welcomeHumeur button').forEach(b => {
+                b.style.opacity = '0.4';
+                b.style.transform = 'scale(0.9)';
+            });
+            event.target.closest('button').style.opacity = '1';
+            event.target.closest('button').style.transform = 'scale(1.1)';
+            
+            if (membreEmail) {
+                await apiCommunaute({ action: 'majHumeur', email: membreEmail, humeur });
+            }
+        }
+        
+        // ── Inscription : clic sur RGPD → lance le processus ──
+        document.addEventListener('DOMContentLoaded', () => {
+            // Quand la case RGPD est cochée, lancer l'inscription
+            const rgpdCb = document.getElementById('rgpdCheckbox');
+            if (rgpdCb) {
+                rgpdCb.addEventListener('change', async function() {
+                    if (!this.checked) return;
+                    
+                    const email = document.getElementById('playerEmail').value.trim().toLowerCase();
+                    const prenom = document.getElementById('playerName').value.trim();
+                    
+                    if (!email || !email.includes('@')) {
+                        showError('Entre une adresse email valide.');
+                        this.checked = false;
+                        return;
+                    }
+                    if (!prenom) {
+                        showError('Entre ton prénom d\'abord.');
+                        this.checked = false;
+                        return;
+                    }
+                    
+                    // Inscrire le membre
+                    const result = await apiCommunaute({ action: 'inscrire', email, prenom });
+                    
+                    if (result.success) {
+                        membreEmail = email;
+                        
+                        if (!result.nouveau && result.membre?.statutVerifie) {
+                            // Déjà inscrit et vérifié
+                            membreVerifie = true;
+                            membreData = result.membre;
+                            afficherBienvenue(result.membre);
+                        } else {
+                            // Nouveau ou pas encore vérifié → envoyer le code
+                            const codeResult = await apiCommunaute({ action: 'envoyerCode', email });
+                            if (codeResult.success) {
+                                document.getElementById('verificationBlock').style.display = 'block';
+                                document.getElementById('rgpdBlock').style.display = 'none';
+                            } else {
+                                showError('Erreur envoi du code : ' + (codeResult.error || 'Réessaie'));
+                            }
+                        }
+                    } else {
+                        showError(result.error || 'Erreur d\'inscription');
+                        this.checked = false;
+                    }
+                });
+            }
+        });
+        
+        // ── Vérifier le code email ──
+        async function verifierCodeEmail() {
+            const code = document.getElementById('codeVerification').value.trim();
+            if (code.length !== 4) {
+                showError('Le code doit contenir 4 chiffres.');
+                return;
+            }
+            
+            const result = await apiCommunaute({ action: 'verifierCode', email: membreEmail, code });
+            
+            if (result.success) {
+                membreVerifie = true;
+                document.getElementById('verificationBlock').style.display = 'none';
+                
+                // Récupérer le profil à jour
+                const profil = await apiCommunaute({ action: 'getMembre', email: membreEmail });
+                if (profil.success && profil.membre) {
+                    membreData = profil.membre;
+                    afficherBienvenue(profil.membre);
+                } else {
+                    // Profil minimal
+                    showModal(`
+                        <h3>✅ Email vérifié !</h3>
+                        <p style="font-size: 0.95rem;">Bienvenue dans la communauté ESPOYR ! Tu peux maintenant rejoindre des parties et être noté par les autres joueurs.</p>
+                    `, `<button class="btn btn-primary" onclick="closeModal()">Super !</button>`);
+                    document.getElementById('btnGererCompte').style.display = 'block';
+                    chargerPartiesEnAttente();
+                }
+            } else {
+                showError(result.error || 'Code invalide');
+            }
+        }
+        
+        // ── Gérer mon compte ──
+        function showGererCompte() {
+            if (!membreData) return;
+            
+            const m = membreData;
+            const coteEmoji = { 'AAA': '🌟🌟🌟', 'AA': '⭐⭐', 'A': '👍', 'BB': '👀', 'C': '💪' };
+            const protege = m.protege && m.nbPartiesJouees < 3;
+            const peutSecondeChance = m.nbSecondesChances < 2 && m.compteurSmileys < 15;
+            
+            showModal(`
+                <h3>👤 Mon compte ESPOYR</h3>
+                
+                <div style="background: #f0fdf4; padding: 12px; border-radius: 8px; margin-bottom: 10px;">
+                    <p style="margin: 0; font-size: 0.95rem;"><strong>${m.prenom}</strong> — ${m.email}</p>
+                    <p style="margin: 4px 0 0 0; font-size: 0.9rem;">
+                        Cote : <strong>${m.coteActuelle}</strong> ${coteEmoji[m.coteActuelle] || ''} 
+                        ${protege ? '<span style="color:#059669;">(protégé)</span>' : ''}
+                    </p>
+                    <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: #6b7280;">
+                        ${m.compteurSmileys} 😊 cumulés — ${m.nbPartiesJouees} parties jouées
+                        ${m.nbNegRecus > 0 ? ` — ${m.nbNegRecus} 💬 reçus` : ''}
+                    </p>
+                </div>
+                
+                ${peutSecondeChance ? `
+                <div style="background: #fef3c7; padding: 12px; border-radius: 8px; margin-bottom: 10px;">
+                    <p style="margin: 0; font-size: 0.9rem; font-weight: bold;">😊 Seconde chance disponible</p>
+                    <p style="margin: 4px 0 8px 0; font-size: 0.85rem; color: #6b7280;">
+                        Restaure les 😊 perdus par tes 2 pires événements. 
+                        ${m.nbSecondesChances === 0 ? '2 chances restantes.' : '1 chance restante.'}
+                    </p>
+                    <button class="btn" style="background: #fbbf24; color: #78350f; width: 100%;" 
+                            onclick="activerSecondeChanceFn()">
+                        😊 Je veux m'améliorer
+                    </button>
+                </div>
+                ` : ''}
+                
+                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e5e7eb;">
+                    <button class="btn" onclick="confirmerDesinscription()" 
+                            style="width: 100%; background: #fee2e2; color: #dc2626; font-size: 0.85rem;">
+                        🗑️ Supprimer mon inscription
+                    </button>
+                </div>
+            `, `<button class="btn btn-secondary" onclick="closeModal()">Fermer</button>`);
+        }
+        
+        // ── Seconde chance ──
+        async function activerSecondeChanceFn() {
+            closeModal();
+            
+            // Message toltèque
+            showModal(`
+                <h3>😊 Seconde chance</h3>
+                <div style="background: #f0fdf4; padding: 15px; border-radius: 10px; margin-bottom: 12px;">
+                    <p style="margin: 0 0 10px 0; font-size: 0.95rem; color: #065f46;">
+                        Merci pour ta démarche 😊. Avant ta prochaine partie, souviens-toi :
+                    </p>
+                    <p style="margin: 4px 0; font-size: 0.9rem;">🗣️ Que ta parole soit bienveillante</p>
+                    <p style="margin: 4px 0; font-size: 0.9rem;">🪞 Ne prends rien personnellement</p>
+                    <p style="margin: 4px 0; font-size: 0.9rem;">❓ Ne fais pas de suppositions</p>
+                    <p style="margin: 4px 0; font-size: 0.9rem;">💪 Fais toujours de ton mieux</p>
+                    <p style="margin: 10px 0 0 0; font-size: 0.85rem; color: #6b7280; font-style: italic;">
+                        Pose-toi la question : pourquoi certains joueurs ont été affectés par ta façon de réagir ? 
+                        Chaque partie est une nouvelle chance.
+                    </p>
+                </div>
+            `, `
+                <button class="btn btn-primary" onclick="confirmerSecondeChance()">✅ Je m'engage</button>
+                <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+            `);
+        }
+        
+        async function confirmerSecondeChance() {
+            closeModal();
+            
+            const result = await apiCommunaute({ action: 'secondeChance', email: membreEmail });
+            
+            if (result.success) {
+                // Mettre à jour les données locales
+                membreData.compteurSmileys = result.nouveauCompteur;
+                membreData.nbSecondesChances = (membreData.nbSecondesChances || 0) + 1;
+                membreData.coteActuelle = result.nouvelleCote;
+                
+                showModal(`
+                    <h3>✅ Seconde chance activée !</h3>
+                    <p style="font-size: 0.95rem;">
+                        <strong>${result.smileysRestaures} 😊</strong> ont été restaurés.
+                    </p>
+                    <p style="font-size: 0.9rem;">
+                        Ta nouvelle cote : <strong>${result.nouvelleCote}</strong>
+                    </p>
+                    <p style="font-size: 0.85rem; color: #6b7280;">
+                        ${result.restantes > 0 ? `Il te reste ${result.restantes} seconde(s) chance(s).` : 'C\'était ta dernière seconde chance.'}
+                    </p>
+                `, `<button class="btn btn-primary" onclick="closeModal()">Merci !</button>`);
+            } else {
+                showError(result.error || 'Erreur lors de l\'activation');
+            }
+        }
+        
+        // ── Désinscription ──
+        function confirmerDesinscription() {
+            closeModal();
+            showModal(`
+                <h3>🗑️ Supprimer ton inscription ?</h3>
+                <div style="background: #fee2e2; padding: 12px; border-radius: 8px; margin-bottom: 12px;">
+                    <p style="margin: 0; font-size: 0.9rem; color: #991b1b;">
+                        ⚠️ Cette action est <strong>définitive</strong>. Toutes tes données seront supprimées :
+                        email, prénom, cote, historique.
+                    </p>
+                    <p style="margin: 8px 0 0 0; font-size: 0.85rem; color: #991b1b;">
+                        Les notes négatives que tu as données seront retirées et les cotes recalculées.
+                    </p>
+                </div>
+            `, `
+                <button class="btn" style="background: #dc2626; color: white;" onclick="executerDesinscription()">🗑️ Oui, tout supprimer</button>
+                <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+            `);
+        }
+        
+        async function executerDesinscription() {
+            closeModal();
+            const result = await apiCommunaute({ action: 'desinscrire', email: membreEmail });
+            
+            if (result.success) {
+                // Réinitialiser l'état communautaire
+                membreEmail = '';
+                membreData = null;
+                membreVerifie = false;
+                
+                // Réinitialiser l'UI
+                document.getElementById('playerEmail').value = '';
+                document.getElementById('welcomeBack').style.display = 'none';
+                document.getElementById('btnGererCompte').style.display = 'none';
+                document.getElementById('partiesEnAttente').style.display = 'none';
+                document.getElementById('rgpdBlock').style.display = 'none';
+                document.getElementById('verificationBlock').style.display = 'none';
+                document.getElementById('msgTutoiement').style.display = 'block';
+                document.getElementById('emailIncitatif').style.display = 'block';
+                
+                showModal(`
+                    <h3>✅ Inscription supprimée</h3>
+                    <p style="font-size: 0.95rem;">Toutes tes données ont été effacées. Tu redeviens un joueur anonyme.</p>
+                    <p style="font-size: 0.85rem; color: #6b7280;">Tu peux te réinscrire à tout moment.</p>
+                `, `<button class="btn btn-primary" onclick="closeModal()">OK</button>`);
+            } else {
+                showError(result.error || 'Erreur lors de la suppression');
+            }
+        }
+        
+        // ── Politique de confidentialité ──
+        function showPolitiqueConfidentialite() {
+            showModal(`
+                <h3>🔒 Politique de confidentialité</h3>
+                <div style="font-size: 0.85rem; color: #374151; max-height: 300px; overflow-y: auto;">
+                    <p><strong>Responsable du traitement :</strong> ASBL Espoyr, Sprimont, Belgique</p>
+                    <p><strong>Finalité :</strong> Mise en relation des joueurs de la communauté ESPOYR et information sur les activités de l'ASBL Espoyr.</p>
+                    <p><strong>Données collectées :</strong> Prénom, adresse email, cote de joueur, historique de notation.</p>
+                    <p><strong>Durée de conservation :</strong> Jusqu'à désinscription. Tu peux supprimer ton compte à tout moment via le bouton "Gérer mon compte" dans le jeu ou via le lien dans chaque email.</p>
+                    <p><strong>Droit de suppression :</strong> Tu peux demander la suppression complète de tes données à tout moment. La suppression est immédiate et automatique, sans intervention nécessaire.</p>
+                    <p><strong>Partage des données :</strong> Tes données ne sont jamais partagées avec des tiers. Elles sont stockées sur le compte Google de l'ASBL Espoyr.</p>
+                    <p><strong>Contact :</strong> espoyr.asbl@gmail.com</p>
+                </div>
+            `, `<button class="btn btn-secondary" onclick="closeModal()">Fermer</button>`);
+        }
+        
+        // ── Charger les parties en attente ──
+        async function chargerPartiesEnAttente() {
+            if (!membreVerifie) return;
+            
+            try {
+                const result = await apiCommunaute({ action: 'getPartiesEnAttente' });
+                
+                if (result.success && result.parties && result.parties.length > 0) {
+                    const container = document.getElementById('partiesEnAttente');
+                    const liste = document.getElementById('listeParties');
+                    
+                    liste.innerHTML = result.parties.map(p => {
+                        const date = p.datePrevue ? new Date(p.datePrevue).toLocaleString('fr-BE', {
+                            weekday: 'short', day: 'numeric', month: 'short',
+                            hour: '2-digit', minute: '2-digit'
+                        }) : 'Bientôt';
+                        
+                        const coteColors = { 'AAA': '#059669', 'AA': '#10b981', 'A': '#6b7280', 'BB': '#f59e0b', 'C': '#ef4444' };
+                        
+                        return `
+                            <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+                                <div>
+                                    <strong>${p.prenomOrganisateur}</strong>
+                                    <span style="color: ${coteColors[p.coteOrganisateur] || '#6b7280'}; font-size: 0.8rem; font-weight: bold;">${p.coteOrganisateur}</span>
+                                    <div style="font-size: 0.8rem; color: #6b7280;">📅 ${date} — ${p.placesRestantes} place(s)</div>
+                                </div>
+                                <button class="btn" style="background: #dbeafe; color: #2563eb; font-size: 0.8rem; padding: 6px 12px;"
+                                        onclick="document.getElementById('gameCode').value='${p.codePartie}'; joinGame();">
+                                    Rejoindre
+                                </button>
+                            </div>
+                        `;
+                    }).join('');
+                    
+                    container.style.display = 'block';
+                } else {
+                    document.getElementById('partiesEnAttente').style.display = 'none';
+                }
+            } catch (e) {
+                console.error('❌ Erreur chargement parties:', e);
+            }
+        }
+        
+        // ── Enregistrer la partie dans le backend quand elle est créée ──
+        async function enregistrerPartieCommunaute(codePartie) {
+            if (!membreEmail || !membreVerifie) return;
+            
+            try {
+                const datePrevue = document.getElementById('datePartie')?.value || '';
+                await apiCommunaute({
+                    action: 'creerPartie',
+                    codePartie,
+                    emailOrganisateur: membreEmail,
+                    prenomOrganisateur: myName,
+                    datePrevue: datePrevue ? new Date(datePrevue).toISOString() : new Date().toISOString(),
+                    nbPlaces: 4
+                });
+                
+                // Notifier les membres
+                await apiCommunaute({
+                    action: 'notifierMembres',
+                    codePartie,
+                    prenomOrganisateur: myName,
+                    emailOrganisateur: membreEmail,
+                    coteOrganisateur: membreData?.coteActuelle || 'A',
+                    datePrevue: datePrevue ? new Date(datePrevue).toISOString() : new Date().toISOString()
+                });
+                
+                console.log('✅ Partie enregistrée + membres notifiés');
+            } catch (e) {
+                console.error('❌ Erreur enregistrement partie:', e);
+            }
         }
 
 
