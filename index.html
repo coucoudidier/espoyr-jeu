@@ -1064,7 +1064,7 @@
         let gameConfig = { ...CONFIG };
         
         // ========== API COMMUNAUTAIRE ==========
-        const API_URL = 'https://script.google.com/macros/s/AKfycbxcDkpL8XBex9OtX6DhJY6zRYYpzJxGUTbny7T64Qniy_blhwO2t7vYDPoUFSFnXYRi2Q/exec';
+        const API_URL = 'https://script.google.com/macros/s/AKfycbyWJCV3Pt5yvaE0wNeeJnkzyx_8RnwT6RR-tq95jdaM9ZttWdaXbs7IwGm6KUZovp3-jg/exec';
         
         // État communautaire du joueur
         let membreEmail = '';         // Email du membre (vide = joueur anonyme)
@@ -4270,9 +4270,82 @@ activiteId: actId
                 console.log('DEBUG choix mode:', { mode, minPlayers, diceMode });
                 console.log('DEBUG gameConfig final:', gameConfig);
 
-
-                // Afficher l'intro puis demander le profil économique
-                showIntroModal(() => showProfilChoiceModal(async (profil) => {
+                // Si membre vérifié ET mode multi → proposer de planifier
+                if (membreVerifie && mode !== 'SOLO') {
+                    choisirDatePartie(() => {
+                        showIntroModal(() => showProfilChoiceModal(async (profil) => {
+                            await finaliserCreationPartie(profil);
+                        }));
+                    });
+                } else {
+                    window._datePartiePrevue = ''; // Pas de planification
+                    // Afficher l'intro puis demander le profil économique
+                    showIntroModal(() => showProfilChoiceModal(async (profil) => {
+                        await finaliserCreationPartie(profil);
+                    }));
+                }
+            });
+        }
+        
+        // ── Sélecteur date/heure pour planifier une partie ──
+        function choisirDatePartie(callback) {
+            // Stocker le callback globalement
+            window._datePartieCallback = callback;
+            
+            // Pré-remplir avec maintenant + 1h arrondi
+            const now = new Date();
+            now.setHours(now.getHours() + 1);
+            now.setMinutes(0, 0, 0);
+            const defaultDate = now.toISOString().slice(0, 16);
+            
+            showModal(`
+                <h3>📅 Quand veux-tu jouer ?</h3>
+                <p style="font-size: 0.9rem; color: var(--gray); margin-bottom: 12px;">
+                    Planifie ta partie pour que d'autres membres puissent te rejoindre. 
+                    Ils seront notifiés par email.
+                </p>
+                
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <button class="btn btn-primary btn-full" onclick="window._datePartiePrevue=''; closeModal(); window._datePartieCallback();">
+                        ⚡ Jouer maintenant
+                    </button>
+                    
+                    <div class="divider"><span>ou planifier</span></div>
+                    
+                    <div style="background: #f0fdf4; padding: 12px; border-radius: 8px;">
+                        <label style="font-size: 0.85rem; font-weight: bold; display: block; margin-bottom: 6px;">
+                            📆 Date et heure :
+                        </label>
+                        <input type="datetime-local" id="datePartie" value="${defaultDate}" 
+                               min="${new Date().toISOString().slice(0, 16)}"
+                               style="width: 100%; padding: 10px; font-size: 1rem; border-radius: 8px; border: 2px solid #059669;">
+                        <button class="btn btn-primary btn-full" style="margin-top: 10px;" 
+                                onclick="validerDatePartie()">
+                            📅 Planifier cette partie
+                        </button>
+                    </div>
+                </div>
+            `, ``);
+        }
+        
+        function validerDatePartie() {
+            const dateInput = document.getElementById('datePartie');
+            if (!dateInput || !dateInput.value) {
+                showError('Choisis une date et heure');
+                return;
+            }
+            const datePrevue = new Date(dateInput.value);
+            if (datePrevue <= new Date()) {
+                showError('La date doit être dans le futur');
+                return;
+            }
+            window._datePartiePrevue = datePrevue.toISOString();
+            closeModal();
+            if (window._datePartieCallback) window._datePartieCallback();
+        }
+        
+        // ── Finaliser la création (code commun) ──
+        async function finaliserCreationPartie(profil) {
 
                 const code = generateCode();
                 currentGameCode = code;
@@ -4324,7 +4397,7 @@ activiteId: actId
                 await db.ref(`parties/${code}`).set({
                     code, hostId: myPlayerId, status: 'waiting',
                     createdAt: firebase.database.ServerValue.TIMESTAMP,
-                    config: partyConfig,
+                    config: gameConfig,
                     state: { turn: 1, phase: 1, currentPlayerIndex: 0, started: false, toursComplets: 0, passagesLigne1Total: 0 },
                     activites: {}, equipements: {},
                     comptabilite: COMPTABILITE
@@ -4369,7 +4442,7 @@ activiteId: actId
                     gameCode: code,
                     playerName: myName,
                     profil,
-                    config: partyConfig,
+                    config: gameConfig,
                     rngSeed: GAME_SAVE.rng.seed
                 }, capitalEcriture?.ledgerEntryId ? [capitalEcriture.ledgerEntryId] : []);
                 
@@ -4387,8 +4460,6 @@ activiteId: actId
                 
                 // Enregistrer dans le backend communautaire
                 enregistrerPartieCommunaute(code);
-            }));
-            });
         }
         
         // Variable pour stocker le profil du joueur
@@ -15360,6 +15431,37 @@ function initSystemeDe() {
             const protege = m.protege && m.nbPartiesJouees < 3;
             const peutSecondeChance = m.nbSecondesChances < 2 && m.compteurSmileys < 15;
             
+            // Parser les plages existantes
+            let plage1 = null, plage2 = null;
+            try { if (m.plageHoraire1) plage1 = JSON.parse(m.plageHoraire1); } catch(e) {}
+            try { if (m.plageHoraire2) plage2 = JSON.parse(m.plageHoraire2); } catch(e) {}
+            
+            const jours = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'];
+            const optionsJours = jours.map(j => `<option value="${j}">${j.charAt(0).toUpperCase() + j.slice(1)}</option>`).join('');
+            
+            function plageHTML(num, plage) {
+                const jour = plage?.jour || '';
+                const debut = plage?.heureDebut || '14:00';
+                const fin = plage?.heureFin || '18:00';
+                return `
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; align-items: center; margin-bottom: 6px;">
+                        <select id="plageJour${num}" style="padding: 6px; border-radius: 6px; border: 1px solid #d1d5db; font-size: 0.85rem;">
+                            <option value="">— Jour —</option>
+                            ${optionsJours.replace(`value="${jour}"`, `value="${jour}" selected`)}
+                        </select>
+                        <input type="time" id="plageDebut${num}" value="${debut}" 
+                               style="padding: 6px; border-radius: 6px; border: 1px solid #d1d5db; font-size: 0.85rem;">
+                        <input type="time" id="plageFin${num}" value="${fin}" 
+                               style="padding: 6px; border-radius: 6px; border: 1px solid #d1d5db; font-size: 0.85rem;">
+                    </div>`;
+            }
+            
+            // Résumé actuel des plages
+            let plageResume = '';
+            if (plage1?.jour) plageResume += `${plage1.jour} ${plage1.heureDebut}–${plage1.heureFin}`;
+            if (plage2?.jour) plageResume += `${plageResume ? ', ' : ''}${plage2.jour} ${plage2.heureDebut}–${plage2.heureFin}`;
+            if (!plageResume) plageResume = 'Aucune — tu recevras toutes les notifications';
+            
             showModal(`
                 <h3>👤 Mon compte ESPOYR</h3>
                 
@@ -15373,6 +15475,27 @@ function initSystemeDe() {
                         ${m.compteurSmileys} 😊 cumulés — ${m.nbPartiesJouees} parties jouées
                         ${m.nbNegRecus > 0 ? ` — ${m.nbNegRecus} 💬 reçus` : ''}
                     </p>
+                </div>
+                
+                <!-- Plages horaires -->
+                <div style="background: #dbeafe; padding: 12px; border-radius: 8px; margin-bottom: 10px;">
+                    <p style="margin: 0 0 4px 0; font-size: 0.9rem; font-weight: bold;">📅 Mes disponibilités</p>
+                    <p style="margin: 0 0 8px 0; font-size: 0.8rem; color: #6b7280;">
+                        Actuellement : <em>${plageResume}</em>
+                    </p>
+                    <p style="margin: 0 0 4px 0; font-size: 0.8rem; color: #374151;">Plage 1 :</p>
+                    ${plageHTML(1, plage1)}
+                    <p style="margin: 0 0 4px 0; font-size: 0.8rem; color: #374151;">Plage 2 :</p>
+                    ${plageHTML(2, plage2)}
+                    <p style="margin: 0 0 6px 0; font-size: 0.75rem; color: #6b7280;">
+                        Tu seras notifié uniquement quand une partie correspond à tes disponibilités. 
+                        Laisse vide pour recevoir toutes les notifications.
+                    </p>
+                    <button class="btn" onclick="sauverPlagesHoraires()" 
+                            style="width: 100%; background: #2563eb; color: white; font-size: 0.85rem;">
+                        💾 Enregistrer mes disponibilités
+                    </button>
+                    <div id="plagesSaveMsg" style="display: none; text-align: center; margin-top: 6px; font-size: 0.8rem; color: #059669;"></div>
                 </div>
                 
                 ${peutSecondeChance ? `
@@ -15396,6 +15519,41 @@ function initSystemeDe() {
                     </button>
                 </div>
             `, `<button class="btn btn-secondary" onclick="closeModal()">Fermer</button>`);
+        }
+        
+        // ── Sauvegarder les plages horaires ──
+        async function sauverPlagesHoraires() {
+            const plage1Jour = document.getElementById('plageJour1').value;
+            const plage1Debut = document.getElementById('plageDebut1').value;
+            const plage1Fin = document.getElementById('plageFin1').value;
+            
+            const plage2Jour = document.getElementById('plageJour2').value;
+            const plage2Debut = document.getElementById('plageDebut2').value;
+            const plage2Fin = document.getElementById('plageFin2').value;
+            
+            const plage1 = plage1Jour ? { jour: plage1Jour, heureDebut: plage1Debut, heureFin: plage1Fin } : null;
+            const plage2 = plage2Jour ? { jour: plage2Jour, heureDebut: plage2Debut, heureFin: plage2Fin } : null;
+            
+            const result = await apiCommunaute({
+                action: 'majPlagesHoraires',
+                email: membreEmail,
+                plage1, plage2
+            });
+            
+            const msg = document.getElementById('plagesSaveMsg');
+            if (result.success) {
+                // Mettre à jour les données locales
+                membreData.plageHoraire1 = plage1 ? JSON.stringify(plage1) : '';
+                membreData.plageHoraire2 = plage2 ? JSON.stringify(plage2) : '';
+                msg.textContent = '✅ Disponibilités enregistrées !';
+                msg.style.display = 'block';
+                msg.style.color = '#059669';
+            } else {
+                msg.textContent = '❌ ' + (result.error || 'Erreur');
+                msg.style.display = 'block';
+                msg.style.color = '#dc2626';
+            }
+            setTimeout(() => { if (msg) msg.style.display = 'none'; }, 3000);
         }
         
         // ── Seconde chance ──
@@ -15536,18 +15694,24 @@ function initSystemeDe() {
                         }) : 'Bientôt';
                         
                         const coteColors = { 'AAA': '#059669', 'AA': '#10b981', 'A': '#6b7280', 'BB': '#f59e0b', 'C': '#ef4444' };
+                        const confirmesText = p.confirmes && p.confirmes.length > 0 
+                            ? `👥 ${p.confirmes.join(', ')}` 
+                            : '';
                         
                         return `
-                            <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
-                                <div>
-                                    <strong>${p.prenomOrganisateur}</strong>
-                                    <span style="color: ${coteColors[p.coteOrganisateur] || '#6b7280'}; font-size: 0.8rem; font-weight: bold;">${p.coteOrganisateur}</span>
-                                    <div style="font-size: 0.8rem; color: #6b7280;">📅 ${date} — ${p.placesRestantes} place(s)</div>
+                            <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; margin-bottom: 6px;">
+                                <div style="display: flex; align-items: center; justify-content: space-between;">
+                                    <div>
+                                        <strong>${p.prenomOrganisateur}</strong>
+                                        <span style="color: ${coteColors[p.coteOrganisateur] || '#6b7280'}; font-size: 0.8rem; font-weight: bold;">${p.coteOrganisateur}</span>
+                                        <div style="font-size: 0.8rem; color: #6b7280;">📅 ${date} — ${p.placesRestantes} place(s) restante(s)</div>
+                                    </div>
+                                    <button class="btn" style="background: #dbeafe; color: #2563eb; font-size: 0.8rem; padding: 6px 12px;"
+                                            onclick="document.getElementById('gameCode').value='${p.codePartie}'; joinGame();">
+                                        Rejoindre
+                                    </button>
                                 </div>
-                                <button class="btn" style="background: #dbeafe; color: #2563eb; font-size: 0.8rem; padding: 6px 12px;"
-                                        onclick="document.getElementById('gameCode').value='${p.codePartie}'; joinGame();">
-                                    Rejoindre
-                                </button>
+                                ${confirmesText ? `<div style="font-size: 0.75rem; color: #059669; margin-top: 4px;">${confirmesText} ${p.nbConfirmes > 1 ? 'ont' : 'a'} confirmé</div>` : ''}
                             </div>
                         `;
                     }).join('');
@@ -15566,13 +15730,13 @@ function initSystemeDe() {
             if (!membreEmail || !membreVerifie) return;
             
             try {
-                const datePrevue = document.getElementById('datePartie')?.value || '';
+                const datePrevue = window._datePartiePrevue || new Date().toISOString();
                 await apiCommunaute({
                     action: 'creerPartie',
                     codePartie,
                     emailOrganisateur: membreEmail,
                     prenomOrganisateur: myName,
-                    datePrevue: datePrevue ? new Date(datePrevue).toISOString() : new Date().toISOString(),
+                    datePrevue: datePrevue,
                     nbPlaces: 4
                 });
                 
@@ -15583,7 +15747,7 @@ function initSystemeDe() {
                     prenomOrganisateur: myName,
                     emailOrganisateur: membreEmail,
                     coteOrganisateur: membreData?.coteActuelle || 'A',
-                    datePrevue: datePrevue ? new Date(datePrevue).toISOString() : new Date().toISOString()
+                    datePrevue: datePrevue
                 });
                 
                 console.log('✅ Partie enregistrée + membres notifiés');
