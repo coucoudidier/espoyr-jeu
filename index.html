@@ -364,22 +364,6 @@
             <p class="subtitle">Jeu collaboratif d'économie - V3 Comptabilité complète</p>
             <div class="error-message" id="errorMessage"></div>
             
-            <!-- Message tutoiement (affiché une fois) -->
-            <div id="msgTutoiement" style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px; margin-bottom: 12px; text-align: center; font-size: 0.9rem; color: #065f46;">
-                🤝 Nous espérons que vous acceptez le tutoiement
-            </div>
-            
-            <!-- Message de bienvenue personnalisé (caché par défaut) -->
-            <div id="welcomeBack" style="display: none; background: #dbeafe; border-radius: 10px; padding: 12px; margin-bottom: 12px; text-align: center;">
-                <p id="welcomeBackMsg" style="margin: 0 0 8px 0; font-size: 0.95rem; color: #1e40af;"></p>
-                <div id="welcomeHumeur" style="display: flex; justify-content: center; gap: 12px;">
-                    <button class="btn" onclick="choisirHumeur('😊')" style="font-size: 1.5rem; padding: 8px 16px; background: #dcfce7;" title="Ça va bien !">😊</button>
-                    <button class="btn" onclick="choisirHumeur('😐')" style="font-size: 1.5rem; padding: 8px 16px; background: #fef3c7;" title="Bof...">😐</button>
-                    <button class="btn" onclick="choisirHumeur('😔')" style="font-size: 1.5rem; padding: 8px 16px; background: #fee2e2;" title="Pas terrible">😔</button>
-                </div>
-                <p id="welcomeCote" style="margin: 8px 0 0 0; font-size: 0.85rem; color: #6b7280;"></p>
-            </div>
-            
             <div style="margin-bottom: 15px; text-align: center;">
                 <a href="https://docs.google.com/document/d/1fTV-keDtwbxwTQPUuj4JCEN-sUBkqvRx/edit?usp=sharing&ouid=114447202650775631504&rtpof=true&sd=true" 
                    target="_blank" rel="noopener noreferrer"
@@ -388,73 +372,27 @@
                 </a>
             </div>
             
-            <!-- Prénom -->
-            <div style="margin-bottom: 10px;">
+            <div style="margin-bottom: 15px;">
                 <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 6px; font-size: 0.9rem;">Introduit ton Prénom :</label>
                 <input type="text" id="playerName" placeholder="Entre ton prénom..." maxlength="15">
             </div>
-            
-            <!-- Email (optionnel) -->
-            <div style="margin-bottom: 10px;">
-                <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 6px; font-size: 0.9rem;">
-                    Email : <span style="font-weight: 400; color: #9ca3af; font-size: 0.85rem;">(optionnel)</span>
-                </label>
-                <input type="email" id="playerEmail" placeholder="ton.email@exemple.com" 
-                       style="margin-bottom: 0;" oninput="onEmailInput()">
-                <p id="emailIncitatif" style="font-size: 0.8rem; color: #059669; margin: 4px 0 0 0;">
-                    💡 Pour rejoindre des parties et être noté, deviens membre — c'est simple !
-                </p>
-            </div>
-            
-            <!-- Case RGPD (apparaît quand email rempli) -->
-            <div id="rgpdBlock" style="display: none; margin-bottom: 10px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px;">
-                <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 0.82rem; color: #374151;">
-                    <input type="checkbox" id="rgpdCheckbox" style="margin-top: 3px; flex-shrink: 0;">
-                    <span>J'accepte que l'ASBL Espoyr conserve mon email pour me permettre de rejoindre des parties et m'informer des activités d'Espoyr.
-                    <a href="#" onclick="showPolitiqueConfidentialite(); return false;" style="color: #2563eb;">Politique de confidentialité</a></span>
-                </label>
-            </div>
-            
-            <!-- Vérification email (apparaît après envoi du code) -->
-            <div id="verificationBlock" style="display: none; margin-bottom: 10px; background: #fef3c7; border-radius: 8px; padding: 12px; text-align: center;">
-                <p style="margin: 0 0 8px 0; font-size: 0.9rem; color: #92400e;">📧 Un code à 4 chiffres t'a été envoyé par email</p>
-                <input type="text" id="codeVerification" placeholder="Code 4 chiffres" maxlength="4" 
-                       style="text-align: center; font-size: 1.3rem; letter-spacing: 6px; width: 150px; margin: 0 auto 8px auto; display: block;">
-                <button class="btn btn-primary" onclick="verifierCodeEmail()" style="font-size: 0.9rem;">✅ Vérifier</button>
-                <p style="font-size: 0.75rem; color: #6b7280; margin: 6px 0 0 0;">Le code expire dans 10 minutes</p>
-            </div>
-            
-            <!-- Bouton Gérer mon compte (membres vérifiés) -->
-            <div id="btnGererCompte" style="display: none; margin-bottom: 12px;">
-                <button class="btn" onclick="showGererCompte()" style="width: 100%; background: #ede9fe; color: #6d28d9; font-size: 0.9rem;">
-                    👤 Gérer mon compte
-                </button>
-            </div>
+           
             
             <button class="btn btn-primary btn-full" onclick="createGame()" style="margin-bottom: 12px;">
                 ➕ Créer une nouvelle partie
             </button>
             
-            <!-- Parties sauvées (détection automatique) -->
-            <div id="partiesSauvees" style="display: none; margin-bottom: 12px;"></div>
-            
-            <!-- Liste des parties en attente (membres uniquement) -->
-            <div id="partiesEnAttente" style="display: none; margin-bottom: 12px;">
-                <h3 style="font-size: 0.9rem; color: #374151; margin-bottom: 8px;">🎮 Parties en attente</h3>
-                <div id="listeParties" style="max-height: 150px; overflow-y: auto;"></div>
-            </div>
+           
             
             <div class="divider"><span>ou rejoindre</span></div>
             
             <div style="margin-top: 12px;">
                 <input type="text" id="gameCode" placeholder="Code (ex: ABC123)" maxlength="6" 
                        style="text-transform: uppercase; text-align: center; font-size: 1.2rem; letter-spacing: 3px;">
-                <input type="text" id="resumeTicket" style="display: none;">
+                <input type="text" id="resumeTicket" placeholder="Ticket de reprise (optionnel)" 
+                       style="margin-top: 8px; text-align: center; font-size: 0.95rem;">
 
-                <div style="display: flex; gap: 8px; margin-top: 8px;">
-                    <button class="btn btn-secondary" style="flex: 1;" onclick="joinGame()">🚪 Rejoindre</button>
-                    <button class="btn" style="flex: 1; background: #dbeafe; color: #2563eb; font-size: 0.85rem;" onclick="showReconnexionEmailModal(document.getElementById('gameCode').value.trim())">📧 Me reconnecter</button>
-                </div>
+                <button class="btn btn-secondary btn-full" onclick="joinGame()">🚪 Rejoindre une partie</button>
             </div>
         </div>
         
@@ -478,17 +416,6 @@
                 <div class="loading"></div>
                 <p style="margin-top: 8px; font-size: 0.9rem;">En attente du lancement...</p>
             </div>
-            
-            <!-- Chat lobby -->
-            <div style="margin-top: 15px;">
-                <h3 style="color: var(--gray); margin-bottom: 6px; font-size: 0.9rem;">💬 Chat</h3>
-                <div class="chat-box" id="lobbyChatBox" style="height: 120px;"></div>
-                <div class="chat-input">
-                    <input type="text" id="lobbyChatInput" placeholder="Message..." onkeypress="if(event.key==='Enter')sendLobbyChat()">
-                    <button class="btn btn-primary" onclick="sendLobbyChat()" style="padding: 8px 12px; font-size: 0.8rem;">→</button>
-                </div>
-            </div>
-            
             <button class="btn" onclick="leaveGame()" style="margin-top: 15px; background: #f3f4f6; color: var(--gray); font-size: 0.85rem;">← Quitter</button>
         </div>
         
@@ -1079,29 +1006,6 @@
         // Config modifiable par l'host
         let gameConfig = { ...CONFIG };
         
-        // ========== API COMMUNAUTAIRE ==========
-        const API_URL = 'https://script.google.com/macros/s/AKfycby_u0XpPkw5ANLD-o6L7dgPn2ACdHXQcQNfIfGAMPJDSbdOs2arsNIe-opvDq0lOdaDyw/exec';
-        
-        // État communautaire du joueur
-        let membreEmail = '';         // Email du membre (vide = joueur anonyme)
-        let membreData = null;        // Données du membre (cote, compteur, etc.)
-        let membreVerifie = false;    // Email vérifié ?
-        
-        // Appel générique à l'API communautaire
-        async function apiCommunaute(data) {
-            try {
-                const resp = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain' },
-                    body: JSON.stringify(data)
-                });
-                return await resp.json();
-            } catch (err) {
-                console.error('❌ API communautaire:', err);
-                return { success: false, error: err.message };
-            }
-        }
-        
         // ========== ÉTAT LOCAL ==========
         let myPlayerId = null;
         let myName = '';
@@ -1240,11 +1144,12 @@ function showMyTicketModal() {
         LAST_RESUME_CODE = currentGameCode;
         LAST_RESUME_NAME = saved.name || myName || '';
         showModal(
-            `<h3>🔑 Ticket technique</h3>
-             <p style="color: var(--gray); font-size: 0.85rem;">Ce ticket est un identifiant technique de secours. Normalement tu n'en as pas besoin — la reconnexion par email ou par cookie est automatique.</p>
-             <div id="ticketValue" style="background:#f3f4f6; border:1px solid #e5e7eb; padding:10px; border-radius:10px; font-family: monospace; word-break: break-all; font-size: 0.8rem;">${ticket}</div>`,
-            `<button class="btn" style="font-size: 0.85rem;" onclick="copyToClipboard(document.getElementById('ticketValue').textContent)">📋 Copier</button>
-             <button class="btn btn-secondary" onclick="closeModal()">Fermer</button>`
+            `<h3>🎟️ Mon ticket de reprise</h3>
+             <p style="color: var(--gray); font-size: 0.9rem;">Garde ce ticket pour reprendre la partie en cas de problème technique (même sur un autre appareil).</p>
+             <div id="ticketValue" style="background:#f3f4f6; border:1px solid #e5e7eb; padding:10px; border-radius:10px; font-family: monospace; word-break: break-all;">${ticket}</div>`,
+            `<button class="btn btn-primary" onclick="copyToClipboard(document.getElementById('ticketValue').textContent)">📋 Copier</button>
+             <button class="btn" onclick="downloadResumeTicket()">💾 Télécharger</button>
+             <button class="btn" onclick="closeModal()">OK</button>`
         );
     } catch (e) {
         console.error('showMyTicketModal error', e);
@@ -4164,27 +4069,7 @@ activiteId: actId
                     }
                 }
                 
-                // Mettre à jour les soldes globaux (protéger les compteurs cumulatifs)
-                const protectCumulatifs = (incoming, local, keys) => {
-                    if (!incoming || !local) return incoming || local;
-                    keys.forEach(k => {
-                        if (incoming[k] !== undefined && local[k] !== undefined) {
-                            incoming[k] = Math.max(incoming[k] || 0, local[k] || 0);
-                        }
-                    });
-                    return incoming;
-                };
-                
-                if (firebaseCompta.banque) {
-                    protectCumulatifs(firebaseCompta.banque, COMPTABILITE.banque, ['interetsRecus', 'creancesJoueurs', 'masseMonetaire']);
-                }
-                if (firebaseCompta.etat) {
-                    protectCumulatifs(firebaseCompta.etat, COMPTABILITE.etat, ['taxesRecues', 'salairesVerses']);
-                }
-                if (firebaseCompta.potAAA) {
-                    protectCumulatifs(firebaseCompta.potAAA, COMPTABILITE.potAAA, ['circulationHash']);
-                }
-                
+                // Mettre à jour les soldes globaux
                 COMPTABILITE.potAAA = firebaseCompta.potAAA || COMPTABILITE.potAAA;
                 COMPTABILITE.etat = firebaseCompta.etat || COMPTABILITE.etat;
                 COMPTABILITE.banque = firebaseCompta.banque || COMPTABILITE.banque;
@@ -4276,6 +4161,13 @@ activiteId: actId
         
         function closeModal() {
             document.getElementById('modalContainer').innerHTML = '';
+            // Arrêter tout timer de décision en cours (sécurité anti-blocage)
+            stopDecisionTimer();
+            // Arrêter le countdown Ligne 2 si actif
+            if (window._ligne2Interval) {
+                clearInterval(window._ligne2Interval);
+                window._ligne2Interval = null;
+            }
         }
         
         function generateCode() {
@@ -4305,89 +4197,9 @@ activiteId: actId
                 console.log('DEBUG choix mode:', { mode, minPlayers, diceMode });
                 console.log('DEBUG gameConfig final:', gameConfig);
 
-                // Si membre vérifié ET mode multi → proposer de planifier
-                if (membreVerifie && mode !== 'SOLO') {
-                    choisirDatePartie(() => {
-                        // Membre vérifié → pas d'intro, directement le choix de profil
-                        showProfilChoiceModal(async (profil) => {
-                            await finaliserCreationPartie(profil);
-                        });
-                    });
-                } else if (membreVerifie) {
-                    window._datePartiePrevue = '';
-                    // Membre vérifié solo → pas d'intro non plus
-                    showProfilChoiceModal(async (profil) => {
-                        await finaliserCreationPartie(profil);
-                    });
-                } else {
-                    window._datePartiePrevue = ''; // Pas de planification
-                    // Joueur anonyme → afficher l'intro puis le profil
-                    showIntroModal(() => showProfilChoiceModal(async (profil) => {
-                        await finaliserCreationPartie(profil);
-                    }));
-                }
-            });
-        }
-        
-        // ── Sélecteur date/heure pour planifier une partie ──
-        function choisirDatePartie(callback) {
-            // Stocker le callback globalement
-            window._datePartieCallback = callback;
-            
-            // Pré-remplir avec maintenant + 1h arrondi
-            const now = new Date();
-            now.setHours(now.getHours() + 1);
-            now.setMinutes(0, 0, 0);
-            const defaultDate = now.toISOString().slice(0, 16);
-            
-            showModal(`
-                <h3>📅 Quand veux-tu jouer ?</h3>
-                <p style="font-size: 0.9rem; color: var(--gray); margin-bottom: 12px;">
-                    Planifie ta partie pour que d'autres membres puissent te rejoindre. 
-                    Ils seront notifiés par email.
-                </p>
-                
-                <div style="display: flex; flex-direction: column; gap: 10px;">
-                    <button class="btn btn-primary btn-full" onclick="window._datePartiePrevue=''; closeModal(); window._datePartieCallback();">
-                        ⚡ Jouer maintenant
-                    </button>
-                    
-                    <div class="divider"><span>ou planifier</span></div>
-                    
-                    <div style="background: #f0fdf4; padding: 12px; border-radius: 8px;">
-                        <label style="font-size: 0.85rem; font-weight: bold; display: block; margin-bottom: 6px;">
-                            📆 Date et heure :
-                        </label>
-                        <input type="datetime-local" id="datePartie" value="${defaultDate}" 
-                               min="${new Date().toISOString().slice(0, 16)}"
-                               style="width: 100%; padding: 10px; font-size: 1rem; border-radius: 8px; border: 2px solid #059669;">
-                        <button class="btn btn-primary btn-full" style="margin-top: 10px;" 
-                                onclick="validerDatePartie()">
-                            📅 Planifier cette partie
-                        </button>
-                    </div>
-                </div>
-            `, ``);
-        }
-        
-        function validerDatePartie() {
-            const dateInput = document.getElementById('datePartie');
-            if (!dateInput || !dateInput.value) {
-                showError('Choisis une date et heure');
-                return;
-            }
-            const datePrevue = new Date(dateInput.value);
-            if (datePrevue <= new Date()) {
-                showError('La date doit être dans le futur');
-                return;
-            }
-            window._datePartiePrevue = datePrevue.toISOString();
-            closeModal();
-            if (window._datePartieCallback) window._datePartieCallback();
-        }
-        
-        // ── Finaliser la création (code commun) ──
-        async function finaliserCreationPartie(profil) {
+
+                // Afficher l'intro puis demander le profil économique
+                showIntroModal(() => showProfilChoiceModal(async (profil) => {
 
                 const code = generateCode();
                 currentGameCode = code;
@@ -4439,7 +4251,7 @@ activiteId: actId
                 await db.ref(`parties/${code}`).set({
                     code, hostId: myPlayerId, status: 'waiting',
                     createdAt: firebase.database.ServerValue.TIMESTAMP,
-                    config: gameConfig,
+                    config: partyConfig,
                     state: { turn: 1, phase: 1, currentPlayerIndex: 0, started: false, toursComplets: 0, passagesLigne1Total: 0 },
                     activites: {}, equipements: {},
                     comptabilite: COMPTABILITE
@@ -4458,17 +4270,19 @@ activiteId: actId
                     secretHash: secretHash
                 });
 
-                // Sauvegarde locale
+                // Sauvegarde locale + ticket de reprise
                 saveResume(code, { code, name: myName, playerId: myPlayerId, secret, avatar: myAvatar, savedAt: Date.now() });
+                const ticket = `${myPlayerId}|${secret}`;
                 LAST_RESUME_CODE = code;
                 LAST_RESUME_NAME = myName;
-                
-                // Demander email (optionnel) pour la reconnexion
-                demanderEmailOptional(async (emailJoueur) => {
-                    if (emailJoueur) {
-                        await enregistrerEmailJoueur(code, myPlayerId, emailJoueur, myName);
-                    }
-                });
+                showModal(
+                    `<h3>🎟️ Ticket de reprise</h3>
+                     <p style="color: var(--gray); font-size: 0.9rem;">Garde ce ticket pour reprendre la partie même en changeant d'appareil.</p>
+                     <div id="ticketValue" style="background:#f3f4f6; padding:12px; border-radius:12px; font-family: monospace; word-break: break-all;">${ticket}</div>`,
+                    `<button class="btn btn-primary" onclick="copyToClipboard(document.getElementById('ticketValue').textContent)">📋 Copier</button>
+                     <button class="btn" onclick="downloadResumeTicket()">💾 Télécharger</button>
+                     <button class="btn" onclick="closeModal()">OK</button>`
+                );
 
                 
                 // Écriture capital initial - gameRef est maintenant initialisé !
@@ -4482,7 +4296,7 @@ activiteId: actId
                     gameCode: code,
                     playerName: myName,
                     profil,
-                    config: gameConfig,
+                    config: partyConfig,
                     rngSeed: GAME_SAVE.rng.seed
                 }, capitalEcriture?.ledgerEntryId ? [capitalEcriture.ledgerEntryId] : []);
                 
@@ -4497,9 +4311,8 @@ activiteId: actId
                 document.getElementById('waitingMessage').classList.add('hidden');
                 
                 sendSystemMessage(`${myName} (${profil === 'creatif' ? '🎨 Créatif' : '🏛️ Contributif'}) a créé la partie !`);
-                
-                // Enregistrer dans le backend communautaire
-                enregistrerPartieCommunaute(code);
+            }));
+            });
         }
         
         // Variable pour stocker le profil du joueur
@@ -4717,22 +4530,25 @@ activiteId: actId
                 showLobbyOrGame(gameData);
                 startHeartbeat();
 
+                const ticket = `${myPlayerId}|${secret}`;
                 LAST_RESUME_CODE = code;
                 LAST_RESUME_NAME = myName;
-                // Demander email pour reconnexion future
-                demanderEmailOptional(async (emailJoueur) => {
-                    if (emailJoueur) {
-                        await enregistrerEmailJoueur(code, myPlayerId, emailJoueur, myName);
-                    }
-                });
+                showModal(
+                    `<h3>🎟️ Ticket de reprise</h3>
+                     <p style="color: var(--gray); font-size: 0.9rem;">Garde ce ticket pour reprendre la partie même en changeant d'appareil.</p>
+                     <div id="ticketValue" style="background:#f3f4f6; padding:12px; border-radius:12px; font-family: monospace; word-break: break-all;">${ticket}</div>`,
+                    `<button class="btn btn-primary" onclick="copyToClipboard(document.getElementById('ticketValue').textContent)">📋 Copier</button>
+                     <button class="btn" onclick="downloadResumeTicket()">💾 Télécharger</button>
+                     <button class="btn" onclick="closeModal()">OK</button>`
+                );
                 return;
             }
 
 if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); return; }
             if (playersSnap.numChildren() >= 6) { showError('Partie complète (6 joueurs max) !'); return; }
             
-            // Membre vérifié → pas d'intro / Anonyme → intro complète
-            const afterIntro = () => showProfilChoiceModal(async (profil) => {
+            // Afficher l'intro puis demander le profil avant de rejoindre
+            showIntroModal(() => showProfilChoiceModal(async (profil) => {
                 currentGameCode = code;
                 isHost = false;
                 myPlayerId = 'p_' + Date.now() + '_' + Math.floor(Math.random()*1000);
@@ -4764,11 +4580,6 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                 // Sauvegarder vers Firebase
                 await syncComptabiliteToFirebase();
                 
-                // Sauvegarde locale
-                saveResume(code, { code, name: myName, playerId: myPlayerId, secret, avatar: myAvatar, savedAt: Date.now() });
-                LAST_RESUME_CODE = code;
-                LAST_RESUME_NAME = myName;
-                
                 // S'abonner aux updates
                 subscribeToGame(code);
                 showScreen('lobbyScreen');
@@ -4777,15 +4588,7 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                 document.getElementById('waitingMessage').classList.remove('hidden');
                 
                 sendSystemMessage(`${myName} (${profil === 'creatif' ? '🎨 Créatif' : '🏛️ Contributif'}) a rejoint !`);
-                
-                // Demander email (optionnel) pour la reconnexion
-                demanderEmailOptional(async (emailJoueur) => {
-                    if (emailJoueur) {
-                        await enregistrerEmailJoueur(code, myPlayerId, emailJoueur, myName);
-                    }
-                });
-            });
-            if (membreVerifie) { afterIntro(); } else { showIntroModal(afterIntro); }
+            }));
         }
         
         // ========== ABONNEMENT FIREBASE ==========
@@ -4838,25 +4641,9 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             // Comptabilité (sync)
             gameRef.child('comptabilite').on('value', (snap) => {
                 if (snap.exists() && !_comptaSyncLocked) {
-                    const incoming = snap.val();
-                    
-                    // Protéger les compteurs cumulatifs (ne jamais les écraser par des valeurs plus basses)
-                    if (COMPTABILITE.banque && incoming.banque) {
-                        incoming.banque.interetsRecus = Math.max(incoming.banque.interetsRecus || 0, COMPTABILITE.banque.interetsRecus || 0);
-                        incoming.banque.creancesJoueurs = Math.max(incoming.banque.creancesJoueurs || 0, COMPTABILITE.banque.creancesJoueurs || 0);
-                        incoming.banque.masseMonetaire = Math.max(incoming.banque.masseMonetaire || 0, COMPTABILITE.banque.masseMonetaire || 0);
-                    }
-                    if (COMPTABILITE.etat && incoming.etat) {
-                        incoming.etat.taxesRecues = Math.max(incoming.etat.taxesRecues || 0, COMPTABILITE.etat.taxesRecues || 0);
-                        incoming.etat.salairesVerses = Math.max(incoming.etat.salairesVerses || 0, COMPTABILITE.etat.salairesVerses || 0);
-                    }
-                    if (COMPTABILITE.potAAA && incoming.potAAA) {
-                        incoming.potAAA.circulationHash = Math.max(incoming.potAAA.circulationHash || 0, COMPTABILITE.potAAA.circulationHash || 0);
-                    }
-                    
-                    COMPTABILITE = incoming;
+                    COMPTABILITE = snap.val();
                     normalizeComptabilite();
-                    updatePlayersUI();
+                    updatePlayersUI();  // Mettre à jour l'UI après sync
                     console.log('🔄 Comptabilité synchronisée depuis Firebase');
                 }
             });
@@ -4916,20 +4703,6 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             input.value = '';
         }
         
-        function sendLobbyChat() {
-            const input = document.getElementById('lobbyChatInput');
-            const msg = input.value.trim();
-            if (!msg) return;
-            
-            if (gameRef) {
-                gameRef.child('chat').push({
-                    sender: myName, avatar: myAvatar, message: msg,
-                    timestamp: firebase.database.ServerValue.TIMESTAMP, isSystem: false
-                });
-            }
-            input.value = '';
-        }
-        
         function sendSystemMessage(msg) {
             if (!gameRef) return;
             gameRef.child('chat').push({
@@ -4939,19 +4712,16 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
         }
         
         function addChatMessage(msg) {
-            // Écrire dans les deux chat boxes (lobby + jeu)
-            ['chatBox', 'lobbyChatBox'].forEach(boxId => {
-                const chatBox = document.getElementById(boxId);
-                if (!chatBox) return;
-                
-                const div = document.createElement('div');
-                div.className = `chat-message ${msg.isSystem ? 'system' : ''}`;
-                div.innerHTML = msg.isSystem 
-                    ? msg.message 
-                    : `<span class="sender">${msg.avatar} ${msg.sender}:</span> ${msg.message}`;
-                chatBox.appendChild(div);
-                chatBox.scrollTop = chatBox.scrollHeight;
-            });
+            const chatBox = document.getElementById('chatBox');
+            if (!chatBox) return;
+            
+            const div = document.createElement('div');
+            div.className = `chat-message ${msg.isSystem ? 'system' : ''}`;
+            div.innerHTML = msg.isSystem 
+                ? msg.message 
+                : `<span class="sender">${msg.avatar} ${msg.sender}:</span> ${msg.message}`;
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
             
             // ═══ TOAST LIVE — actions des autres joueurs ═══
             if (msg.isSystem && liveToastsReady) {
@@ -5184,12 +4954,9 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                     Ces paramètres s'appliquent à tous les joueurs.
                 </p>
 
+                <button class="btn btn-secondary btn-full" onclick="showMyTicketModal()">🎟️ Mon ticket</button>
+                
                 <div style="display: grid; gap: 12px;">
-                    <!-- Ticket technique (discret) -->
-                    <div style="text-align: right;">
-                        <button style="background: none; border: none; color: #9ca3af; font-size: 0.75rem; cursor: pointer; padding: 4px 8px;" onclick="showMyTicketModal()">🔑 Ticket technique</button>
-                    </div>
-                    
                     <!-- Sens de déplacement personnel -->
                     <div style="background: ${monSens === 1 ? '#dcfce7' : '#dbeafe'}; padding: 12px; border-radius: 8px;">
                         <label style="font-size: 0.9rem; font-weight: bold;">🎯 Ton sens de déplacement</label>
@@ -5400,7 +5167,7 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                 joinedAt: firebase.database.ServerValue.TIMESTAMP,
                     isConnected: true,
                     lastSeen: firebase.database.ServerValue.TIMESTAMP,
-                  secretHash: Array.from({length: 64}, () => '0123456789abcdef'[Math.floor(Math.random()*16)]).join('')
+                  secretHash: 'bot'
             });
             
             // Si le profil est membre AAA, l'ajouter à la liste comptable
@@ -8151,6 +7918,7 @@ function initSystemeDe() {
             const cannotPayAtAll = !canPayEuro && !canPayMixed && status.capaciteEmprunt < (facture - currentEuro - myEspoyr);
             
             let content = `
+                <div id="modalTimer" style="text-align: center; margin-bottom: 10px;"></div>
                 <h3>${c.icon} ${c.name}</h3>
                 <p>Propriétaire : <strong>${ownerPlayer?.avatar} ${ownerPlayer?.name}</strong></p>
                 
@@ -8225,6 +7993,17 @@ function initSystemeDe() {
             buttons += `<button class="btn" style="background:#fef9c3;color:#854d0e;font-size:0.8rem;margin-top:6px;" onclick="closeModal(); showAbandonModal();">🚪 Abandonner la partie</button>`;
             
             showModal(content, buttons);
+            
+            // Timer de décision — auto-paiement si le joueur ne réagit pas
+            startDecisionTimer(gameConfig.timingDecision * 2, () => {
+                sendSystemMessage(`⏱️ Temps écoulé — ${myName} paie automatiquement`);
+                if (canPayEuro) {
+                    payOwner(c.id, ownerId, facture, 0);
+                } else {
+                    // Découvert forcé
+                    confirmerDecouvert(c.id, ownerId, facture);
+                }
+            });
         }
         
         // Modal de paiement différé
@@ -9476,23 +9255,6 @@ function initSystemeDe() {
             await syncComptabiliteToFirebase();
             
             sendSystemMessage(`🚪 ${myName} a abandonné la partie.`);
-            
-            // Pénalité communautaire : -2 😊
-            if (membreEmail && membreVerifie) {
-                const penResult = await apiCommunaute({
-                    action: 'penaliteAbandon',
-                    email: membreEmail,
-                    codePartie: currentGameCode
-                });
-                if (penResult.success) {
-                    sendSystemMessage(`📉 ${penResult.message}`);
-                    if (membreData) {
-                        membreData.compteurSmileys = penResult.nouveauCompteur;
-                        membreData.coteActuelle = penResult.nouvelleCote;
-                    }
-                }
-            }
-            
             nextTurn();
         }
         
@@ -9603,7 +9365,7 @@ function initSystemeDe() {
                     await executerSurplus(caseId, ownerId, facture, surplus);
                 } else {
                     closeModal();
-                    sendSystemMessage(`❌ ${ownerPlayer.name} refuse l'échange €→#`);
+                    sendSystemMessage(`❌ ${ownerPlayer.name} (${PROFILS_IA[profilId]?.nom || profilId}) refuse l'échange €→#`);
                     showPayOrNegotiateModal(CASES[caseId], ownerId, myEuro);
                 }
             } else {
@@ -10179,6 +9941,8 @@ function initSystemeDe() {
             
             // Afficher le modal avec un timer qui passe au tour suivant automatiquement
             let countdown = 3;
+            let _ligne2Interval = null;
+            
             showModal(`
                 <h3>${c.icon} ${c.name}</h3>
                 <p style="font-size: 0.9rem; color: #6b7280; font-style: italic; margin: 4px 0 8px 0;">
@@ -10190,16 +9954,17 @@ function initSystemeDe() {
                 </div>
                 <p id="ligne2Countdown" style="text-align: center; color: #6b7280; font-size: 0.9rem;">Tour suivant dans ${countdown}s...</p>
             `, `
-                <button class="btn btn-primary" onclick="safeNextTurn();">OK ✓</button>
+                <button class="btn btn-primary" onclick="if(window._ligne2Interval){clearInterval(window._ligne2Interval);window._ligne2Interval=null;} safeNextTurn();">OK ✓</button>
             `);
             
-            // Timer auto-nextTurn
-            const countdownInterval = setInterval(() => {
+            // Timer auto-nextTurn (stocké sur window pour pouvoir l'annuler depuis le bouton)
+            window._ligne2Interval = setInterval(() => {
                 countdown--;
                 const el = document.getElementById('ligne2Countdown');
                 if (el) el.textContent = `Tour suivant dans ${countdown}s...`;
                 if (countdown <= 0) {
-                    clearInterval(countdownInterval);
+                    clearInterval(window._ligne2Interval);
+                    window._ligne2Interval = null;
                     closeModal();
                     nextTurn();
                 }
@@ -11726,7 +11491,6 @@ function initSystemeDe() {
                 ${equilibreHtml}
                 <p style="font-size: 0.75rem; color: #9ca3af;">${bilan.nbEcritures} écritures comptables</p>
             `, `
-                <button class="btn" style="background:#e0e7ff; color:#4338ca;" onclick="analyserBilan()">🤖 Analyser</button>
                 <button class="btn btn-primary" onclick="enregistrerBilanTour(); closeModal();">📸 Sauver</button>
                 <button class="btn" style="background:#dbeafe; color:#2563eb;" onclick="showGraphiqueEvolution()">📈 Évolution</button>
                 <button class="btn" style="background:#fef3c7; color:#92400e;" onclick="exportBilanCSV()">📥 CSV</button>
@@ -11734,393 +11498,7 @@ function initSystemeDe() {
             `);
         }
         
-        // ══════════════════════════════════════════════════════════════
-        // ██  ASSISTANT COACH — Analyse de bilan                     ██
-        // ══════════════════════════════════════════════════════════════
-        
-        function analyserBilan() {
-            closeModal();
-            const bilan = calculerBilan();
-            const players = Object.values(playersData);
-            const tour = gameState?.turn || 1;
-            const phase = gameState?.phase || 1;
-            const moi = bilan.bilansJoueurs[myPlayerId] || {};
-            const monNom = myName;
-            
-            // ── 1. VÉRIFICATION DES TOTAUX ──
-            const totalEuroJoueurs = Object.values(bilan.bilansJoueurs)
-                .reduce((s, j) => s + (j.actif?.euro || 0), 0);
-            const totalHashJoueurs = Object.values(bilan.bilansJoueurs)
-                .reduce((s, j) => s + (j.actif?.espoyr || 0), 0);
-            const totalDetteJoueurs = Object.values(bilan.bilansJoueurs)
-                .reduce((s, j) => s + (j.passif?.emprunt || 0), 0);
-            const totalActivitesJoueurs = Object.values(bilan.bilansJoueurs)
-                .reduce((s, j) => s + (j.actif?.activites || 0), 0);
-            
-            const verifications = [];
-            verifications.push({
-                label: 'Total € en circulation (joueurs)',
-                valeur: `${fmt(totalEuroJoueurs)}€`,
-                ok: true
-            });
-            verifications.push({
-                label: 'Total # en circulation (joueurs)',
-                valeur: `${fmt(totalHashJoueurs)}#`,
-                ok: true
-            });
-            verifications.push({
-                label: 'Total des dettes',
-                valeur: `${fmt(totalDetteJoueurs)}€`,
-                ok: totalDetteJoueurs <= totalEuroJoueurs * 2
-            });
-            verifications.push({
-                label: 'Équilibre du bilan',
-                valeur: `Écart: ${fmt(Math.abs(bilan.equilibre))}€`,
-                ok: Math.abs(bilan.equilibre) <= 1
-            });
-            verifications.push({
-                label: 'Banque: Créances vs Masse monétaire',
-                valeur: `${fmt(bilan.bilanBanque.actif.creancesJoueurs)}€ / ${fmt(bilan.bilanBanque.passif.masseMonetaire)}€`,
-                ok: bilan.bilanBanque.actif.creancesJoueurs >= 0
-            });
-            verifications.push({
-                label: 'Pot AAA: Solde',
-                valeur: `${fmt(bilan.bilanAAA.passif.solde)}# (${bilan.bilanAAA.membres} membres)`,
-                ok: bilan.bilanAAA.passif.solde >= 0
-            });
-            verifications.push({
-                label: 'État: Trésor',
-                valeur: `${fmt(bilan.bilanEtat.actif.tresor)}€`,
-                ok: bilan.bilanEtat.actif.tresor >= 0
-            });
-            
-            // ── 2. ANALYSE PERSONNELLE ──
-            const monEuro = moi.actif?.euro || 0;
-            const monHash = moi.actif?.espoyr || 0;
-            const maDette = moi.passif?.emprunt || 0;
-            const mesActivites = moi.actif?.activites || 0;
-            const monNet = moi.net || 0;
-            const estMembreAAA = COMPTABILITE.potAAA.membres?.includes(myPlayerId);
-            
-            // Ratio dette/actif
-            const ratioDette = monEuro > 0 ? (maDette / monEuro * 100) : (maDette > 0 ? 999 : 0);
-            
-            // ── 3. CLASSEMENT ──
-            const classement = Object.entries(bilan.bilansJoueurs)
-                .map(([id, bj]) => ({ id, nom: bj.nom, net: bj.net || 0 }))
-                .sort((a, b) => b.net - a.net);
-            const monRang = classement.findIndex(c => c.id === myPlayerId) + 1;
-            const nbJoueurs = classement.length;
-            const leader = classement[0];
-            const dernier = classement[classement.length - 1];
-            
-            // ── 4. COMPARAISON AVEC LE TOUR PRÉCÉDENT ──
-            let tendanceHtml = '';
-            if (historiqueBilans.length > 0) {
-                const prev = historiqueBilans[historiqueBilans.length - 1];
-                const prevMoi = prev.bilansJoueurs?.[myPlayerId];
-                if (prevMoi) {
-                    const deltaEuro = monEuro - (prevMoi.actif?.euro || 0);
-                    const deltaHash = monHash - (prevMoi.actif?.espoyr || 0);
-                    const deltaDette = maDette - (prevMoi.passif?.emprunt || 0);
-                    const deltaNet = monNet - (prevMoi.net || 0);
-                    
-                    tendanceHtml = `
-                    <div style="background: #f9fafb; padding: 8px; border-radius: 6px; margin-bottom: 10px;">
-                        <p style="margin: 0; font-size: 0.85rem; font-weight: bold;">📈 Évolution depuis le tour ${prev.tour} :</p>
-                        <p style="margin: 4px 0 0 0; font-size: 0.85rem;">
-                            € <span style="color: ${deltaEuro >= 0 ? '#059669' : '#dc2626'};">${deltaEuro >= 0 ? '+' : ''}${fmt(deltaEuro)}</span> | 
-                            # <span style="color: ${deltaHash >= 0 ? '#059669' : '#dc2626'};">${deltaHash >= 0 ? '+' : ''}${fmt(deltaHash)}</span> | 
-                            Dette <span style="color: ${deltaDette <= 0 ? '#059669' : '#dc2626'};">${deltaDette >= 0 ? '+' : ''}${fmt(deltaDette)}</span> | 
-                            Net <span style="color: ${deltaNet >= 0 ? '#059669' : '#dc2626'}; font-weight: bold;">${deltaNet >= 0 ? '+' : ''}${fmt(deltaNet)}</span>
-                        </p>
-                    </div>`;
-                }
-            }
-            
-            // ── 5. DIAGNOSTIC ──
-            const diagnostics = [];
-            
-            // Santé financière
-            if (monEuro < 50 && maDette > 0) {
-                diagnostics.push({ icon: '🚨', niveau: 'critique', msg: `Ta caisse € est très basse (${fmt(monEuro)}€) et tu as ${fmt(maDette)}€ de dettes. Risque de faillite.` });
-            } else if (monEuro < 100) {
-                diagnostics.push({ icon: '⚠️', niveau: 'attention', msg: `Ta caisse € est basse (${fmt(monEuro)}€). Attention à ne pas trop dépenser.` });
-            } else if (monEuro > 500) {
-                diagnostics.push({ icon: '💰', niveau: 'ok', msg: `Bonne réserve en € (${fmt(monEuro)}€). Tu as de la marge pour investir.` });
-            }
-            
-            // Dette
-            if (maDette === 0) {
-                diagnostics.push({ icon: '✅', niveau: 'ok', msg: 'Aucune dette ! Situation idéale.' });
-            } else if (ratioDette > 200) {
-                diagnostics.push({ icon: '🚨', niveau: 'critique', msg: `Ratio dette/caisse dangereux (${Math.round(ratioDette)}%). Rembourse en priorité !` });
-            } else if (ratioDette > 100) {
-                diagnostics.push({ icon: '⚠️', niveau: 'attention', msg: `Tu dois plus que ce que tu as en caisse (ratio ${Math.round(ratioDette)}%). Surveille ta dette.` });
-            } else {
-                diagnostics.push({ icon: '👍', niveau: 'ok', msg: `Dette maîtrisée (${fmt(maDette)}€, ratio ${Math.round(ratioDette)}%).` });
-            }
-            
-            // Activités
-            if (mesActivites === 0) {
-                diagnostics.push({ icon: '📦', niveau: 'attention', msg: 'Tu n\'as aucune activité ! Investir rapporte des revenus à chaque passage.' });
-            } else if (mesActivites < 200) {
-                diagnostics.push({ icon: '🏗️', niveau: 'info', msg: `${fmt(mesActivites)}€ en activités. Pense à équiper pour augmenter les revenus.` });
-            } else {
-                diagnostics.push({ icon: '🏭', niveau: 'ok', msg: `Bon portefeuille d'activités (${fmt(mesActivites)}€). Tes revenus devraient bien avancer.` });
-            }
-            
-            // Espoyr
-            if (estMembreAAA) {
-                if (monHash > 0) {
-                    diagnostics.push({ icon: '🪙', niveau: 'ok', msg: `Membre AAA avec ${fmt(monHash)}# en caisse. La monnaie Espoyr te protège de l'érosion.` });
-                } else {
-                    diagnostics.push({ icon: '🪙', niveau: 'info', msg: 'Membre AAA, mais ta caisse # est vide. Tu profiteras du complément au prochain salaire.' });
-                }
-            } else {
-                if (phase >= 2) {
-                    diagnostics.push({ icon: '💡', niveau: 'info', msg: 'Tu n\'es pas membre AAA. Rejoindre le pot te donne accès à la monnaie Espoyr et un complément en cas d\'érosion.' });
-                }
-            }
-            
-            // Position dans le classement
-            if (monRang === 1) {
-                diagnostics.push({ icon: '🥇', niveau: 'ok', msg: `Tu es en tête du classement ! Patrimoine net: ${fmt(monNet)}€.` });
-            } else if (monRang === nbJoueurs) {
-                diagnostics.push({ icon: '💪', niveau: 'attention', msg: `Tu es dernier (${monRang}/${nbJoueurs}). Écart avec le leader (${leader.nom}): ${fmt(leader.net - monNet)}€. C'est le moment de rattraper !` });
-            } else {
-                diagnostics.push({ icon: '📊', niveau: 'info', msg: `Tu es ${monRang}ème sur ${nbJoueurs}. Leader: ${leader.nom} (${fmt(leader.net)}€ net).` });
-            }
-            
-            // Phase du jeu
-            if (phase === 1) {
-                diagnostics.push({ icon: '🌱', niveau: 'info', msg: 'Phase 1 : Le salaire est garanti. Profite pour investir et acheter des activités !' });
-            } else if (phase === 2) {
-                diagnostics.push({ icon: '🌪️', niveau: 'attention', msg: 'Phase 2 : Les crises arrivent, le salaire peut baisser. L\'épargne devient cruciale.' });
-            } else if (phase === 3) {
-                diagnostics.push({ icon: '🔥', niveau: 'critique', msg: 'Phase 3 : Période difficile. Solidarité et gestion prudente sont essentielles.' });
-            }
-            
-            // Analyse de l'économie globale
-            const economieGlobale = [];
-            if (bilan.bilanEtat.actif.tresor < 0) {
-                economieGlobale.push({ icon: '🏛️', msg: `L'État est en déficit (${fmt(bilan.bilanEtat.actif.tresor)}€). Les taxes augmenteront probablement.` });
-            }
-            if (bilan.bilanExportation?.solde < -100) {
-                economieGlobale.push({ icon: '🌍', msg: `Le secteur Export perd de l'argent (${fmt(bilan.bilanExportation.solde)}€). L'argent quitte le circuit local.` });
-            }
-            if (bilan.bilanHorsCircuit?.solde > 200) {
-                economieGlobale.push({ icon: '🛰️', msg: `${fmt(bilan.bilanHorsCircuit.solde)}€ sont "hors circuit" (spéculation). Cet argent ne profite pas à l'économie locale.` });
-            }
-            if (bilan.bilanAAA.membres > 0 && bilan.bilanAAA.circulationHash > 0) {
-                economieGlobale.push({ icon: '🪙', msg: `${fmt(bilan.bilanAAA.circulationHash)}# circulent dans l'économie locale via le pot AAA. C'est la monnaie complémentaire en action !` });
-            }
-            
-            // ── 6. RECOMMANDATIONS ──
-            const recommandations = [];
-            
-            if (monEuro > 300 && mesActivites === 0) {
-                recommandations.push({ 
-                    action: '🛒 Acheter une activité',
-                    raison: 'Tu as assez de cash mais aucun investissement. Une activité te rapportera des revenus récurrents.',
-                    priorite: 1
-                });
-            }
-            if (maDette > 0 && monEuro > maDette * 1.2) {
-                recommandations.push({
-                    action: '💳 Rembourser ta dette',
-                    raison: `Tu as ${fmt(monEuro)}€ et seulement ${fmt(maDette)}€ de dette. En remboursant, tu économises les intérêts (10%/tour).`,
-                    priorite: 1
-                });
-            }
-            if (maDette > 0 && maDette > monEuro * 2 && monEuro < 100) {
-                recommandations.push({
-                    action: '⚠️ Négocier ou demander un Smart Contract',
-                    raison: 'Ta dette est lourde. Un joueur plus riche pourrait te prêter à taux 0 via un Smart Contract.',
-                    priorite: 1
-                });
-            }
-            if (!estMembreAAA && phase >= 2 && monEuro > 200) {
-                recommandations.push({
-                    action: `${LOGO_AAA} Rejoindre le Pot AAA`,
-                    raison: 'En phase 2+, le complément Espoyr protège ton pouvoir d\'achat contre l\'érosion monétaire.',
-                    priorite: 2
-                });
-            }
-            if (mesActivites > 0) {
-                // Vérifier si des activités ne sont pas équipées
-                const mesActIds = Object.entries(COMPTABILITE.caisseActivites || {})
-                    .filter(([id, a]) => a.proprietaireId === myPlayerId);
-                const nonEquipees = mesActIds.filter(([id, a]) => !a.equipementA && !a.equipementB);
-                if (nonEquipees.length > 0) {
-                    recommandations.push({
-                        action: '📚 Équiper tes activités',
-                        raison: `Tu as ${nonEquipees.length} activité(s) sans formation. Un équipement augmente fortement le revenu.`,
-                        priorite: 2
-                    });
-                }
-            }
-            if (monEuro > 600 && maDette === 0) {
-                recommandations.push({
-                    action: '🤝 Aider un joueur en difficulté',
-                    raison: `Tu es en bonne position (${fmt(monEuro)}€, 0 dette). Un prêt solidaire via Smart Contract renforce l'économie locale.`,
-                    priorite: 3
-                });
-            }
-            
-            recommandations.sort((a, b) => a.priorite - b.priorite);
-            
-            // ── 7. QUESTIONS POUR LE JOUEUR ──
-            const questions = [];
-            if (mesActivites > 0 && maDette > 0) {
-                questions.push('Faut-il rembourser d\'abord ou investir pour augmenter tes revenus ?');
-            }
-            if (phase >= 2 && !estMembreAAA) {
-                questions.push('As-tu réfléchi à l\'impact de l\'érosion monétaire sur ton pouvoir d\'achat ?');
-            }
-            if (monRang > 1 && monRang < nbJoueurs) {
-                questions.push(`Quelle stratégie pour rattraper ${leader.nom} qui a ${fmt(leader.net - monNet)}€ d'avance ?`);
-            }
-            if (classement.length > 2) {
-                const ecartMaxMin = leader.net - dernier.net;
-                if (ecartMaxMin > 300) {
-                    questions.push(`L'écart entre le plus riche et le plus pauvre est de ${fmt(ecartMaxMin)}€. L'économie est-elle assez solidaire ?`);
-                }
-            }
-            
-            // ══ CONSTRUCTION DU MODAL ══
-            const diagnosticsHtml = diagnostics.map(d => 
-                `<div style="padding: 6px 0; border-bottom: 1px solid #f3f4f6;">
-                    <span style="font-size: 1.1rem;">${d.icon}</span>
-                    <span style="font-size: 0.85rem; color: ${d.niveau === 'critique' ? '#dc2626' : d.niveau === 'attention' ? '#d97706' : '#374151'};">${d.msg}</span>
-                </div>`
-            ).join('');
-            
-            const verifHtml = verifications.map(v =>
-                `<div style="display: flex; justify-content: space-between; padding: 3px 0; font-size: 0.8rem;">
-                    <span>${v.ok ? '✅' : '⚠️'} ${v.label}</span>
-                    <strong style="color: ${v.ok ? '#059669' : '#dc2626'};">${v.valeur}</strong>
-                </div>`
-            ).join('');
-            
-            const recoHtml = recommandations.length > 0 ? recommandations.map(r =>
-                `<div style="background: ${r.priorite === 1 ? '#fef3c7' : r.priorite === 2 ? '#dbeafe' : '#f0fdf4'}; 
-                            padding: 8px; border-radius: 6px; margin-bottom: 6px;">
-                    <p style="margin: 0; font-size: 0.9rem; font-weight: bold;">${r.action}</p>
-                    <p style="margin: 3px 0 0 0; font-size: 0.8rem; color: #6b7280;">${r.raison}</p>
-                </div>`
-            ).join('') : '<p style="font-size: 0.85rem; color: #059669;">Tout va bien ! Continue comme ça.</p>';
-            
-            const questionsHtml = questions.length > 0 ? questions.map(q =>
-                `<p style="margin: 4px 0; font-size: 0.85rem; color: #4338ca;">💭 ${q}</p>`
-            ).join('') : '';
-            
-            const ecoGlobaleHtml = economieGlobale.length > 0 ? economieGlobale.map(e =>
-                `<p style="margin: 4px 0; font-size: 0.85rem;">${e.icon} ${e.msg}</p>`
-            ).join('') : '<p style="font-size: 0.85rem; color: #059669;">L\'économie locale semble équilibrée.</p>';
-            
-            // Classement compact
-            const classementHtml = classement.map((c, i) =>
-                `<span style="font-size: 0.8rem; ${c.id === myPlayerId ? 'font-weight: bold; color: #2563eb;' : 'color: #6b7280;'}">
-                    ${['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣'][i]} ${c.nom}: ${fmt(c.net)}€
-                </span>`
-            ).join(' — ');
-            
-            showModal(`
-                <h3>🤖 Coach ESPOYR — Analyse Tour ${tour}</h3>
-                
-                <!-- Résumé personnel -->
-                <div style="background: #e0e7ff; padding: 10px; border-radius: 8px; margin-bottom: 10px;">
-                    <p style="margin: 0; font-size: 0.95rem; font-weight: bold;">
-                        ${monNom}, voici ton bilan :
-                    </p>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 6px;">
-                        <span style="font-size: 0.9rem;">💶 Caisse : <strong>${fmt(monEuro)}€</strong></span>
-                        <span style="font-size: 0.9rem;">🪙 Espoyr : <strong>${fmt(monHash)}#</strong></span>
-                        <span style="font-size: 0.9rem;">🏭 Activités : <strong>${fmt(mesActivites)}€</strong></span>
-                        <span style="font-size: 0.9rem;">💳 Dette : <strong style="color: ${maDette > 0 ? '#dc2626' : '#059669'};">${fmt(maDette)}€</strong></span>
-                    </div>
-                    <p style="margin: 6px 0 0 0; font-size: 0.95rem;">
-                        <strong>Patrimoine net : ${fmt(monNet)}€</strong>
-                        <span style="font-size: 0.85rem; color: #4338ca;"> — ${monRang}${monRang === 1 ? 'er' : 'ème'}/${nbJoueurs}</span>
-                    </p>
-                </div>
-                
-                ${tendanceHtml}
-                
-                <!-- Diagnostic -->
-                <details open style="margin-bottom: 10px;">
-                    <summary style="cursor: pointer; font-weight: bold; font-size: 0.9rem; padding: 4px 0;">🩺 Diagnostic</summary>
-                    <div style="padding: 6px 0;">
-                        ${diagnosticsHtml}
-                    </div>
-                </details>
-                
-                <!-- Recommandations -->
-                <details open style="margin-bottom: 10px;">
-                    <summary style="cursor: pointer; font-weight: bold; font-size: 0.9rem; padding: 4px 0;">💡 Ce que je ferais à ta place</summary>
-                    <div style="padding: 6px 0;">
-                        ${recoHtml}
-                    </div>
-                </details>
-                
-                <!-- Questions -->
-                ${questions.length > 0 ? `
-                <details style="margin-bottom: 10px;">
-                    <summary style="cursor: pointer; font-weight: bold; font-size: 0.9rem; padding: 4px 0;">❓ Questions à te poser</summary>
-                    <div style="padding: 6px 0; background: #f5f3ff; border-radius: 6px; padding: 8px;">
-                        ${questionsHtml}
-                    </div>
-                </details>
-                ` : ''}
-                
-                <!-- Économie globale -->
-                <details style="margin-bottom: 10px;">
-                    <summary style="cursor: pointer; font-weight: bold; font-size: 0.9rem; padding: 4px 0;">🌍 État de l'économie</summary>
-                    <div style="padding: 6px 0;">
-                        ${ecoGlobaleHtml}
-                    </div>
-                </details>
-                
-                <!-- Vérifications -->
-                <details style="margin-bottom: 10px;">
-                    <summary style="cursor: pointer; font-weight: bold; font-size: 0.9rem; padding: 4px 0;">🔍 Vérification des totaux</summary>
-                    <div style="padding: 6px 0; background: #f9fafb; border-radius: 6px; padding: 8px;">
-                        ${verifHtml}
-                        <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #e5e7eb;">
-                            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: bold;">
-                                <span>TOTAL € joueurs</span>
-                                <span>${fmt(totalEuroJoueurs)}€</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: bold;">
-                                <span>TOTAL # joueurs</span>
-                                <span>${fmt(totalHashJoueurs)}#</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: bold;">
-                                <span>TOTAL activités</span>
-                                <span>${fmt(totalActivitesJoueurs)}€</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: bold; color: #dc2626;">
-                                <span>TOTAL dettes</span>
-                                <span>${fmt(totalDetteJoueurs)}€</span>
-                            </div>
-                        </div>
-                    </div>
-                </details>
-                
-                <!-- Classement -->
-                <div style="background: #f9fafb; padding: 8px; border-radius: 6px; text-align: center;">
-                    ${classementHtml}
-                </div>
-                
-                <p style="font-size: 0.7rem; color: #9ca3af; text-align: center; margin-top: 8px;">
-                    ℹ️ Cette analyse est indicative. Les décisions t'appartiennent !
-                </p>
-            `, `
-                <button class="btn btn-primary" onclick="closeModal(); showBilanModal();">← Retour au bilan</button>
-                <button class="btn btn-secondary" onclick="closeModal()">Fermer</button>
-            `);
-        }
+        // ========== GRAPHIQUE ÉVOLUTION ÉCONOMIQUE ==========
         function showGraphiqueEvolution() {
             // S'assurer qu'on a le bilan actuel dans l'historique
             const currentTour = gameState?.turn || 1;
@@ -12158,15 +11536,14 @@ function initSystemeDe() {
                 series.push({ nom: `${p.avatar || '⬜'} ${p.name}`, points, color: couleurs[i % couleurs.length], dash: '' });
             });
             
-            // Série Banque : intérêts cumulés (profit pur) — forcer monotonie (ne peut que monter)
-            let bankMax = 0;
-            const bankSeries = bilans.map(b => {
-                bankMax = Math.max(bankMax, Math.round(b.bilanBanque?.interetsRecus || 0));
-                return { tour: b.tour, val: bankMax };
-            });
+            // Série Banque : intérêts cumulés (profit pur)
+            const bankSeries = bilans.map(b => ({ tour: b.tour, val: Math.round(b.bilanBanque?.interetsRecus || 0) }));
             series.push({ nom: '🏦 Banque (intérêts)', points: bankSeries, color: '#000000', dash: '6,3' });
             
-            // Série État : dette publique (peut varier si l'État rembourse)
+            // Fuite hors circuit : exclue du graphique (écrase l'échelle)
+            // → reste visible dans l'analyse textuelle en dessous
+            
+            // Série État : dette publique
             const etatDetteSeries = bilans.map(b => ({ tour: b.tour, val: Math.round(b.bilanEtat?.dette || 0) }));
             series.push({ nom: '🏛️ Dette État', points: etatDetteSeries, color: '#7c3aed', dash: '8,4' });
             
@@ -15621,7 +14998,7 @@ function initSystemeDe() {
             
             const notes = window.__notesFinPartie || {};
             
-            // Stocker dans Firebase
+            // Stocker dans Firebase pour usage futur (système communautaire)
             try {
                 const notationData = {
                     noteurId: myPlayerId,
@@ -15643,53 +15020,7 @@ function initSystemeDe() {
                 await db.ref(`parties/${currentGameCode}/notations/${myPlayerId}`).set(notationData);
                 console.log('✅ Notations sauvegardées dans Firebase:', notationData);
             } catch (e) {
-                console.error('❌ Erreur sauvegarde notations Firebase:', e);
-            }
-            
-            // ══════ ENVOI AU BACKEND COMMUNAUTAIRE ══════
-            if (membreEmail && membreVerifie) {
-                try {
-                    const notesAPI = [];
-                    for (const [joueurId, note] of Object.entries(notes)) {
-                        const joueur = playersData[joueurId];
-                        // Chercher l'email du joueur noté (s'il est membre)
-                        // On stocke le joueurId pour l'identification, l'email sera '' pour les non-membres
-                        notesAPI.push({
-                            emailNote: joueur?._membreEmail || '',
-                            prenomNote: joueur?.name || 'Inconnu',
-                            note: note,
-                            estBot: joueur?.isBot || false
-                        });
-                    }
-                    
-                    const result = await apiCommunaute({
-                        action: 'enregistrerNotes',
-                        codePartie: currentGameCode,
-                        emailNoteur: membreEmail,
-                        prenomNoteur: myName,
-                        notes: notesAPI
-                    });
-                    
-                    if (result.success) {
-                        console.log('✅ Notes envoyées au backend communautaire:', result);
-                        // Afficher les messages de changement de cote
-                        if (result.resultats) {
-                            for (const r of result.resultats) {
-                                if (r.message && !r.autoRegulation) {
-                                    sendSystemMessage(`📊 ${r.joueur} : ${r.message}`);
-                                }
-                                if (r.autoRegulation) {
-                                    showModal(`
-                                        <h3>⚠️ Auto-régulation</h3>
-                                        <p style="font-size: 0.9rem; color: #92400e;">${r.message}</p>
-                                    `, `<button class="btn btn-secondary" onclick="closeModal()">Compris</button>`);
-                                }
-                            }
-                        }
-                    }
-                } catch (e) {
-                    console.error('❌ Erreur envoi notes communautaires:', e);
-                }
+                console.error('❌ Erreur sauvegarde notations:', e);
             }
             
             // Message système
@@ -15710,810 +15041,6 @@ function initSystemeDe() {
             
             // Afficher directement le graphique d'évolution
             showGraphiqueEvolution();
-        }
-
-        // ══════════════════════════════════════════════════════════════
-        // ██  SYSTÈME COMMUNAUTAIRE — Fonctions UI & API             ██
-        // ══════════════════════════════════════════════════════════════
-
-        // ── Réaction au champ email ──
-        function onEmailInput() {
-            const email = document.getElementById('playerEmail').value.trim();
-            const rgpdBlock = document.getElementById('rgpdBlock');
-            const incitatif = document.getElementById('emailIncitatif');
-            const verBlock = document.getElementById('verificationBlock');
-            
-            if (email && email.includes('@')) {
-                rgpdBlock.style.display = 'block';
-                incitatif.style.display = 'none';
-                // Vérifier automatiquement si le membre est déjà connu
-                verifierMembreExistant(email);
-            } else {
-                rgpdBlock.style.display = 'none';
-                incitatif.style.display = 'block';
-                verBlock.style.display = 'none';
-                document.getElementById('welcomeBack').style.display = 'none';
-                document.getElementById('btnGererCompte').style.display = 'none';
-                document.getElementById('partiesEnAttente').style.display = 'none';
-                membreEmail = '';
-                membreData = null;
-                membreVerifie = false;
-            }
-        }
-        
-        // ── Vérifier si le membre existe déjà ──
-        let _checkMembreTimeout = null;
-        async function verifierMembreExistant(email) {
-            // Debounce pour éviter trop d'appels
-            clearTimeout(_checkMembreTimeout);
-            _checkMembreTimeout = setTimeout(async () => {
-                const result = await apiCommunaute({ action: 'getMembre', email });
-                if (result.success && result.membre) {
-                    membreData = result.membre;
-                    membreEmail = email;
-                    
-                    if (result.membre.statutVerifie) {
-                        // Membre reconnu et vérifié !
-                        membreVerifie = true;
-                        afficherBienvenue(result.membre);
-                    }
-                    // Si inscrit mais pas vérifié, on attend que l'utilisateur clique
-                }
-            }, 600);
-        }
-        
-        // ── Afficher le message de bienvenue pour un membre reconnu ──
-        function afficherBienvenue(membre) {
-            // Remplir le prénom si vide
-            const nameInput = document.getElementById('playerName');
-            if (!nameInput.value.trim()) {
-                nameInput.value = membre.prenom;
-            }
-            
-            // Message personnalisé
-            const welcomeDiv = document.getElementById('welcomeBack');
-            document.getElementById('welcomeBackMsg').innerHTML = 
-                `Bonjour <strong>${membre.prenom}</strong>, bienvenue ! Comment te sens-tu aujourd'hui ?`;
-            
-            // Cote
-            const coteEmoji = { 'AAA': '🌟', 'AA': '⭐', 'A': '👍', 'BB': '👀', 'C': '💪' };
-            const protege = membre.protege && membre.nbPartiesJouees < 3;
-            document.getElementById('welcomeCote').innerHTML = 
-                `Ta cote : <strong>${membre.coteActuelle}</strong> ${coteEmoji[membre.coteActuelle] || ''} — ${membre.compteurSmileys} 😊 cumulés`
-                + (protege ? ' <span style="color:#059669;">(statut protégé)</span>' : '')
-                + ` — ${membre.nbPartiesJouees} partie(s) jouée(s)`;
-            
-            welcomeDiv.style.display = 'block';
-            
-            // Cacher la case RGPD (déjà acceptée)
-            document.getElementById('rgpdBlock').style.display = 'none';
-            document.getElementById('verificationBlock').style.display = 'none';
-            document.getElementById('msgTutoiement').style.display = 'none';
-            
-            // Afficher bouton "Gérer mon compte"
-            document.getElementById('btnGererCompte').style.display = 'block';
-            
-            // Charger les parties en attente
-            chargerPartiesEnAttente();
-        }
-        
-        // ── Choisir l'humeur ──
-        async function choisirHumeur(humeur) {
-            // Feedback visuel
-            document.querySelectorAll('#welcomeHumeur button').forEach(b => {
-                b.style.opacity = '0.4';
-                b.style.transform = 'scale(0.9)';
-            });
-            event.target.closest('button').style.opacity = '1';
-            event.target.closest('button').style.transform = 'scale(1.1)';
-            
-            if (membreEmail) {
-                await apiCommunaute({ action: 'majHumeur', email: membreEmail, humeur });
-            }
-        }
-        
-        // ── Inscription : clic sur RGPD → lance le processus ──
-        document.addEventListener('DOMContentLoaded', () => {
-            // ── Détection reconnexion via URL (lien email) ──
-            const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.get('reconnecter') === '1') {
-                const code = urlParams.get('code') || '';
-                const token = urlParams.get('token') || '';
-                const playerId = urlParams.get('playerId') || '';
-                // Nettoyer l'URL
-                window.history.replaceState({}, '', window.location.pathname);
-                if (code && token) {
-                    setTimeout(() => reconnecterViaToken(code, playerId, token), 500);
-                }
-            }
-            
-            // ── Détection parties sauvées (localStorage) ──
-            detecterPartiesSauvees();
-            
-            // Quand la case RGPD est cochée, lancer l'inscription
-            const rgpdCb = document.getElementById('rgpdCheckbox');
-            if (rgpdCb) {
-                rgpdCb.addEventListener('change', async function() {
-                    if (!this.checked) return;
-                    
-                    const email = document.getElementById('playerEmail').value.trim().toLowerCase();
-                    const prenom = document.getElementById('playerName').value.trim();
-                    
-                    if (!email || !email.includes('@')) {
-                        showError('Entre une adresse email valide.');
-                        this.checked = false;
-                        return;
-                    }
-                    if (!prenom) {
-                        showError('Entre ton prénom d\'abord.');
-                        this.checked = false;
-                        return;
-                    }
-                    
-                    // Inscrire le membre
-                    const result = await apiCommunaute({ action: 'inscrire', email, prenom });
-                    
-                    if (result.success) {
-                        membreEmail = email;
-                        
-                        if (!result.nouveau && result.membre?.statutVerifie) {
-                            // Déjà inscrit et vérifié
-                            membreVerifie = true;
-                            membreData = result.membre;
-                            afficherBienvenue(result.membre);
-                        } else {
-                            // Nouveau ou pas encore vérifié → envoyer le code
-                            const codeResult = await apiCommunaute({ action: 'envoyerCode', email });
-                            if (codeResult.success) {
-                                document.getElementById('verificationBlock').style.display = 'block';
-                                document.getElementById('rgpdBlock').style.display = 'none';
-                            } else {
-                                showError('Erreur envoi du code : ' + (codeResult.error || 'Réessaie'));
-                            }
-                        }
-                    } else {
-                        showError(result.error || 'Erreur d\'inscription');
-                        this.checked = false;
-                    }
-                });
-            }
-        });
-        
-        // ── Vérifier le code email ──
-        async function verifierCodeEmail() {
-            const code = document.getElementById('codeVerification').value.trim();
-            if (code.length !== 4) {
-                showError('Le code doit contenir 4 chiffres.');
-                return;
-            }
-            
-            const result = await apiCommunaute({ action: 'verifierCode', email: membreEmail, code });
-            
-            if (result.success) {
-                membreVerifie = true;
-                document.getElementById('verificationBlock').style.display = 'none';
-                
-                // Récupérer le profil à jour
-                const profil = await apiCommunaute({ action: 'getMembre', email: membreEmail });
-                if (profil.success && profil.membre) {
-                    membreData = profil.membre;
-                    afficherBienvenue(profil.membre);
-                } else {
-                    // Profil minimal
-                    showModal(`
-                        <h3>✅ Email vérifié !</h3>
-                        <p style="font-size: 0.95rem;">Bienvenue dans la communauté ESPOYR ! Tu peux maintenant rejoindre des parties et être noté par les autres joueurs.</p>
-                    `, `<button class="btn btn-primary" onclick="closeModal()">Super !</button>`);
-                    document.getElementById('btnGererCompte').style.display = 'block';
-                    chargerPartiesEnAttente();
-                }
-            } else {
-                showError(result.error || 'Code invalide');
-            }
-        }
-        
-        // ── Gérer mon compte ──
-        function showGererCompte() {
-            if (!membreData) return;
-            
-            const m = membreData;
-            const coteEmoji = { 'AAA': '🌟🌟🌟', 'AA': '⭐⭐', 'A': '👍', 'BB': '👀', 'C': '💪' };
-            const protege = m.protege && m.nbPartiesJouees < 3;
-            const peutSecondeChance = m.nbSecondesChances < 2 && m.compteurSmileys < 15;
-            
-            // Parser les plages existantes
-            let plage1 = null, plage2 = null;
-            try { if (m.plageHoraire1) plage1 = JSON.parse(m.plageHoraire1); } catch(e) {}
-            try { if (m.plageHoraire2) plage2 = JSON.parse(m.plageHoraire2); } catch(e) {}
-            
-            const jours = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'];
-            const optionsJours = jours.map(j => `<option value="${j}">${j.charAt(0).toUpperCase() + j.slice(1)}</option>`).join('');
-            
-            function plageHTML(num, plage) {
-                const jour = plage?.jour || '';
-                const debut = plage?.heureDebut || '14:00';
-                const fin = plage?.heureFin || '18:00';
-                return `
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; align-items: center; margin-bottom: 6px;">
-                        <select id="plageJour${num}" style="padding: 6px; border-radius: 6px; border: 1px solid #d1d5db; font-size: 0.85rem;">
-                            <option value="">— Jour —</option>
-                            ${optionsJours.replace(`value="${jour}"`, `value="${jour}" selected`)}
-                        </select>
-                        <input type="time" id="plageDebut${num}" value="${debut}" 
-                               style="padding: 6px; border-radius: 6px; border: 1px solid #d1d5db; font-size: 0.85rem;">
-                        <input type="time" id="plageFin${num}" value="${fin}" 
-                               style="padding: 6px; border-radius: 6px; border: 1px solid #d1d5db; font-size: 0.85rem;">
-                    </div>`;
-            }
-            
-            // Résumé actuel des plages
-            let plageResume = '';
-            if (plage1?.jour) plageResume += `${plage1.jour} ${plage1.heureDebut}–${plage1.heureFin}`;
-            if (plage2?.jour) plageResume += `${plageResume ? ', ' : ''}${plage2.jour} ${plage2.heureDebut}–${plage2.heureFin}`;
-            if (!plageResume) plageResume = 'Aucune — tu recevras toutes les notifications';
-            
-            showModal(`
-                <h3>👤 Mon compte ESPOYR</h3>
-                
-                <div style="background: #f0fdf4; padding: 12px; border-radius: 8px; margin-bottom: 10px;">
-                    <p style="margin: 0; font-size: 0.95rem;"><strong>${m.prenom}</strong> — ${m.email}</p>
-                    <p style="margin: 4px 0 0 0; font-size: 0.9rem;">
-                        Cote : <strong>${m.coteActuelle}</strong> ${coteEmoji[m.coteActuelle] || ''} 
-                        ${protege ? '<span style="color:#059669;">(protégé)</span>' : ''}
-                    </p>
-                    <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: #6b7280;">
-                        ${m.compteurSmileys} 😊 cumulés — ${m.nbPartiesJouees} parties jouées
-                        ${m.nbNegRecus > 0 ? ` — ${m.nbNegRecus} 💬 reçus` : ''}
-                    </p>
-                </div>
-                
-                <!-- Plages horaires -->
-                <div style="background: #dbeafe; padding: 12px; border-radius: 8px; margin-bottom: 10px;">
-                    <p style="margin: 0 0 4px 0; font-size: 0.9rem; font-weight: bold;">📅 Mes disponibilités</p>
-                    <p style="margin: 0 0 8px 0; font-size: 0.8rem; color: #6b7280;">
-                        Actuellement : <em>${plageResume}</em>
-                    </p>
-                    <p style="margin: 0 0 4px 0; font-size: 0.8rem; color: #374151;">Plage 1 :</p>
-                    ${plageHTML(1, plage1)}
-                    <p style="margin: 0 0 4px 0; font-size: 0.8rem; color: #374151;">Plage 2 :</p>
-                    ${plageHTML(2, plage2)}
-                    <p style="margin: 0 0 6px 0; font-size: 0.75rem; color: #6b7280;">
-                        Tu seras notifié uniquement quand une partie correspond à tes disponibilités. 
-                        Laisse vide pour recevoir toutes les notifications.
-                    </p>
-                    <button class="btn" onclick="sauverPlagesHoraires()" 
-                            style="width: 100%; background: #2563eb; color: white; font-size: 0.85rem;">
-                        💾 Enregistrer mes disponibilités
-                    </button>
-                    <div id="plagesSaveMsg" style="display: none; text-align: center; margin-top: 6px; font-size: 0.8rem; color: #059669;"></div>
-                </div>
-                
-                ${peutSecondeChance ? `
-                <div style="background: #fef3c7; padding: 12px; border-radius: 8px; margin-bottom: 10px;">
-                    <p style="margin: 0; font-size: 0.9rem; font-weight: bold;">😊 Seconde chance disponible</p>
-                    <p style="margin: 4px 0 8px 0; font-size: 0.85rem; color: #6b7280;">
-                        Restaure les 😊 perdus par tes 2 pires événements. 
-                        ${m.nbSecondesChances === 0 ? '2 chances restantes.' : '1 chance restante.'}
-                    </p>
-                    <button class="btn" style="background: #fbbf24; color: #78350f; width: 100%;" 
-                            onclick="activerSecondeChanceFn()">
-                        😊 Je veux m'améliorer
-                    </button>
-                </div>
-                ` : ''}
-                
-                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e5e7eb;">
-                    <button class="btn" onclick="confirmerDesinscription()" 
-                            style="width: 100%; background: #fee2e2; color: #dc2626; font-size: 0.85rem;">
-                        🗑️ Supprimer mon inscription
-                    </button>
-                </div>
-            `, `<button class="btn btn-secondary" onclick="closeModal()">Fermer</button>`);
-        }
-        
-        // ── Sauvegarder les plages horaires ──
-        async function sauverPlagesHoraires() {
-            const plage1Jour = document.getElementById('plageJour1').value;
-            const plage1Debut = document.getElementById('plageDebut1').value;
-            const plage1Fin = document.getElementById('plageFin1').value;
-            
-            const plage2Jour = document.getElementById('plageJour2').value;
-            const plage2Debut = document.getElementById('plageDebut2').value;
-            const plage2Fin = document.getElementById('plageFin2').value;
-            
-            const plage1 = plage1Jour ? { jour: plage1Jour, heureDebut: plage1Debut, heureFin: plage1Fin } : null;
-            const plage2 = plage2Jour ? { jour: plage2Jour, heureDebut: plage2Debut, heureFin: plage2Fin } : null;
-            
-            const result = await apiCommunaute({
-                action: 'majPlagesHoraires',
-                email: membreEmail,
-                plage1, plage2
-            });
-            
-            const msg = document.getElementById('plagesSaveMsg');
-            if (result.success) {
-                // Mettre à jour les données locales
-                membreData.plageHoraire1 = plage1 ? JSON.stringify(plage1) : '';
-                membreData.plageHoraire2 = plage2 ? JSON.stringify(plage2) : '';
-                msg.textContent = '✅ Disponibilités enregistrées !';
-                msg.style.display = 'block';
-                msg.style.color = '#059669';
-            } else {
-                msg.textContent = '❌ ' + (result.error || 'Erreur');
-                msg.style.display = 'block';
-                msg.style.color = '#dc2626';
-            }
-            setTimeout(() => { if (msg) msg.style.display = 'none'; }, 3000);
-        }
-        
-        // ── Seconde chance ──
-        async function activerSecondeChanceFn() {
-            closeModal();
-            
-            // Message toltèque
-            showModal(`
-                <h3>😊 Seconde chance</h3>
-                <div style="background: #f0fdf4; padding: 15px; border-radius: 10px; margin-bottom: 12px;">
-                    <p style="margin: 0 0 10px 0; font-size: 0.95rem; color: #065f46;">
-                        Merci pour ta démarche 😊. Avant ta prochaine partie, souviens-toi :
-                    </p>
-                    <p style="margin: 4px 0; font-size: 0.9rem;">🗣️ Que ta parole soit bienveillante</p>
-                    <p style="margin: 4px 0; font-size: 0.9rem;">🪞 Ne prends rien personnellement</p>
-                    <p style="margin: 4px 0; font-size: 0.9rem;">❓ Ne fais pas de suppositions</p>
-                    <p style="margin: 4px 0; font-size: 0.9rem;">💪 Fais toujours de ton mieux</p>
-                    <p style="margin: 10px 0 0 0; font-size: 0.85rem; color: #6b7280; font-style: italic;">
-                        Pose-toi la question : pourquoi certains joueurs ont été affectés par ta façon de réagir ? 
-                        Chaque partie est une nouvelle chance.
-                    </p>
-                </div>
-            `, `
-                <button class="btn btn-primary" onclick="confirmerSecondeChance()">✅ Je m'engage</button>
-                <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
-            `);
-        }
-        
-        async function confirmerSecondeChance() {
-            closeModal();
-            
-            const result = await apiCommunaute({ action: 'secondeChance', email: membreEmail });
-            
-            if (result.success) {
-                // Mettre à jour les données locales
-                membreData.compteurSmileys = result.nouveauCompteur;
-                membreData.nbSecondesChances = (membreData.nbSecondesChances || 0) + 1;
-                membreData.coteActuelle = result.nouvelleCote;
-                
-                showModal(`
-                    <h3>✅ Seconde chance activée !</h3>
-                    <p style="font-size: 0.95rem;">
-                        <strong>${result.smileysRestaures} 😊</strong> ont été restaurés.
-                    </p>
-                    <p style="font-size: 0.9rem;">
-                        Ta nouvelle cote : <strong>${result.nouvelleCote}</strong>
-                    </p>
-                    <p style="font-size: 0.85rem; color: #6b7280;">
-                        ${result.restantes > 0 ? `Il te reste ${result.restantes} seconde(s) chance(s).` : 'C\'était ta dernière seconde chance.'}
-                    </p>
-                `, `<button class="btn btn-primary" onclick="closeModal()">Merci !</button>`);
-            } else {
-                showError(result.error || 'Erreur lors de l\'activation');
-            }
-        }
-        
-        // ── Désinscription ──
-        function confirmerDesinscription() {
-            closeModal();
-            showModal(`
-                <h3>🗑️ Supprimer ton inscription ?</h3>
-                <div style="background: #fee2e2; padding: 12px; border-radius: 8px; margin-bottom: 12px;">
-                    <p style="margin: 0; font-size: 0.9rem; color: #991b1b;">
-                        ⚠️ Cette action est <strong>définitive</strong>. Toutes tes données seront supprimées :
-                        email, prénom, cote, historique.
-                    </p>
-                    <p style="margin: 8px 0 0 0; font-size: 0.85rem; color: #991b1b;">
-                        Les notes négatives que tu as données seront retirées et les cotes recalculées.
-                    </p>
-                </div>
-            `, `
-                <button class="btn" style="background: #dc2626; color: white;" onclick="executerDesinscription()">🗑️ Oui, tout supprimer</button>
-                <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
-            `);
-        }
-        
-        async function executerDesinscription() {
-            closeModal();
-            const result = await apiCommunaute({ action: 'desinscrire', email: membreEmail });
-            
-            if (result.success) {
-                // Réinitialiser l'état communautaire
-                membreEmail = '';
-                membreData = null;
-                membreVerifie = false;
-                
-                // Réinitialiser l'UI
-                document.getElementById('playerEmail').value = '';
-                document.getElementById('welcomeBack').style.display = 'none';
-                document.getElementById('btnGererCompte').style.display = 'none';
-                document.getElementById('partiesEnAttente').style.display = 'none';
-                document.getElementById('rgpdBlock').style.display = 'none';
-                document.getElementById('verificationBlock').style.display = 'none';
-                document.getElementById('msgTutoiement').style.display = 'block';
-                document.getElementById('emailIncitatif').style.display = 'block';
-                
-                showModal(`
-                    <h3>✅ Inscription supprimée</h3>
-                    <p style="font-size: 0.95rem;">Toutes tes données ont été effacées. Tu redeviens un joueur anonyme.</p>
-                    <p style="font-size: 0.85rem; color: #6b7280;">Tu peux te réinscrire à tout moment.</p>
-                `, `<button class="btn btn-primary" onclick="closeModal()">OK</button>`);
-            } else {
-                showError(result.error || 'Erreur lors de la suppression');
-            }
-        }
-        
-        // ── Politique de confidentialité ──
-        function showPolitiqueConfidentialite() {
-            showModal(`
-                <h3>🔒 Politique de confidentialité</h3>
-                <div style="font-size: 0.85rem; color: #374151; max-height: 300px; overflow-y: auto;">
-                    <p><strong>Responsable du traitement :</strong> ASBL Espoyr, Sprimont, Belgique</p>
-                    <p><strong>Finalité :</strong> Mise en relation des joueurs de la communauté ESPOYR et information sur les activités de l'ASBL Espoyr.</p>
-                    <p><strong>Données collectées :</strong> Prénom, adresse email, cote de joueur, historique de notation.</p>
-                    <p><strong>Durée de conservation :</strong> Jusqu'à désinscription. Tu peux supprimer ton compte à tout moment via le bouton "Gérer mon compte" dans le jeu ou via le lien dans chaque email.</p>
-                    <p><strong>Droit de suppression :</strong> Tu peux demander la suppression complète de tes données à tout moment. La suppression est immédiate et automatique, sans intervention nécessaire.</p>
-                    <p><strong>Partage des données :</strong> Tes données ne sont jamais partagées avec des tiers. Elles sont stockées sur le compte Google de l'ASBL Espoyr.</p>
-                    <p><strong>Contact :</strong> Via le jeu ou par email à l'adresse indiquée dans les emails que tu reçois de notre part.</p>
-                </div>
-            `, `<button class="btn btn-secondary" onclick="closeModal()">Fermer</button>`);
-        }
-        
-        // ── Charger les parties en attente ──
-        // ══════════════════════════════════════════════════════════════
-        // ██  SYSTÈME DE RECONNEXION                                 ██
-        // ══════════════════════════════════════════════════════════════
-        
-        /**
-         * Détecter les parties sauvées dans localStorage et afficher un bouton "Reprendre"
-         */
-        function detecterPartiesSauvees() {
-            const container = document.getElementById('partiesSauvees');
-            if (!container) return;
-            
-            const sauvees = [];
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key && key.startsWith(RESUME_KEY_PREFIX)) {
-                    try {
-                        const data = JSON.parse(localStorage.getItem(key));
-                        if (data && data.code && data.playerId && data.secret) {
-                            // Vérifier que la sauvegarde n'est pas trop vieille (7 jours)
-                            const age = Date.now() - (data.savedAt || 0);
-                            if (age < 7 * 24 * 60 * 60 * 1000) {
-                                sauvees.push(data);
-                            }
-                        }
-                    } catch(e) {}
-                }
-            }
-            
-            if (sauvees.length === 0) {
-                container.style.display = 'none';
-                return;
-            }
-            
-            // Trier par date (les plus récentes en premier)
-            sauvees.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
-            
-            container.style.display = 'block';
-            container.innerHTML = `
-                <h3 style="font-size: 0.9rem; color: #059669; margin-bottom: 8px;">🔄 Reprendre ta partie</h3>
-                ${sauvees.map(s => `
-                    <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; padding: 10px; margin-bottom: 6px;">
-                        <div style="display: flex; align-items: center; justify-content: space-between;">
-                            <div>
-                                <strong>${s.name || 'Joueur'}</strong>
-                                <span style="font-family: monospace; color: #059669; font-weight: bold; margin-left: 8px;">${s.code}</span>
-                                <div style="font-size: 0.75rem; color: #6b7280;">${s.avatar || '⬜'} Sauvé ${new Date(s.savedAt).toLocaleString('fr-BE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
-                            </div>
-                            <button class="btn" style="background: #059669; color: white; font-size: 0.85rem; padding: 8px 16px;"
-                                    onclick="reprendrePartieSauvee('${s.code}')">
-                                🔄 Reprendre
-                            </button>
-                        </div>
-                    </div>
-                `).join('')}
-            `;
-        }
-        
-        /**
-         * Reprendre une partie sauvée (1 clic)
-         */
-        async function reprendrePartieSauvee(code) {
-            const saved = loadResume(code);
-            if (!saved) { showError('Sauvegarde introuvable.'); return; }
-            
-            // Remplir les champs et rejoindre
-            document.getElementById('playerName').value = saved.name || '';
-            document.getElementById('gameCode').value = code;
-            myName = saved.name;
-            myAvatar = saved.avatar || '🐤';
-            
-            // joinGame détectera automatiquement le ticket dans localStorage
-            await joinGame();
-        }
-        
-        /**
-         * Reconnexion via token (depuis lien email)
-         */
-        async function reconnecterViaToken(code, playerId, token) {
-            showModal(
-                `<h3>🔄 Reconnexion en cours...</h3>
-                 <p>Vérification de ton lien...</p>
-                 <div class="loading"></div>`,
-                ''
-            );
-            
-            try {
-                const result = await apiCommunaute({
-                    action: 'validerTokenReconnexion',
-                    codePartie: code,
-                    playerId: playerId,
-                    token: token
-                });
-                
-                if (result.success) {
-                    // Générer un nouveau secret local
-                    const secret = generateSecret(24);
-                    const secretHash = await sha256Hex(secret);
-                    
-                    // Récupérer les infos du joueur depuis Firebase
-                    const pSnap = await db.ref(`parties/${code}/players/${result.playerId}`).once('value');
-                    if (!pSnap.exists()) {
-                        closeModal();
-                        showError('Joueur introuvable dans la partie. Elle est peut-être terminée.');
-                        return;
-                    }
-                    
-                    const p = pSnap.val();
-                    
-                    // Mettre à jour le secretHash dans Firebase
-                    await db.ref(`parties/${code}/players/${result.playerId}`).update({ 
-                        secretHash, isConnected: true, lastSeen: firebase.database.ServerValue.TIMESTAMP 
-                    });
-                    
-                    // Sauvegarder localement
-                    myName = p.name;
-                    myAvatar = p.avatar;
-                    myPlayerId = p.id;
-                    currentGameCode = code;
-                    isHost = !!p.isHost;
-                    myProfil = p.profil || 'contributif';
-                    
-                    saveResume(code, { code, name: myName, playerId: myPlayerId, secret, avatar: myAvatar, savedAt: Date.now() });
-                    
-                    // Entrer dans la partie
-                    gameRef = db.ref(`parties/${code}`);
-                    subscribeToGame(code);
-                    
-                    const gameSnap = await db.ref(`parties/${code}`).once('value');
-                    showLobbyOrGame(gameSnap.val());
-                    startHeartbeat();
-                    
-                    closeModal();
-                    sendSystemMessage(`🔄 ${myName} s'est reconnecté !`);
-                } else {
-                    closeModal();
-                    showError(result.error || 'Lien invalide ou expiré.');
-                }
-            } catch(e) {
-                closeModal();
-                showError('Erreur de reconnexion : ' + e.message);
-            }
-        }
-        
-        /**
-         * Modal de demande de reconnexion par email (pour joueurs sans cookie)
-         */
-        function showReconnexionEmailModal(codePartie) {
-            showModal(`
-                <h3>📧 Reconnexion par email</h3>
-                <p style="font-size: 0.9rem; color: #6b7280;">
-                    Tu as été déconnecté ? Donne ton prénom et l'email que tu avais utilisé, et on t'envoie un lien pour reprendre ta place.
-                </p>
-                <div style="margin-top: 10px;">
-                    <input type="text" id="reconnPrenom" placeholder="Ton prénom dans la partie" 
-                           style="width: 100%; padding: 8px; margin-bottom: 8px;">
-                    <input type="email" id="reconnEmail" placeholder="Ton email" 
-                           style="width: 100%; padding: 8px; margin-bottom: 8px;">
-                    <input type="text" id="reconnCode" placeholder="Code de la partie" value="${codePartie || ''}"
-                           style="width: 100%; padding: 8px; text-transform: uppercase; letter-spacing: 2px; text-align: center; ${codePartie ? 'background: #f3f4f6;' : ''}"
-                           ${codePartie ? 'readonly' : ''}>
-                </div>
-            `, `
-                <button class="btn btn-primary" onclick="envoyerDemandeReconnexion()">📧 Envoyer le lien</button>
-                <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
-            `);
-        }
-        
-        /**
-         * Envoyer la demande de reconnexion au backend
-         */
-        async function envoyerDemandeReconnexion() {
-            const prenom = (document.getElementById('reconnPrenom')?.value || '').trim();
-            const email = (document.getElementById('reconnEmail')?.value || '').trim().toLowerCase();
-            const code = (document.getElementById('reconnCode')?.value || '').trim().toUpperCase();
-            
-            if (!prenom || !email || !code) {
-                showError('Remplis tous les champs.');
-                return;
-            }
-            
-            closeModal();
-            showModal(
-                `<h3>📧 Envoi en cours...</h3><div class="loading"></div>`,
-                ''
-            );
-            
-            try {
-                const result = await apiCommunaute({
-                    action: 'demanderReconnexion',
-                    codePartie: code,
-                    email: email,
-                    prenom: prenom
-                });
-                
-                closeModal();
-                
-                if (result.success) {
-                    showModal(
-                        `<h3>✅ Email envoyé !</h3>
-                         <p style="font-size: 0.95rem;">${result.message}</p>
-                         <p style="font-size: 0.85rem; color: #6b7280;">Vérifie ta boîte mail (et les spams). Le lien est valable 30 minutes.</p>`,
-                        `<button class="btn btn-primary" onclick="closeModal()">OK</button>`
-                    );
-                } else {
-                    showError(result.error || 'Erreur de reconnexion');
-                }
-            } catch(e) {
-                closeModal();
-                showError('Erreur : ' + e.message);
-            }
-        }
-        
-        /**
-         * Modal pour demander l'email (optionnel) après choix de profil
-         */
-        function demanderEmailOptional(callback) {
-            // Si membre vérifié, on a déjà l'email → skip
-            if (membreVerifie && membreEmail) {
-                callback(membreEmail);
-                return;
-            }
-            
-            showModal(`
-                <h3>📧 Ton email (optionnel)</h3>
-                <p style="font-size: 0.9rem; color: #6b7280;">
-                    Si tu donnes ton email, tu pourras reprendre ta partie même en cas de déconnexion ou en changeant d'appareil.
-                </p>
-                <input type="email" id="emailOptional" placeholder="email@exemple.com" 
-                       style="width: 100%; padding: 10px; font-size: 1rem; margin-top: 8px;">
-                <p style="font-size: 0.75rem; color: #9ca3af; margin-top: 6px;">
-                    🔒 Ton email ne sera pas partagé. Il sert uniquement à la reconnexion.
-                </p>
-            `, `
-                <button class="btn btn-primary" onclick="(function(){
-                    const email = (document.getElementById('emailOptional')?.value || '').trim().toLowerCase();
-                    closeModal();
-                    window._emailOptionalCallback(email);
-                })()">Continuer</button>
-                <button class="btn" style="background: #f3f4f6; color: #6b7280;" onclick="closeModal(); window._emailOptionalCallback('');">Passer →</button>
-            `);
-            
-            window._emailOptionalCallback = callback;
-        }
-        
-        /**
-         * Enregistrer l'email du joueur dans Firebase (hashé) + Sheet (clair via API)
-         */
-        async function enregistrerEmailJoueur(codePartie, playerId, email, prenom) {
-            if (!email || !email.includes('@')) return;
-            
-            try {
-                // 1) Stocker le hash dans Firebase
-                const emailHash = await sha256Hex(email.toLowerCase());
-                await db.ref(`parties/${codePartie}/players/${playerId}`).update({ emailHash });
-                
-                // 2) Stocker en clair dans le Sheet via API
-                await apiCommunaute({
-                    action: 'enregistrerEmailJoueur',
-                    codePartie,
-                    playerId,
-                    email: email.toLowerCase(),
-                    prenom
-                });
-                
-                console.log('✅ Email joueur enregistré pour reconnexion');
-            } catch(e) {
-                console.warn('⚠️ Erreur enregistrement email:', e);
-            }
-        }
-
-        async function chargerPartiesEnAttente() {
-            if (!membreVerifie) return;
-            
-            try {
-                const result = await apiCommunaute({ action: 'getPartiesEnAttente' });
-                
-                if (result.success && result.parties && result.parties.length > 0) {
-                    const container = document.getElementById('partiesEnAttente');
-                    const liste = document.getElementById('listeParties');
-                    
-                    liste.innerHTML = result.parties.map(p => {
-                        const date = p.datePrevue ? new Date(p.datePrevue).toLocaleString('fr-BE', {
-                            weekday: 'short', day: 'numeric', month: 'short',
-                            hour: '2-digit', minute: '2-digit'
-                        }) : 'Bientôt';
-                        
-                        const coteColors = { 'AAA': '#059669', 'AA': '#10b981', 'A': '#6b7280', 'BB': '#f59e0b', 'C': '#ef4444' };
-                        const confirmesText = p.confirmes && p.confirmes.length > 0 
-                            ? `👥 ${p.confirmes.join(', ')}` 
-                            : '';
-                        
-                        return `
-                            <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; margin-bottom: 6px;">
-                                <div style="display: flex; align-items: center; justify-content: space-between;">
-                                    <div>
-                                        <strong>${p.prenomOrganisateur}</strong>
-                                        <span style="color: ${coteColors[p.coteOrganisateur] || '#6b7280'}; font-size: 0.8rem; font-weight: bold;">${p.coteOrganisateur}</span>
-                                        <div style="font-size: 0.8rem; color: #6b7280;">📅 ${date} — ${p.placesRestantes} place(s) restante(s)</div>
-                                    </div>
-                                    <button class="btn" style="background: #dbeafe; color: #2563eb; font-size: 0.8rem; padding: 6px 12px;"
-                                            onclick="document.getElementById('gameCode').value='${p.codePartie}'; joinGame();">
-                                        Rejoindre
-                                    </button>
-                                </div>
-                                ${confirmesText ? `<div style="font-size: 0.75rem; color: #059669; margin-top: 4px;">${confirmesText} ${p.nbConfirmes > 1 ? 'ont' : 'a'} confirmé</div>` : ''}
-                            </div>
-                        `;
-                    }).join('');
-                    
-                    container.style.display = 'block';
-                } else {
-                    document.getElementById('partiesEnAttente').style.display = 'none';
-                }
-            } catch (e) {
-                console.error('❌ Erreur chargement parties:', e);
-            }
-        }
-        
-        // ── Enregistrer la partie dans le backend quand elle est créée ──
-        async function enregistrerPartieCommunaute(codePartie) {
-            if (!membreEmail || !membreVerifie) return;
-            
-            try {
-                const datePrevue = window._datePartiePrevue || new Date().toISOString();
-                await apiCommunaute({
-                    action: 'creerPartie',
-                    codePartie,
-                    emailOrganisateur: membreEmail,
-                    prenomOrganisateur: myName,
-                    datePrevue: datePrevue,
-                    nbPlaces: 4
-                });
-                
-                // Notifier les membres
-                await apiCommunaute({
-                    action: 'notifierMembres',
-                    codePartie,
-                    prenomOrganisateur: myName,
-                    emailOrganisateur: membreEmail,
-                    coteOrganisateur: membreData?.coteActuelle || 'A',
-                    datePrevue: datePrevue
-                });
-                
-                console.log('✅ Partie enregistrée + membres notifiés');
-            } catch (e) {
-                console.error('❌ Erreur enregistrement partie:', e);
-            }
         }
 
 
