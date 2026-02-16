@@ -473,6 +473,17 @@
                 <div class="loading"></div>
                 <p style="margin-top: 8px; font-size: 0.9rem;">En attente du lancement...</p>
             </div>
+            
+            <!-- Chat lobby -->
+            <div style="margin-top: 15px;">
+                <h3 style="color: var(--gray); margin-bottom: 6px; font-size: 0.9rem;">💬 Chat</h3>
+                <div class="chat-box" id="lobbyChatBox" style="height: 120px;"></div>
+                <div class="chat-input">
+                    <input type="text" id="lobbyChatInput" placeholder="Message..." onkeypress="if(event.key==='Enter')sendLobbyChat()">
+                    <button class="btn btn-primary" onclick="sendLobbyChat()" style="padding: 8px 12px; font-size: 0.8rem;">→</button>
+                </div>
+            </div>
+            
             <button class="btn" onclick="leaveGame()" style="margin-top: 15px; background: #f3f4f6; color: var(--gray); font-size: 0.85rem;">← Quitter</button>
         </div>
         
@@ -1064,7 +1075,7 @@
         let gameConfig = { ...CONFIG };
         
         // ========== API COMMUNAUTAIRE ==========
-        const API_URL = 'https://script.google.com/macros/s/AKfycbyWJCV3Pt5yvaE0wNeeJnkzyx_8RnwT6RR-tq95jdaM9ZttWdaXbs7IwGm6KUZovp3-jg/exec';
+        const API_URL = 'https://script.google.com/macros/s/AKfycbzgYPCOEol2by31GSGPGdmXSjbVi_eHYL4q2keAYY3-v66F_TqNHeEPknwV4Um_XIWcnw/exec';
         
         // État communautaire du joueur
         let membreEmail = '';         // Email du membre (vide = joueur anonyme)
@@ -4149,7 +4160,27 @@ activiteId: actId
                     }
                 }
                 
-                // Mettre à jour les soldes globaux
+                // Mettre à jour les soldes globaux (protéger les compteurs cumulatifs)
+                const protectCumulatifs = (incoming, local, keys) => {
+                    if (!incoming || !local) return incoming || local;
+                    keys.forEach(k => {
+                        if (incoming[k] !== undefined && local[k] !== undefined) {
+                            incoming[k] = Math.max(incoming[k] || 0, local[k] || 0);
+                        }
+                    });
+                    return incoming;
+                };
+                
+                if (firebaseCompta.banque) {
+                    protectCumulatifs(firebaseCompta.banque, COMPTABILITE.banque, ['interetsRecus', 'creancesJoueurs', 'masseMonetaire']);
+                }
+                if (firebaseCompta.etat) {
+                    protectCumulatifs(firebaseCompta.etat, COMPTABILITE.etat, ['taxesRecues', 'salairesVerses']);
+                }
+                if (firebaseCompta.potAAA) {
+                    protectCumulatifs(firebaseCompta.potAAA, COMPTABILITE.potAAA, ['circulationHash']);
+                }
+                
                 COMPTABILITE.potAAA = firebaseCompta.potAAA || COMPTABILITE.potAAA;
                 COMPTABILITE.etat = firebaseCompta.etat || COMPTABILITE.etat;
                 COMPTABILITE.banque = firebaseCompta.banque || COMPTABILITE.banque;
@@ -4273,13 +4304,20 @@ activiteId: actId
                 // Si membre vérifié ET mode multi → proposer de planifier
                 if (membreVerifie && mode !== 'SOLO') {
                     choisirDatePartie(() => {
-                        showIntroModal(() => showProfilChoiceModal(async (profil) => {
+                        // Membre vérifié → pas d'intro, directement le choix de profil
+                        showProfilChoiceModal(async (profil) => {
                             await finaliserCreationPartie(profil);
-                        }));
+                        });
+                    });
+                } else if (membreVerifie) {
+                    window._datePartiePrevue = '';
+                    // Membre vérifié solo → pas d'intro non plus
+                    showProfilChoiceModal(async (profil) => {
+                        await finaliserCreationPartie(profil);
                     });
                 } else {
                     window._datePartiePrevue = ''; // Pas de planification
-                    // Afficher l'intro puis demander le profil économique
+                    // Joueur anonyme → afficher l'intro puis le profil
                     showIntroModal(() => showProfilChoiceModal(async (profil) => {
                         await finaliserCreationPartie(profil);
                     }));
@@ -4694,8 +4732,8 @@ activiteId: actId
 if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); return; }
             if (playersSnap.numChildren() >= 6) { showError('Partie complète (6 joueurs max) !'); return; }
             
-            // Afficher l'intro puis demander le profil avant de rejoindre
-            showIntroModal(() => showProfilChoiceModal(async (profil) => {
+            // Membre vérifié → pas d'intro / Anonyme → intro complète
+            const afterIntro = () => showProfilChoiceModal(async (profil) => {
                 currentGameCode = code;
                 isHost = false;
                 myPlayerId = 'p_' + Date.now() + '_' + Math.floor(Math.random()*1000);
@@ -4735,7 +4773,8 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                 document.getElementById('waitingMessage').classList.remove('hidden');
                 
                 sendSystemMessage(`${myName} (${profil === 'creatif' ? '🎨 Créatif' : '🏛️ Contributif'}) a rejoint !`);
-            }));
+            });
+            if (membreVerifie) { afterIntro(); } else { showIntroModal(afterIntro); }
         }
         
         // ========== ABONNEMENT FIREBASE ==========
@@ -4788,9 +4827,25 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             // Comptabilité (sync)
             gameRef.child('comptabilite').on('value', (snap) => {
                 if (snap.exists() && !_comptaSyncLocked) {
-                    COMPTABILITE = snap.val();
+                    const incoming = snap.val();
+                    
+                    // Protéger les compteurs cumulatifs (ne jamais les écraser par des valeurs plus basses)
+                    if (COMPTABILITE.banque && incoming.banque) {
+                        incoming.banque.interetsRecus = Math.max(incoming.banque.interetsRecus || 0, COMPTABILITE.banque.interetsRecus || 0);
+                        incoming.banque.creancesJoueurs = Math.max(incoming.banque.creancesJoueurs || 0, COMPTABILITE.banque.creancesJoueurs || 0);
+                        incoming.banque.masseMonetaire = Math.max(incoming.banque.masseMonetaire || 0, COMPTABILITE.banque.masseMonetaire || 0);
+                    }
+                    if (COMPTABILITE.etat && incoming.etat) {
+                        incoming.etat.taxesRecues = Math.max(incoming.etat.taxesRecues || 0, COMPTABILITE.etat.taxesRecues || 0);
+                        incoming.etat.salairesVerses = Math.max(incoming.etat.salairesVerses || 0, COMPTABILITE.etat.salairesVerses || 0);
+                    }
+                    if (COMPTABILITE.potAAA && incoming.potAAA) {
+                        incoming.potAAA.circulationHash = Math.max(incoming.potAAA.circulationHash || 0, COMPTABILITE.potAAA.circulationHash || 0);
+                    }
+                    
+                    COMPTABILITE = incoming;
                     normalizeComptabilite();
-                    updatePlayersUI();  // Mettre à jour l'UI après sync
+                    updatePlayersUI();
                     console.log('🔄 Comptabilité synchronisée depuis Firebase');
                 }
             });
@@ -4850,6 +4905,20 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             input.value = '';
         }
         
+        function sendLobbyChat() {
+            const input = document.getElementById('lobbyChatInput');
+            const msg = input.value.trim();
+            if (!msg) return;
+            
+            if (gameRef) {
+                gameRef.child('chat').push({
+                    sender: myName, avatar: myAvatar, message: msg,
+                    timestamp: firebase.database.ServerValue.TIMESTAMP, isSystem: false
+                });
+            }
+            input.value = '';
+        }
+        
         function sendSystemMessage(msg) {
             if (!gameRef) return;
             gameRef.child('chat').push({
@@ -4859,16 +4928,19 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
         }
         
         function addChatMessage(msg) {
-            const chatBox = document.getElementById('chatBox');
-            if (!chatBox) return;
-            
-            const div = document.createElement('div');
-            div.className = `chat-message ${msg.isSystem ? 'system' : ''}`;
-            div.innerHTML = msg.isSystem 
-                ? msg.message 
-                : `<span class="sender">${msg.avatar} ${msg.sender}:</span> ${msg.message}`;
-            chatBox.appendChild(div);
-            chatBox.scrollTop = chatBox.scrollHeight;
+            // Écrire dans les deux chat boxes (lobby + jeu)
+            ['chatBox', 'lobbyChatBox'].forEach(boxId => {
+                const chatBox = document.getElementById(boxId);
+                if (!chatBox) return;
+                
+                const div = document.createElement('div');
+                div.className = `chat-message ${msg.isSystem ? 'system' : ''}`;
+                div.innerHTML = msg.isSystem 
+                    ? msg.message 
+                    : `<span class="sender">${msg.avatar} ${msg.sender}:</span> ${msg.message}`;
+                chatBox.appendChild(div);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            });
             
             // ═══ TOAST LIVE — actions des autres joueurs ═══
             if (msg.isSystem && liveToastsReady) {
@@ -11640,6 +11712,7 @@ function initSystemeDe() {
                 ${equilibreHtml}
                 <p style="font-size: 0.75rem; color: #9ca3af;">${bilan.nbEcritures} écritures comptables</p>
             `, `
+                <button class="btn" style="background:#e0e7ff; color:#4338ca;" onclick="analyserBilan()">🤖 Analyser</button>
                 <button class="btn btn-primary" onclick="enregistrerBilanTour(); closeModal();">📸 Sauver</button>
                 <button class="btn" style="background:#dbeafe; color:#2563eb;" onclick="showGraphiqueEvolution()">📈 Évolution</button>
                 <button class="btn" style="background:#fef3c7; color:#92400e;" onclick="exportBilanCSV()">📥 CSV</button>
@@ -11647,7 +11720,393 @@ function initSystemeDe() {
             `);
         }
         
-        // ========== GRAPHIQUE ÉVOLUTION ÉCONOMIQUE ==========
+        // ══════════════════════════════════════════════════════════════
+        // ██  ASSISTANT COACH — Analyse de bilan                     ██
+        // ══════════════════════════════════════════════════════════════
+        
+        function analyserBilan() {
+            closeModal();
+            const bilan = calculerBilan();
+            const players = Object.values(playersData);
+            const tour = gameState?.turn || 1;
+            const phase = gameState?.phase || 1;
+            const moi = bilan.bilansJoueurs[myPlayerId] || {};
+            const monNom = myName;
+            
+            // ── 1. VÉRIFICATION DES TOTAUX ──
+            const totalEuroJoueurs = Object.values(bilan.bilansJoueurs)
+                .reduce((s, j) => s + (j.actif?.euro || 0), 0);
+            const totalHashJoueurs = Object.values(bilan.bilansJoueurs)
+                .reduce((s, j) => s + (j.actif?.espoyr || 0), 0);
+            const totalDetteJoueurs = Object.values(bilan.bilansJoueurs)
+                .reduce((s, j) => s + (j.passif?.emprunt || 0), 0);
+            const totalActivitesJoueurs = Object.values(bilan.bilansJoueurs)
+                .reduce((s, j) => s + (j.actif?.activites || 0), 0);
+            
+            const verifications = [];
+            verifications.push({
+                label: 'Total € en circulation (joueurs)',
+                valeur: `${fmt(totalEuroJoueurs)}€`,
+                ok: true
+            });
+            verifications.push({
+                label: 'Total # en circulation (joueurs)',
+                valeur: `${fmt(totalHashJoueurs)}#`,
+                ok: true
+            });
+            verifications.push({
+                label: 'Total des dettes',
+                valeur: `${fmt(totalDetteJoueurs)}€`,
+                ok: totalDetteJoueurs <= totalEuroJoueurs * 2
+            });
+            verifications.push({
+                label: 'Équilibre du bilan',
+                valeur: `Écart: ${fmt(Math.abs(bilan.equilibre))}€`,
+                ok: Math.abs(bilan.equilibre) <= 1
+            });
+            verifications.push({
+                label: 'Banque: Créances vs Masse monétaire',
+                valeur: `${fmt(bilan.bilanBanque.actif.creancesJoueurs)}€ / ${fmt(bilan.bilanBanque.passif.masseMonetaire)}€`,
+                ok: bilan.bilanBanque.actif.creancesJoueurs >= 0
+            });
+            verifications.push({
+                label: 'Pot AAA: Solde',
+                valeur: `${fmt(bilan.bilanAAA.passif.solde)}# (${bilan.bilanAAA.membres} membres)`,
+                ok: bilan.bilanAAA.passif.solde >= 0
+            });
+            verifications.push({
+                label: 'État: Trésor',
+                valeur: `${fmt(bilan.bilanEtat.actif.tresor)}€`,
+                ok: bilan.bilanEtat.actif.tresor >= 0
+            });
+            
+            // ── 2. ANALYSE PERSONNELLE ──
+            const monEuro = moi.actif?.euro || 0;
+            const monHash = moi.actif?.espoyr || 0;
+            const maDette = moi.passif?.emprunt || 0;
+            const mesActivites = moi.actif?.activites || 0;
+            const monNet = moi.net || 0;
+            const estMembreAAA = COMPTABILITE.potAAA.membres?.includes(myPlayerId);
+            
+            // Ratio dette/actif
+            const ratioDette = monEuro > 0 ? (maDette / monEuro * 100) : (maDette > 0 ? 999 : 0);
+            
+            // ── 3. CLASSEMENT ──
+            const classement = Object.entries(bilan.bilansJoueurs)
+                .map(([id, bj]) => ({ id, nom: bj.nom, net: bj.net || 0 }))
+                .sort((a, b) => b.net - a.net);
+            const monRang = classement.findIndex(c => c.id === myPlayerId) + 1;
+            const nbJoueurs = classement.length;
+            const leader = classement[0];
+            const dernier = classement[classement.length - 1];
+            
+            // ── 4. COMPARAISON AVEC LE TOUR PRÉCÉDENT ──
+            let tendanceHtml = '';
+            if (historiqueBilans.length > 0) {
+                const prev = historiqueBilans[historiqueBilans.length - 1];
+                const prevMoi = prev.bilansJoueurs?.[myPlayerId];
+                if (prevMoi) {
+                    const deltaEuro = monEuro - (prevMoi.actif?.euro || 0);
+                    const deltaHash = monHash - (prevMoi.actif?.espoyr || 0);
+                    const deltaDette = maDette - (prevMoi.passif?.emprunt || 0);
+                    const deltaNet = monNet - (prevMoi.net || 0);
+                    
+                    tendanceHtml = `
+                    <div style="background: #f9fafb; padding: 8px; border-radius: 6px; margin-bottom: 10px;">
+                        <p style="margin: 0; font-size: 0.85rem; font-weight: bold;">📈 Évolution depuis le tour ${prev.tour} :</p>
+                        <p style="margin: 4px 0 0 0; font-size: 0.85rem;">
+                            € <span style="color: ${deltaEuro >= 0 ? '#059669' : '#dc2626'};">${deltaEuro >= 0 ? '+' : ''}${fmt(deltaEuro)}</span> | 
+                            # <span style="color: ${deltaHash >= 0 ? '#059669' : '#dc2626'};">${deltaHash >= 0 ? '+' : ''}${fmt(deltaHash)}</span> | 
+                            Dette <span style="color: ${deltaDette <= 0 ? '#059669' : '#dc2626'};">${deltaDette >= 0 ? '+' : ''}${fmt(deltaDette)}</span> | 
+                            Net <span style="color: ${deltaNet >= 0 ? '#059669' : '#dc2626'}; font-weight: bold;">${deltaNet >= 0 ? '+' : ''}${fmt(deltaNet)}</span>
+                        </p>
+                    </div>`;
+                }
+            }
+            
+            // ── 5. DIAGNOSTIC ──
+            const diagnostics = [];
+            
+            // Santé financière
+            if (monEuro < 50 && maDette > 0) {
+                diagnostics.push({ icon: '🚨', niveau: 'critique', msg: `Ta caisse € est très basse (${fmt(monEuro)}€) et tu as ${fmt(maDette)}€ de dettes. Risque de faillite.` });
+            } else if (monEuro < 100) {
+                diagnostics.push({ icon: '⚠️', niveau: 'attention', msg: `Ta caisse € est basse (${fmt(monEuro)}€). Attention à ne pas trop dépenser.` });
+            } else if (monEuro > 500) {
+                diagnostics.push({ icon: '💰', niveau: 'ok', msg: `Bonne réserve en € (${fmt(monEuro)}€). Tu as de la marge pour investir.` });
+            }
+            
+            // Dette
+            if (maDette === 0) {
+                diagnostics.push({ icon: '✅', niveau: 'ok', msg: 'Aucune dette ! Situation idéale.' });
+            } else if (ratioDette > 200) {
+                diagnostics.push({ icon: '🚨', niveau: 'critique', msg: `Ratio dette/caisse dangereux (${Math.round(ratioDette)}%). Rembourse en priorité !` });
+            } else if (ratioDette > 100) {
+                diagnostics.push({ icon: '⚠️', niveau: 'attention', msg: `Tu dois plus que ce que tu as en caisse (ratio ${Math.round(ratioDette)}%). Surveille ta dette.` });
+            } else {
+                diagnostics.push({ icon: '👍', niveau: 'ok', msg: `Dette maîtrisée (${fmt(maDette)}€, ratio ${Math.round(ratioDette)}%).` });
+            }
+            
+            // Activités
+            if (mesActivites === 0) {
+                diagnostics.push({ icon: '📦', niveau: 'attention', msg: 'Tu n\'as aucune activité ! Investir rapporte des revenus à chaque passage.' });
+            } else if (mesActivites < 200) {
+                diagnostics.push({ icon: '🏗️', niveau: 'info', msg: `${fmt(mesActivites)}€ en activités. Pense à équiper pour augmenter les revenus.` });
+            } else {
+                diagnostics.push({ icon: '🏭', niveau: 'ok', msg: `Bon portefeuille d'activités (${fmt(mesActivites)}€). Tes revenus devraient bien avancer.` });
+            }
+            
+            // Espoyr
+            if (estMembreAAA) {
+                if (monHash > 0) {
+                    diagnostics.push({ icon: '🪙', niveau: 'ok', msg: `Membre AAA avec ${fmt(monHash)}# en caisse. La monnaie Espoyr te protège de l'érosion.` });
+                } else {
+                    diagnostics.push({ icon: '🪙', niveau: 'info', msg: 'Membre AAA, mais ta caisse # est vide. Tu profiteras du complément au prochain salaire.' });
+                }
+            } else {
+                if (phase >= 2) {
+                    diagnostics.push({ icon: '💡', niveau: 'info', msg: 'Tu n\'es pas membre AAA. Rejoindre le pot te donne accès à la monnaie Espoyr et un complément en cas d\'érosion.' });
+                }
+            }
+            
+            // Position dans le classement
+            if (monRang === 1) {
+                diagnostics.push({ icon: '🥇', niveau: 'ok', msg: `Tu es en tête du classement ! Patrimoine net: ${fmt(monNet)}€.` });
+            } else if (monRang === nbJoueurs) {
+                diagnostics.push({ icon: '💪', niveau: 'attention', msg: `Tu es dernier (${monRang}/${nbJoueurs}). Écart avec le leader (${leader.nom}): ${fmt(leader.net - monNet)}€. C'est le moment de rattraper !` });
+            } else {
+                diagnostics.push({ icon: '📊', niveau: 'info', msg: `Tu es ${monRang}ème sur ${nbJoueurs}. Leader: ${leader.nom} (${fmt(leader.net)}€ net).` });
+            }
+            
+            // Phase du jeu
+            if (phase === 1) {
+                diagnostics.push({ icon: '🌱', niveau: 'info', msg: 'Phase 1 : Le salaire est garanti. Profite pour investir et acheter des activités !' });
+            } else if (phase === 2) {
+                diagnostics.push({ icon: '🌪️', niveau: 'attention', msg: 'Phase 2 : Les crises arrivent, le salaire peut baisser. L\'épargne devient cruciale.' });
+            } else if (phase === 3) {
+                diagnostics.push({ icon: '🔥', niveau: 'critique', msg: 'Phase 3 : Période difficile. Solidarité et gestion prudente sont essentielles.' });
+            }
+            
+            // Analyse de l'économie globale
+            const economieGlobale = [];
+            if (bilan.bilanEtat.actif.tresor < 0) {
+                economieGlobale.push({ icon: '🏛️', msg: `L'État est en déficit (${fmt(bilan.bilanEtat.actif.tresor)}€). Les taxes augmenteront probablement.` });
+            }
+            if (bilan.bilanExportation?.solde < -100) {
+                economieGlobale.push({ icon: '🌍', msg: `Le secteur Export perd de l'argent (${fmt(bilan.bilanExportation.solde)}€). L'argent quitte le circuit local.` });
+            }
+            if (bilan.bilanHorsCircuit?.solde > 200) {
+                economieGlobale.push({ icon: '🛰️', msg: `${fmt(bilan.bilanHorsCircuit.solde)}€ sont "hors circuit" (spéculation). Cet argent ne profite pas à l'économie locale.` });
+            }
+            if (bilan.bilanAAA.membres > 0 && bilan.bilanAAA.circulationHash > 0) {
+                economieGlobale.push({ icon: '🪙', msg: `${fmt(bilan.bilanAAA.circulationHash)}# circulent dans l'économie locale via le pot AAA. C'est la monnaie complémentaire en action !` });
+            }
+            
+            // ── 6. RECOMMANDATIONS ──
+            const recommandations = [];
+            
+            if (monEuro > 300 && mesActivites === 0) {
+                recommandations.push({ 
+                    action: '🛒 Acheter une activité',
+                    raison: 'Tu as assez de cash mais aucun investissement. Une activité te rapportera des revenus récurrents.',
+                    priorite: 1
+                });
+            }
+            if (maDette > 0 && monEuro > maDette * 1.2) {
+                recommandations.push({
+                    action: '💳 Rembourser ta dette',
+                    raison: `Tu as ${fmt(monEuro)}€ et seulement ${fmt(maDette)}€ de dette. En remboursant, tu économises les intérêts (10%/tour).`,
+                    priorite: 1
+                });
+            }
+            if (maDette > 0 && maDette > monEuro * 2 && monEuro < 100) {
+                recommandations.push({
+                    action: '⚠️ Négocier ou demander un Smart Contract',
+                    raison: 'Ta dette est lourde. Un joueur plus riche pourrait te prêter à taux 0 via un Smart Contract.',
+                    priorite: 1
+                });
+            }
+            if (!estMembreAAA && phase >= 2 && monEuro > 200) {
+                recommandations.push({
+                    action: `${LOGO_AAA} Rejoindre le Pot AAA`,
+                    raison: 'En phase 2+, le complément Espoyr protège ton pouvoir d\'achat contre l\'érosion monétaire.',
+                    priorite: 2
+                });
+            }
+            if (mesActivites > 0) {
+                // Vérifier si des activités ne sont pas équipées
+                const mesActIds = Object.entries(COMPTABILITE.caisseActivites || {})
+                    .filter(([id, a]) => a.proprietaireId === myPlayerId);
+                const nonEquipees = mesActIds.filter(([id, a]) => !a.equipementA && !a.equipementB);
+                if (nonEquipees.length > 0) {
+                    recommandations.push({
+                        action: '📚 Équiper tes activités',
+                        raison: `Tu as ${nonEquipees.length} activité(s) sans formation. Un équipement augmente fortement le revenu.`,
+                        priorite: 2
+                    });
+                }
+            }
+            if (monEuro > 600 && maDette === 0) {
+                recommandations.push({
+                    action: '🤝 Aider un joueur en difficulté',
+                    raison: `Tu es en bonne position (${fmt(monEuro)}€, 0 dette). Un prêt solidaire via Smart Contract renforce l'économie locale.`,
+                    priorite: 3
+                });
+            }
+            
+            recommandations.sort((a, b) => a.priorite - b.priorite);
+            
+            // ── 7. QUESTIONS POUR LE JOUEUR ──
+            const questions = [];
+            if (mesActivites > 0 && maDette > 0) {
+                questions.push('Faut-il rembourser d\'abord ou investir pour augmenter tes revenus ?');
+            }
+            if (phase >= 2 && !estMembreAAA) {
+                questions.push('As-tu réfléchi à l\'impact de l\'érosion monétaire sur ton pouvoir d\'achat ?');
+            }
+            if (monRang > 1 && monRang < nbJoueurs) {
+                questions.push(`Quelle stratégie pour rattraper ${leader.nom} qui a ${fmt(leader.net - monNet)}€ d'avance ?`);
+            }
+            if (classement.length > 2) {
+                const ecartMaxMin = leader.net - dernier.net;
+                if (ecartMaxMin > 300) {
+                    questions.push(`L'écart entre le plus riche et le plus pauvre est de ${fmt(ecartMaxMin)}€. L'économie est-elle assez solidaire ?`);
+                }
+            }
+            
+            // ══ CONSTRUCTION DU MODAL ══
+            const diagnosticsHtml = diagnostics.map(d => 
+                `<div style="padding: 6px 0; border-bottom: 1px solid #f3f4f6;">
+                    <span style="font-size: 1.1rem;">${d.icon}</span>
+                    <span style="font-size: 0.85rem; color: ${d.niveau === 'critique' ? '#dc2626' : d.niveau === 'attention' ? '#d97706' : '#374151'};">${d.msg}</span>
+                </div>`
+            ).join('');
+            
+            const verifHtml = verifications.map(v =>
+                `<div style="display: flex; justify-content: space-between; padding: 3px 0; font-size: 0.8rem;">
+                    <span>${v.ok ? '✅' : '⚠️'} ${v.label}</span>
+                    <strong style="color: ${v.ok ? '#059669' : '#dc2626'};">${v.valeur}</strong>
+                </div>`
+            ).join('');
+            
+            const recoHtml = recommandations.length > 0 ? recommandations.map(r =>
+                `<div style="background: ${r.priorite === 1 ? '#fef3c7' : r.priorite === 2 ? '#dbeafe' : '#f0fdf4'}; 
+                            padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+                    <p style="margin: 0; font-size: 0.9rem; font-weight: bold;">${r.action}</p>
+                    <p style="margin: 3px 0 0 0; font-size: 0.8rem; color: #6b7280;">${r.raison}</p>
+                </div>`
+            ).join('') : '<p style="font-size: 0.85rem; color: #059669;">Tout va bien ! Continue comme ça.</p>';
+            
+            const questionsHtml = questions.length > 0 ? questions.map(q =>
+                `<p style="margin: 4px 0; font-size: 0.85rem; color: #4338ca;">💭 ${q}</p>`
+            ).join('') : '';
+            
+            const ecoGlobaleHtml = economieGlobale.length > 0 ? economieGlobale.map(e =>
+                `<p style="margin: 4px 0; font-size: 0.85rem;">${e.icon} ${e.msg}</p>`
+            ).join('') : '<p style="font-size: 0.85rem; color: #059669;">L\'économie locale semble équilibrée.</p>';
+            
+            // Classement compact
+            const classementHtml = classement.map((c, i) =>
+                `<span style="font-size: 0.8rem; ${c.id === myPlayerId ? 'font-weight: bold; color: #2563eb;' : 'color: #6b7280;'}">
+                    ${['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣'][i]} ${c.nom}: ${fmt(c.net)}€
+                </span>`
+            ).join(' — ');
+            
+            showModal(`
+                <h3>🤖 Coach ESPOYR — Analyse Tour ${tour}</h3>
+                
+                <!-- Résumé personnel -->
+                <div style="background: #e0e7ff; padding: 10px; border-radius: 8px; margin-bottom: 10px;">
+                    <p style="margin: 0; font-size: 0.95rem; font-weight: bold;">
+                        ${monNom}, voici ton bilan :
+                    </p>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 6px;">
+                        <span style="font-size: 0.9rem;">💶 Caisse : <strong>${fmt(monEuro)}€</strong></span>
+                        <span style="font-size: 0.9rem;">🪙 Espoyr : <strong>${fmt(monHash)}#</strong></span>
+                        <span style="font-size: 0.9rem;">🏭 Activités : <strong>${fmt(mesActivites)}€</strong></span>
+                        <span style="font-size: 0.9rem;">💳 Dette : <strong style="color: ${maDette > 0 ? '#dc2626' : '#059669'};">${fmt(maDette)}€</strong></span>
+                    </div>
+                    <p style="margin: 6px 0 0 0; font-size: 0.95rem;">
+                        <strong>Patrimoine net : ${fmt(monNet)}€</strong>
+                        <span style="font-size: 0.85rem; color: #4338ca;"> — ${monRang}${monRang === 1 ? 'er' : 'ème'}/${nbJoueurs}</span>
+                    </p>
+                </div>
+                
+                ${tendanceHtml}
+                
+                <!-- Diagnostic -->
+                <details open style="margin-bottom: 10px;">
+                    <summary style="cursor: pointer; font-weight: bold; font-size: 0.9rem; padding: 4px 0;">🩺 Diagnostic</summary>
+                    <div style="padding: 6px 0;">
+                        ${diagnosticsHtml}
+                    </div>
+                </details>
+                
+                <!-- Recommandations -->
+                <details open style="margin-bottom: 10px;">
+                    <summary style="cursor: pointer; font-weight: bold; font-size: 0.9rem; padding: 4px 0;">💡 Ce que je ferais à ta place</summary>
+                    <div style="padding: 6px 0;">
+                        ${recoHtml}
+                    </div>
+                </details>
+                
+                <!-- Questions -->
+                ${questions.length > 0 ? `
+                <details style="margin-bottom: 10px;">
+                    <summary style="cursor: pointer; font-weight: bold; font-size: 0.9rem; padding: 4px 0;">❓ Questions à te poser</summary>
+                    <div style="padding: 6px 0; background: #f5f3ff; border-radius: 6px; padding: 8px;">
+                        ${questionsHtml}
+                    </div>
+                </details>
+                ` : ''}
+                
+                <!-- Économie globale -->
+                <details style="margin-bottom: 10px;">
+                    <summary style="cursor: pointer; font-weight: bold; font-size: 0.9rem; padding: 4px 0;">🌍 État de l'économie</summary>
+                    <div style="padding: 6px 0;">
+                        ${ecoGlobaleHtml}
+                    </div>
+                </details>
+                
+                <!-- Vérifications -->
+                <details style="margin-bottom: 10px;">
+                    <summary style="cursor: pointer; font-weight: bold; font-size: 0.9rem; padding: 4px 0;">🔍 Vérification des totaux</summary>
+                    <div style="padding: 6px 0; background: #f9fafb; border-radius: 6px; padding: 8px;">
+                        ${verifHtml}
+                        <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #e5e7eb;">
+                            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: bold;">
+                                <span>TOTAL € joueurs</span>
+                                <span>${fmt(totalEuroJoueurs)}€</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: bold;">
+                                <span>TOTAL # joueurs</span>
+                                <span>${fmt(totalHashJoueurs)}#</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: bold;">
+                                <span>TOTAL activités</span>
+                                <span>${fmt(totalActivitesJoueurs)}€</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: bold; color: #dc2626;">
+                                <span>TOTAL dettes</span>
+                                <span>${fmt(totalDetteJoueurs)}€</span>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+                
+                <!-- Classement -->
+                <div style="background: #f9fafb; padding: 8px; border-radius: 6px; text-align: center;">
+                    ${classementHtml}
+                </div>
+                
+                <p style="font-size: 0.7rem; color: #9ca3af; text-align: center; margin-top: 8px;">
+                    ℹ️ Cette analyse est indicative. Les décisions t'appartiennent !
+                </p>
+            `, `
+                <button class="btn btn-primary" onclick="closeModal(); showBilanModal();">← Retour au bilan</button>
+                <button class="btn btn-secondary" onclick="closeModal()">Fermer</button>
+            `);
+        }
         function showGraphiqueEvolution() {
             // S'assurer qu'on a le bilan actuel dans l'historique
             const currentTour = gameState?.turn || 1;
@@ -11685,14 +12144,15 @@ function initSystemeDe() {
                 series.push({ nom: `${p.avatar || '⬜'} ${p.name}`, points, color: couleurs[i % couleurs.length], dash: '' });
             });
             
-            // Série Banque : intérêts cumulés (profit pur)
-            const bankSeries = bilans.map(b => ({ tour: b.tour, val: Math.round(b.bilanBanque?.interetsRecus || 0) }));
+            // Série Banque : intérêts cumulés (profit pur) — forcer monotonie (ne peut que monter)
+            let bankMax = 0;
+            const bankSeries = bilans.map(b => {
+                bankMax = Math.max(bankMax, Math.round(b.bilanBanque?.interetsRecus || 0));
+                return { tour: b.tour, val: bankMax };
+            });
             series.push({ nom: '🏦 Banque (intérêts)', points: bankSeries, color: '#000000', dash: '6,3' });
             
-            // Fuite hors circuit : exclue du graphique (écrase l'échelle)
-            // → reste visible dans l'analyse textuelle en dessous
-            
-            // Série État : dette publique
+            // Série État : dette publique (peut varier si l'État rembourse)
             const etatDetteSeries = bilans.map(b => ({ tour: b.tour, val: Math.round(b.bilanEtat?.dette || 0) }));
             series.push({ nom: '🏛️ Dette État', points: etatDetteSeries, color: '#7c3aed', dash: '8,4' });
             
