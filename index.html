@@ -381,9 +381,20 @@
             </div>
            
             
-            <button class="btn btn-primary btn-full" onclick="createGame()" style="margin-bottom: 12px;">
+            <button class="btn btn-primary btn-full" onclick="createGame()" style="margin-bottom: 8px;">
                 ➕ Créer une nouvelle partie
             </button>
+            <div style="display: flex; gap: 6px; margin-bottom: 12px;">
+                <button class="btn btn-full" style="background: #dbeafe; color: #1d4ed8; flex: 1; font-size: 0.85rem;" onclick="showProgrammerPartieModal()">
+                    📅 Programmer une partie
+                </button>
+                <button class="btn btn-full" style="background: #f0fdf4; color: #059669; flex: 1; font-size: 0.85rem;" onclick="showDisponibilitesModal()">
+                    🕐 Mes disponibilités
+                </button>
+            </div>
+            
+            <!-- Parties planifiées à venir -->
+            <div id="partiesAVenir" style="display: none; margin-bottom: 12px;"></div>
             
             <!-- Parties sauvées détectées automatiquement -->
             <div id="partiesSauvees" style="display: none; margin-top: 12px;"></div>
@@ -563,6 +574,8 @@
                 detecterMembre();
                 // Détecter les parties sauvées localement
                 detecterPartiesSauvees();
+                // Charger les parties planifiées à venir
+                chargerPartiesAVenir();
             }
           })
           .catch((error) => {
@@ -1031,7 +1044,7 @@
 
         // ========== REPRISE / TICKET JOUEUR (A+B) ==========
         const RESUME_KEY_PREFIX = 'ESPOYR_RESUME_';
-        const API_URL = 'https://script.google.com/macros/s/AKfycby_u0XpPkw5ANLD-o6L7dgPn2ACdHXQcQNfIfGAMPJDSbdOs2arsNIe-opvDq0lOdaDyw/exec';
+        const API_URL = 'https://script.google.com/macros/s/AKfycbyNqa_sRHbTPCMyc9V7GEZhVHPw8S90TKGGVHRUAOAQyXHva5JNJW0ob0oijU4UKfw85A/exec';
         let membreVerifie = false;
         let membreEmail = '';
         let membreData = null; // Données complètes du membre (prenom, cote, humeur, etc.)
@@ -1324,6 +1337,29 @@
          * Modal de gestion des disponibilités
          */
         function showDisponibilitesModal() {
+            // Si pas encore membre, demander l'email d'abord
+            if (!membreEmail) {
+                showModal(`
+                    <h3>🕐 Mes disponibilités</h3>
+                    <p style="font-size: 0.9rem; color: var(--gray);">
+                        Pour enregistrer tes disponibilités et être prévenu des prochaines parties, entre ton email :
+                    </p>
+                    <input type="email" id="dispoEmail" placeholder="email@exemple.com" 
+                           style="width: 100%; padding: 10px; font-size: 1rem; margin-top: 8px;">
+                `, `
+                    <button class="btn btn-primary" onclick="(function(){
+                        const email = (document.getElementById('dispoEmail')?.value || '').trim();
+                        if (!email || !email.includes('@')) { showError('Email invalide.'); return; }
+                        const prenom = document.getElementById('playerName')?.value?.trim() || 'Joueur';
+                        proposerInscriptionCommunautaire(email, prenom);
+                        membreEmail = email.toLowerCase();
+                        closeModal();
+                        setTimeout(() => showDisponibilitesModal(), 500);
+                    })()">Continuer</button>
+                    <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+                `);
+                return;
+            }
             const plage1 = membreData?.plageHoraire1 ? tryParse(membreData.plageHoraire1) : null;
             const plage2 = membreData?.plageHoraire2 ? tryParse(membreData.plageHoraire2) : null;
             
@@ -1402,7 +1438,277 @@
                         membreData.plageHoraire1 = plage1 ? JSON.stringify(plage1) : '';
                         membreData.plageHoraire2 = plage2 ? JSON.stringify(plage2) : '';
                     }
-                    sendSystemMessage('📅 Disponibilités enregistrées !');
+                    showModal(`
+                        <h3>✅ Disponibilités enregistrées</h3>
+                        <p style="text-align: center; font-size: 0.9rem; color: var(--gray);">
+                            Tu seras prévenu par email quand une partie est créée pendant tes créneaux.
+                        </p>
+                    `, `<button class="btn btn-primary" onclick="closeModal()">OK</button>`);
+                } else {
+                    showError(result.error || 'Erreur');
+                }
+            } catch(e) {
+                showError('Erreur : ' + e.message);
+            }
+        }
+        
+        // ══════════════════════════════════════════════════════════
+        // ██  PLANIFICATION DE PARTIES                            ██
+        // ══════════════════════════════════════════════════════════
+        
+        /**
+         * Modal pour programmer une partie à une date/heure précise
+         */
+        function showProgrammerPartieModal() {
+            const prenom = document.getElementById('playerName')?.value?.trim() || myName || '';
+            if (!prenom) { showError('Entre ton prénom d\'abord.'); return; }
+            
+            // Date par défaut : demain à 19h
+            const demain = new Date();
+            demain.setDate(demain.getDate() + 1);
+            const dateDefaut = demain.toISOString().split('T')[0];
+            
+            showModal(`
+                <h3>📅 Programmer une partie</h3>
+                <p style="font-size: 0.85rem; color: var(--gray); margin-bottom: 12px;">
+                    Choisis une date et heure. Tous les membres disponibles seront prévenus par email.
+                </p>
+                
+                <div style="background: #f0fdf4; padding: 12px; border-radius: 8px; margin-bottom: 10px;">
+                    <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                        <div style="flex: 1;">
+                            <label style="font-size: 0.8rem; color: #6b7280; display: block; margin-bottom: 4px;">📆 Date</label>
+                            <input type="date" id="planifDate" value="${dateDefaut}" style="width: 100%; padding: 8px;">
+                        </div>
+                        <div style="flex: 1;">
+                            <label style="font-size: 0.8rem; color: #6b7280; display: block; margin-bottom: 4px;">🕐 Heure</label>
+                            <input type="time" id="planifHeure" value="19:00" style="width: 100%; padding: 8px;">
+                        </div>
+                    </div>
+                    <div>
+                        <label style="font-size: 0.8rem; color: #6b7280; display: block; margin-bottom: 4px;">👥 Nombre de places</label>
+                        <select id="planifPlaces" style="width: 100%; padding: 8px;">
+                            <option value="2">2 joueurs</option>
+                            <option value="3">3 joueurs</option>
+                            <option value="4" selected>4 joueurs</option>
+                            <option value="5">5 joueurs</option>
+                            <option value="6">6 joueurs</option>
+                        </select>
+                    </div>
+                </div>
+                
+                ${!membreEmail ? `
+                    <div style="background: #fef3c7; padding: 10px; border-radius: 8px; margin-bottom: 10px;">
+                        <p style="margin: 0; font-size: 0.8rem;">
+                            📧 Pour notifier les autres joueurs, entre ton email :
+                        </p>
+                        <input type="email" id="planifEmail" placeholder="email@exemple.com" 
+                               style="width: 100%; padding: 8px; margin-top: 6px;">
+                    </div>
+                ` : ''}
+            `, `
+                <button class="btn btn-primary" onclick="confirmerProgrammation()">📅 Programmer & notifier</button>
+                <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+            `);
+        }
+        
+        /**
+         * Confirmer et enregistrer la partie programmée
+         */
+        async function confirmerProgrammation() {
+            const prenom = document.getElementById('playerName')?.value?.trim() || myName || '';
+            const dateStr = document.getElementById('planifDate')?.value;
+            const heureStr = document.getElementById('planifHeure')?.value;
+            const nbPlaces = parseInt(document.getElementById('planifPlaces')?.value) || 4;
+            const emailInput = document.getElementById('planifEmail')?.value?.trim();
+            const email = membreEmail || emailInput || '';
+            
+            if (!dateStr || !heureStr) { showError('Choisis une date et une heure.'); return; }
+            
+            const datePrevue = new Date(`${dateStr}T${heureStr}:00`);
+            if (datePrevue < new Date()) { showError('La date doit être dans le futur.'); return; }
+            
+            // Si email fourni et pas encore membre, inscrire
+            if (email && !membreEmail) {
+                proposerInscriptionCommunautaire(email, prenom);
+            }
+            
+            closeModal();
+            showModal(`
+                <h3>📅 Programmation en cours...</h3>
+                <div class="loading"></div>
+            `, '');
+            
+            try {
+                // Générer un code pour cette partie
+                const code = generateCode();
+                
+                // 1) Enregistrer dans le Sheet
+                const result = await apiCommunaute({
+                    action: 'creerPartie',
+                    codePartie: code,
+                    emailOrganisateur: email,
+                    prenomOrganisateur: prenom,
+                    datePrevue: datePrevue.toISOString(),
+                    nbPlaces
+                });
+                
+                if (!result.success) {
+                    closeModal();
+                    showError(result.error || 'Erreur lors de la programmation.');
+                    return;
+                }
+                
+                // 2) Notifier les membres disponibles
+                let nbNotifies = 0;
+                if (email) {
+                    try {
+                        const notifResult = await apiCommunaute({
+                            action: 'notifierMembres',
+                            codePartie: code,
+                            emailOrganisateur: email,
+                            prenomOrganisateur: prenom,
+                            datePrevue: datePrevue.toISOString(),
+                            coteOrganisateur: result.coteOrganisateur || 'A'
+                        });
+                        nbNotifies = notifResult.envoyes || 0;
+                    } catch(e) {
+                        console.warn('⚠️ Erreur notification:', e);
+                    }
+                }
+                
+                const dateAffichee = datePrevue.toLocaleString('fr-BE', {
+                    weekday: 'long', day: 'numeric', month: 'long',
+                    hour: '2-digit', minute: '2-digit'
+                });
+                
+                closeModal();
+                showModal(`
+                    <h3>✅ Partie programmée !</h3>
+                    <div style="background: #f0fdf4; padding: 12px; border-radius: 8px; margin-bottom: 10px; text-align: center;">
+                        <p style="margin: 0; font-size: 1rem;">
+                            📅 <strong>${dateAffichee}</strong>
+                        </p>
+                        <p style="margin: 6px 0 0 0; font-family: monospace; font-size: 1.3rem; color: #059669; font-weight: bold;">
+                            ${code}
+                        </p>
+                        <p style="margin: 6px 0 0 0; font-size: 0.8rem; color: #6b7280;">
+                            ${nbPlaces} places · ${nbNotifies > 0 ? `${nbNotifies} membre${nbNotifies > 1 ? 's' : ''} notifié${nbNotifies > 1 ? 's' : ''}` : 'Partage le code !'}
+                        </p>
+                    </div>
+                    <p style="font-size: 0.85rem; color: var(--gray); text-align: center;">
+                        Le jour venu, crée ta partie avec ce code ou partage-le à tes amis.
+                    </p>
+                `, `
+                    <button class="btn btn-primary" onclick="closeModal(); document.getElementById('gameCode').value='${code}';">📋 Utiliser ce code</button>
+                    <button class="btn btn-secondary" onclick="closeModal(); chargerPartiesAVenir();">OK</button>
+                `);
+                
+                // Rafraîchir la liste
+                chargerPartiesAVenir();
+                
+            } catch(e) {
+                closeModal();
+                showError('Erreur : ' + e.message);
+            }
+        }
+        
+        /**
+         * Charger et afficher les parties planifiées à venir
+         */
+        async function chargerPartiesAVenir() {
+            const container = document.getElementById('partiesAVenir');
+            if (!container) return;
+            
+            try {
+                const result = await apiCommunaute({ action: 'getPartiesEnAttente' });
+                if (!result.success || !result.parties || result.parties.length === 0) {
+                    container.style.display = 'none';
+                    return;
+                }
+                
+                // Filtrer : ne garder que les parties futures ou du jour
+                const maintenant = new Date();
+                const partiesFutures = result.parties.filter(p => {
+                    if (!p.datePrevue) return true; // Pas de date = toujours affichée
+                    return new Date(p.datePrevue) > new Date(maintenant.getTime() - 2 * 60 * 60 * 1000); // Encore valide 2h après
+                });
+                
+                if (partiesFutures.length === 0) {
+                    container.style.display = 'none';
+                    return;
+                }
+                
+                container.style.display = 'block';
+                container.innerHTML = `
+                    <h3 style="font-size: 0.9rem; color: #2563eb; margin-bottom: 8px;">🎮 Parties à venir</h3>
+                    ${partiesFutures.map(p => {
+                        const dateAff = p.datePrevue 
+                            ? new Date(p.datePrevue).toLocaleString('fr-BE', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                            : 'Date à confirmer';
+                        const places = p.placesRestantes > 0 
+                            ? `<span style="color:#059669;">${p.placesRestantes} place${p.placesRestantes > 1 ? 's' : ''}</span>` 
+                            : `<span style="color:#dc2626;">Complet</span>`;
+                        const confirmes = p.confirmes && p.confirmes.length > 0 
+                            ? p.confirmes.join(', ') 
+                            : 'aucun confirmé';
+                        return `
+                            <div style="background: #dbeafe; border: 1px solid #93c5fd; border-radius: 8px; padding: 10px; margin-bottom: 6px;">
+                                <div style="display: flex; align-items: center; justify-content: space-between;">
+                                    <div>
+                                        <strong>${p.prenomOrganisateur}</strong>
+                                        <span style="font-size: 0.75rem; background: #e0e7ff; color: #3730a3; padding: 1px 6px; border-radius: 10px; margin-left: 4px;">Cote ${p.coteOrganisateur}</span>
+                                        <div style="font-size: 0.8rem; color: #374151;">📅 ${dateAff}</div>
+                                        <div style="font-size: 0.75rem; color: #6b7280;">👥 ${p.nbConfirmes}/${p.nbPlaces} · ${places} · ${confirmes}</div>
+                                    </div>
+                                    ${p.placesRestantes > 0 ? `
+                                        <button class="btn" style="background: #059669; color: white; font-size: 0.8rem; padding: 8px 12px;"
+                                                onclick="rejoindrePartiePlanifiee('${p.codePartie}')">
+                                            ✅ J'y serai
+                                        </button>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                `;
+            } catch(e) {
+                console.warn('⚠️ Erreur chargement parties:', e);
+                container.style.display = 'none';
+            }
+        }
+        
+        /**
+         * Confirmer sa participation à une partie planifiée
+         */
+        async function rejoindrePartiePlanifiee(codePartie) {
+            const prenom = document.getElementById('playerName')?.value?.trim() || myName || '';
+            const email = membreEmail || '';
+            
+            if (!prenom) { showError('Entre ton prénom d\'abord.'); return; }
+            
+            try {
+                const result = await apiCommunaute({
+                    action: 'confirmerParticipation',
+                    codePartie,
+                    email,
+                    prenom
+                });
+                
+                if (result.success) {
+                    // Pré-remplir le code
+                    const codeInput = document.getElementById('gameCode');
+                    if (codeInput) codeInput.value = codePartie;
+                    
+                    showModal(`
+                        <h3>✅ Participation confirmée !</h3>
+                        <p style="text-align: center; font-size: 0.9rem;">
+                            Le jour venu, rejoins avec le code <strong style="font-family: monospace; color: #059669; font-size: 1.1rem;">${codePartie}</strong>
+                        </p>
+                    `, `<button class="btn btn-primary" onclick="closeModal()">OK</button>`);
+                    
+                    // Rafraîchir
+                    chargerPartiesAVenir();
                 } else {
                     showError(result.error || 'Erreur');
                 }
@@ -1437,6 +1743,26 @@
             }
             
             sauvees.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+            
+            // ── Le joueur a déjà joué → pré-remplir le prénom + marquer comme connu ──
+            const dernierNom = sauvees[0].name;
+            const dernierAvatar = sauvees[0].avatar;
+            if (dernierNom) {
+                const nameInput = document.getElementById('playerName');
+                if (nameInput && !nameInput.value) {
+                    nameInput.value = dernierNom;
+                    myName = dernierNom;
+                }
+                if (dernierAvatar) {
+                    myAvatar = dernierAvatar;
+                    // Sélectionner visuellement l'avatar
+                    document.querySelectorAll('.avatar-btn').forEach(b => {
+                        b.classList.toggle('selected', b.dataset.avatar === dernierAvatar);
+                    });
+                }
+                // Marquer comme joueur connu (skip intro à la prochaine création)
+                window._joueurConnu = true;
+            }
             
             container.style.display = 'block';
             container.innerHTML = `
@@ -4907,9 +5233,9 @@ activiteId: actId
         
         // Modal d'introduction du jeu (avant choix de profil)
         function showIntroModal(callback) {
-            // Si membre vérifié → skip l'intro (il connaît déjà le jeu)
-            if (membreVerifie && membreData) {
-                console.log('⏩ Skip intro pour membre vérifié:', membreData.prenom);
+            // Si membre vérifié OU joueur qui a déjà joué → skip l'intro
+            if ((membreVerifie && membreData) || window._joueurConnu) {
+                console.log('⏩ Skip intro — joueur déjà connu');
                 callback();
                 return;
             }
@@ -15874,6 +16200,7 @@ function initSystemeDe() {
             `, `
                 <button class="btn btn-primary" onclick="retourAccueil()">🏠 Nouvelle partie</button>
                 <button class="btn" style="background:#dbeafe; color:#2563eb;" onclick="closeModal(); showBilanModal()">📊 Revoir le bilan</button>
+                <button class="btn" style="background:#f0fdf4; color:#059669;" onclick="closeModal(); showProgrammerPartieModal()">📅 Programmer la prochaine</button>
                 ${deleteBtn}
             `);
         }
