@@ -1177,10 +1177,16 @@
                                 <span style="font-family: monospace; color: #059669; font-weight: bold; margin-left: 8px;">${s.code}</span>
                                 <div style="font-size: 0.75rem; color: #6b7280;">${s.avatar || '⬜'} Sauvé ${new Date(s.savedAt).toLocaleString('fr-BE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
                             </div>
-                            <button class="btn" style="background: #059669; color: white; font-size: 0.85rem; padding: 8px 16px;"
-                                    onclick="reprendrePartieSauvee('${s.code}')">
-                                🔄 Reprendre
-                            </button>
+                            <div style="display: flex; gap: 4px;">
+                                <button class="btn" style="background: #059669; color: white; font-size: 0.85rem; padding: 8px 16px;"
+                                        onclick="reprendrePartieSauvee('${s.code}')">
+                                    🔄 Reprendre
+                                </button>
+                                <button class="btn" style="background: #fee2e2; color: #dc2626; font-size: 0.8rem; padding: 8px 10px;" 
+                                        onclick="supprimerSauvegarde('${s.code}')" title="Supprimer cette sauvegarde">
+                                    ✕
+                                </button>
+                            </div>
                         </div>
                     </div>
                 `).join('')}
@@ -1195,6 +1201,13 @@
             myName = saved.name;
             myAvatar = saved.avatar || '🐤';
             await joinGame();
+        }
+        
+        // Supprimer une sauvegarde locale (bouton ✕ sur l'écran d'accueil)
+        function supprimerSauvegarde(code) {
+            if (!confirm(`Supprimer la sauvegarde de la partie ${code} ?\n\nTu ne pourras plus reprendre cette partie automatiquement.`)) return;
+            localStorage.removeItem(getResumeKey(code));
+            detecterPartiesSauvees(); // Rafraîchir l'affichage
         }
         
         /**
@@ -10321,6 +10334,9 @@ function initSystemeDe() {
                     // Capture automatique du bilan pour l'historique et les graphiques
                     enregistrerBilanTour();
                     console.log(`📊 Bilan auto-capturé: Tour ${newTurn}`);
+                    
+                    // Analyse textuelle automatique tous les 5 tours
+                    autoAnalyseBilan(newTurn);
                 }
                 
                 // Reset compteur actions contributives du joueur qui vient de jouer
@@ -11604,6 +11620,158 @@ function initSystemeDe() {
             URL.revokeObjectURL(url);
         }
         
+        // ══════════════════════════════════════════════════════════
+        // ██  ANALYSE TEXTUELLE DU BILAN (Coach IA)             ██
+        // ══════════════════════════════════════════════════════════
+
+        function analyserBilanTexte(afficherDansChat = true) {
+            const bilan = calculerBilan();
+            const players = Object.values(playersData);
+            const tour = bilan.tour;
+            const phase = bilan.phase;
+            const nbJoueurs = players.length || 1;
+            const commentaires = [];
+            
+            // ── 1. Masse monétaire et fuite ──
+            const masseCreee = COMPTABILITE.banque.masseMonetaire || 0;
+            const horsCircuit = COMPTABILITE.horsCircuit?.solde || 0;
+            const enCirculation = bilan.actif.caisseEuro;
+            if (masseCreee > 0) {
+                const pctFuite = Math.round((horsCircuit / masseCreee) * 100);
+                if (pctFuite > 40) {
+                    commentaires.push(`💸 ${pctFuite}% de la monnaie créée a quitté le circuit local (${fmt(horsCircuit)}€ sur ${fmt(masseCreee)}€). L'économie locale se vide au profit de l'extérieur.`);
+                } else if (pctFuite > 20) {
+                    commentaires.push(`💸 ${pctFuite}% de la monnaie fuit vers l'extérieur. La part locale diminue progressivement.`);
+                }
+            }
+            
+            // ── 2. Endettement global ──
+            const detteJoueurs = bilan.passif.emprunts;
+            const actifTotal = bilan.actif.total;
+            if (actifTotal > 0) {
+                const ratioEndettement = Math.round((detteJoueurs / actifTotal) * 100);
+                if (ratioEndettement > 80) {
+                    commentaires.push(`📉 Endettement critique : la dette (${fmt(detteJoueurs)}€) représente ${ratioEndettement}% des actifs. Le système est au bord de l'implosion.`);
+                } else if (ratioEndettement > 50) {
+                    commentaires.push(`📉 La dette des joueurs (${fmt(detteJoueurs)}€) pèse ${ratioEndettement}% des actifs totaux. La pression monte.`);
+                } else if (ratioEndettement > 25) {
+                    commentaires.push(`📊 L'endettement (${ratioEndettement}% des actifs) reste gérable pour l'instant.`);
+                }
+            }
+            
+            // ── 3. Banque : toujours gagnante ? ──
+            const interetsBanque = COMPTABILITE.banque.interetsRecus || COMPTABILITE.banque.cumInterets || 0;
+            const capitalRembourse = COMPTABILITE.banque.cumCapital || 0;
+            if (interetsBanque > 0) {
+                const profitBanque = interetsBanque;
+                const patrimoineJoueurs = bilan.actif.total - bilan.passif.emprunts;
+                commentaires.push(`🏦 La banque a encaissé ${fmt(profitBanque)}€ d'intérêts. Les joueurs possèdent ensemble ${fmt(patrimoineJoueurs)}€ net. ${profitBanque > patrimoineJoueurs ? "La banque gagne plus que les joueurs n'ont !" : "Les joueurs gardent encore l'avantage... pour combien de temps ?"}`);
+            }
+            
+            // ── 4. Inégalités entre joueurs ──
+            const nets = Object.values(bilan.bilansJoueurs).map(bj => ({ nom: bj.nom, net: bj.net }));
+            nets.sort((a, b) => b.net - a.net);
+            if (nets.length >= 2) {
+                const plusRiche = nets[0];
+                const plusPauvre = nets[nets.length - 1];
+                const ecart = plusRiche.net - plusPauvre.net;
+                if (ecart > 500) {
+                    const ratio = plusPauvre.net > 0 ? Math.round(plusRiche.net / plusPauvre.net) : '∞';
+                    commentaires.push(`📊 Inégalités : ${plusRiche.nom} (${fmt(plusRiche.net)}€) vs ${plusPauvre.nom} (${fmt(plusPauvre.net)}€) — écart de ${fmt(ecart)}€ (×${ratio}).`);
+                }
+            }
+            
+            // ── 5. Joueurs en difficulté ──
+            const enDifficulte = nets.filter(j => j.net < 50);
+            if (enDifficulte.length > 0) {
+                const noms = enDifficulte.map(j => `${j.nom} (${fmt(j.net)}€)`).join(', ');
+                const pct = Math.round((enDifficulte.length / nbJoueurs) * 100);
+                commentaires.push(`🚨 ${enDifficulte.length} joueur${enDifficulte.length > 1 ? 's' : ''} en difficulté (${pct}%) : ${noms}.`);
+            }
+            
+            // ── 6. Pot AAA / Monnaie # ──
+            const circulationHash = COMPTABILITE.potAAA.circulationHash || 0;
+            const membresAAA = COMPTABILITE.potAAA.membres?.length || 0;
+            const soldeAAA = COMPTABILITE.potAAA.solde || 0;
+            if (phase >= 2) {
+                if (membresAAA === 0) {
+                    commentaires.push(`💡 Aucun membre du Pot AAA ! La monnaie complémentaire (#) n'est pas utilisée. Pourtant, c'est elle qui peut sauver l'économie locale...`);
+                } else {
+                    commentaires.push(`🌿 ${membresAAA} membre${membresAAA > 1 ? 's' : ''} AAA — ${fmt(circulationHash)}# en circulation. ${circulationHash > 500 ? "La monnaie locale prend vie !" : "L'économie # démarre doucement."}`);
+                }
+            } else if (membresAAA > 0) {
+                commentaires.push(`🌿 ${membresAAA} membre${membresAAA > 1 ? 's' : ''} AAA dès la Phase 1 — vision à long terme !`);
+            }
+            
+            // ── 7. État : recettes vs dépenses ──
+            const tresorEtat = COMPTABILITE.etat.tresor || 0;
+            const detteEtat = COMPTABILITE.etat.dette?.capital || 0;
+            const recettesEtat = COMPTABILITE.etat.recettes?.total || COMPTABILITE.etat.taxesRecues || 0;
+            const depensesEtat = COMPTABILITE.etat.depenses?.total || COMPTABILITE.etat.salairesVerses || 0;
+            if (recettesEtat > 0 || depensesEtat > 0) {
+                const soldeEtat = recettesEtat - depensesEtat;
+                if (detteEtat > 0) {
+                    commentaires.push(`🏛️ L'État a ${fmt(tresorEtat)}€ en caisse mais ${fmt(detteEtat)}€ de dette envers la banque. ${soldeEtat < 0 ? "Ses dépenses dépassent ses recettes — le déficit se creuse." : "Il dégage un excédent de " + fmt(soldeEtat) + "€."}`);
+                } else if (tresorEtat > 200) {
+                    commentaires.push(`🏛️ L'État accumule ${fmt(tresorEtat)}€ de trésor. Devrait-il redistribuer davantage ?`);
+                }
+            }
+            
+            // ── 8. Exportation ──
+            const soldeExport = COMPTABILITE.exportation?.solde || 0;
+            if (soldeExport < -200) {
+                commentaires.push(`🌍 L'Exportation est à découvert de ${fmt(Math.abs(soldeExport))}€. Les salaires créatifs sont payés à crédit — qui comble ce trou ?`);
+            }
+            
+            // ── 9. Évolution vs bilan précédent ──
+            const bilanPrec = historiqueBilans.length > 1 ? historiqueBilans[historiqueBilans.length - 2] : null;
+            if (bilanPrec) {
+                const deltaEuro = bilan.actif.caisseEuro - (bilanPrec.actif?.caisseEuro || 0);
+                const deltaDette = bilan.passif.emprunts - (bilanPrec.passif?.emprunts || 0);
+                const evolution = [];
+                if (Math.abs(deltaEuro) > 50) evolution.push(`€ ${deltaEuro > 0 ? '+' : ''}${fmt(deltaEuro)}`);
+                if (Math.abs(deltaDette) > 50) evolution.push(`dette ${deltaDette > 0 ? '+' : ''}${fmt(deltaDette)}`);
+                if (evolution.length > 0) {
+                    commentaires.push(`📈 Depuis le tour ${bilanPrec.tour} : ${evolution.join(' | ')}.`);
+                }
+            }
+            
+            // ── 10. Phase et leçon pédagogique ──
+            if (phase === 1 && tour > 8 && detteJoueurs > masseCreee * 0.5) {
+                commentaires.push(`🎓 Constat : après ${tour} tours, la dette (${fmt(detteJoueurs)}€) dépasse la moitié de la monnaie créée. C'est structurel : dans un système à dette, les intérêts créent un manque d'argent permanent.`);
+            } else if (phase === 2) {
+                commentaires.push(`🎓 Phase 2 : la monnaie complémentaire (#) permet de payer localement sans créer de dette. Chaque # échangé reste dans le circuit !`);
+            } else if (phase === 3) {
+                commentaires.push(`🎓 Phase 3 — Réalité : le système monétaire classique a atteint ses limites. Seule une monnaie locale sans intérêt peut relancer les échanges.`);
+            }
+            
+            // ── Affichage ──
+            if (commentaires.length === 0) {
+                commentaires.push(`📊 Tour ${tour} — L'économie fonctionne normalement. Pas d'alerte particulière.`);
+            }
+            
+            if (afficherDansChat) {
+                sendSystemMessage(`━━━ 💬 ANALYSE ÉCONOMIQUE — Tour ${tour} ━━━`);
+                commentaires.forEach((c, i) => {
+                    setTimeout(() => sendSystemMessage(c), (i + 1) * 800);
+                });
+            }
+            
+            return commentaires;
+        }
+        
+        // Analyse automatique tous les 5 tours complets (quand le tour 1 revient au premier joueur)
+        function autoAnalyseBilan(tourActuel) {
+            if (tourActuel > 1 && tourActuel % 5 === 0 && isHost) {
+                // Vérifier qu'on n'a pas déjà analysé ce tour
+                const clef = `_analyseAuto_${currentGameCode}_${tourActuel}`;
+                if (!window[clef]) {
+                    window[clef] = true;
+                    setTimeout(() => analyserBilanTexte(true), 2000);
+                }
+            }
+        }
+
         function showBilanModal() {
             // Calculer le bilan actuel
             const bilan = calculerBilan();
@@ -11797,6 +11965,7 @@ function initSystemeDe() {
                 <p style="font-size: 0.75rem; color: #9ca3af;">${bilan.nbEcritures} écritures comptables</p>
             `, `
                 <button class="btn btn-primary" onclick="enregistrerBilanTour(); closeModal();">📸 Sauver</button>
+                <button class="btn" style="background:#e8f5e9; color:#1b5e20;" onclick="closeModal(); analyserBilanTexte(true);">💬 Analyser</button>
                 <button class="btn" style="background:#dbeafe; color:#2563eb;" onclick="showGraphiqueEvolution()">📈 Évolution</button>
                 <button class="btn" style="background:#fef3c7; color:#92400e;" onclick="exportBilanCSV()">📥 CSV</button>
                 <button class="btn btn-secondary" onclick="closeModal()">Fermer</button>
@@ -12010,7 +12179,7 @@ function initSystemeDe() {
                 <button class="btn" style="background:#dbeafe; color:#2563eb;" onclick="envoyerAnalyseChat()">💬 Chat</button>
                 <button class="btn" style="background:#fef3c7; color:#92400e;" onclick="toggleGraphLandscape()">🔄 Paysage</button>
                 <button class="btn btn-secondary" onclick="closeGraphModal(); showBilanModal()">← Retour</button>
-            `);
+                ${isHost ? '<button class="btn" style="background:#fee2e2; color:#dc2626; margin-left:4px;" onclick="closeGraphModal(); confirmerSuppressionPartie()">🗑️</button>' : ''}            `);
         }
         
         // Modal graphique plein écran
@@ -15344,8 +15513,158 @@ function initSystemeDe() {
                 enregistrerBilanTour();
             }
             
-            // Afficher directement le graphique d'évolution
+            // Marquer la partie comme terminée dans Firebase
+            if (isHost && gameRef) {
+                gameRef.child('state/ended').set(true).catch(e => console.warn('⚠️', e));
+                // Mettre à jour le statut dans le Sheet communautaire
+                apiCommunaute({ action: 'majStatutPartie', codePartie: currentGameCode, statut: 'terminee', botsUtilises: Object.values(playersData).filter(p => p.isBot).length }).catch(() => {});
+            }
+            
+            // Afficher le graphique d'évolution avec les boutons de fin
+            showGraphiqueEvolutionFinal();
+        }
+        
+        // Graphique d'évolution avec boutons de fin de partie
+        function showGraphiqueEvolutionFinal() {
+            // S'assurer qu'on a le bilan actuel
+            const currentTour = gameState?.turn || 1;
+            if (historiqueBilans.length === 0 || historiqueBilans[historiqueBilans.length - 1].tour !== currentTour) {
+                enregistrerBilanTour();
+            }
+            
+            if (historiqueBilans.length < 2) {
+                showFinPartieButtons('Pas assez de données pour le graphique.');
+                return;
+            }
+            
+            // Réutiliser le graphique normal mais remplacer les boutons
             showGraphiqueEvolution();
+            
+            // Remplacer les boutons après un court délai (le graphique est déjà affiché)
+            setTimeout(() => {
+                const graphBtns = document.querySelector('#graphModal .modal-footer, #graphModal div:last-child');
+                if (graphBtns) {
+                    graphBtns.innerHTML = getFinPartieButtonsHtml();
+                }
+            }, 200);
+        }
+        
+        // Boutons affichés après la fin de partie
+        function getFinPartieButtonsHtml() {
+            const deleteBtn = isHost ? `
+                <button class="btn" style="background:#fee2e2; color:#dc2626;" onclick="confirmerSuppressionPartie()">🗑️ Supprimer la partie</button>
+            ` : '';
+            return `
+                <button class="btn" style="background:#e8f5e9; color:#1b5e20;" onclick="closeGraphModal(); analyserBilanTexte(true);">💬 Analyse</button>
+                <button class="btn btn-primary" onclick="retourAccueil()">🏠 Nouvelle partie</button>
+                ${deleteBtn}
+            `;
+        }
+        
+        // Afficher les boutons de fin si pas de graphique
+        function showFinPartieButtons(message) {
+            const deleteBtn = isHost ? `
+                <button class="btn" style="background:#fee2e2; color:#dc2626;" onclick="confirmerSuppressionPartie()">🗑️ Supprimer la partie</button>
+            ` : '';
+            showModal(`
+                <h3>🏁 Partie terminée</h3>
+                <p style="color: var(--gray);">${message || 'Merci d\'avoir joué !'}</p>
+            `, `
+                <button class="btn btn-primary" onclick="retourAccueil()">🏠 Nouvelle partie</button>
+                ${deleteBtn}
+            `);
+        }
+        
+        // Retour à l'accueil (sans supprimer la partie)
+        function retourAccueil() {
+            closeModal();
+            closeGraphModal();
+            // Détacher les listeners Firebase
+            if (gameRef) {
+                gameRef.off();
+                gameRef = null;
+            }
+            gameState = null;
+            playersData = {};
+            currentGameCode = null;
+            myPlayerId = null;
+            isHost = false;
+            location.reload();
+        }
+        
+        // Confirmation avant suppression
+        function confirmerSuppressionPartie() {
+            if (!isHost) return;
+            closeGraphModal();
+            showModal(`
+                <h3>🗑️ Supprimer la partie ?</h3>
+                <p style="font-size: 0.9rem; color: var(--gray);">
+                    Cette action supprimera <strong>définitivement</strong> toutes les données de la partie 
+                    <strong style="font-family: monospace; color: #dc2626;">${currentGameCode}</strong> 
+                    de Firebase.
+                </p>
+                <div style="background: #fef3c7; padding: 10px; border-radius: 8px; margin-top: 10px;">
+                    <p style="margin: 0; font-size: 0.85rem;">
+                        ⚠️ Les sauvegardes locales et l'historique seront aussi nettoyés.<br>
+                        Cette action est irréversible.
+                    </p>
+                </div>
+            `, `
+                <button class="btn" style="background:#dc2626; color:white;" onclick="executerSuppressionPartie()">🗑️ Oui, supprimer</button>
+                <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+            `);
+        }
+        
+        // Suppression effective de la partie
+        async function executerSuppressionPartie() {
+            if (!isHost || !currentGameCode) return;
+            closeModal();
+            
+            const code = currentGameCode;
+            
+            showModal(`
+                <h3>🗑️ Suppression en cours...</h3>
+                <div class="loading"></div>
+            `, '');
+            
+            try {
+                // 1) Détacher les listeners
+                if (gameRef) {
+                    gameRef.off();
+                }
+                
+                // 2) Supprimer la partie entière de Firebase
+                await db.ref(`parties/${code}`).remove();
+                console.log(`✅ Partie ${code} supprimée de Firebase`);
+                
+                // 3) Nettoyer le localStorage
+                const resumeKey = getResumeKey(code);
+                localStorage.removeItem(resumeKey);
+                console.log(`✅ Sauvegarde locale ${resumeKey} supprimée`);
+                
+                // 4) Mettre à jour le statut dans le Sheet
+                apiCommunaute({ action: 'majStatutPartie', codePartie: code, statut: 'supprimee' }).catch(() => {});
+                
+                closeModal();
+                showModal(`
+                    <h3>✅ Partie supprimée</h3>
+                    <p style="text-align: center; color: #059669;">
+                        La partie <strong>${code}</strong> a été définitivement supprimée.
+                    </p>
+                `, `
+                    <button class="btn btn-primary" onclick="retourAccueil()">🏠 Retour à l'accueil</button>
+                `);
+                
+            } catch(e) {
+                console.error('❌ Erreur suppression:', e);
+                closeModal();
+                showModal(`
+                    <h3>❌ Erreur</h3>
+                    <p>Impossible de supprimer : ${e.message}</p>
+                `, `
+                    <button class="btn btn-primary" onclick="retourAccueil()">🏠 Retour à l'accueil</button>
+                `);
+            }
         }
 
 
