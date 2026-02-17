@@ -372,6 +372,9 @@
                 </a>
             </div>
             
+            <!-- Bandeau membre (affiché si reconnu) -->
+            <div id="membreWelcome" style="display: none; margin-bottom: 12px;"></div>
+            
             <div style="margin-bottom: 15px;">
                 <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 6px; font-size: 0.9rem;">Introduit ton Prénom :</label>
                 <input type="text" id="playerName" placeholder="Entre ton prénom..." maxlength="15">
@@ -556,6 +559,8 @@
             console.log("✅ Connecté anonymement à Firebase");
             // Vérifier si reconnexion depuis un lien email
             if (!verifierURLReconnexion()) {
+                // Détecter membre enregistré
+                detecterMembre();
                 // Détecter les parties sauvées localement
                 detecterPartiesSauvees();
             }
@@ -1029,6 +1034,8 @@
         const API_URL = 'https://script.google.com/macros/s/AKfycby_u0XpPkw5ANLD-o6L7dgPn2ACdHXQcQNfIfGAMPJDSbdOs2arsNIe-opvDq0lOdaDyw/exec';
         let membreVerifie = false;
         let membreEmail = '';
+        let membreData = null; // Données complètes du membre (prenom, cote, humeur, etc.)
+        const MEMBRE_STORAGE_KEY = 'ESPOYR_MEMBRE_EMAIL';
         const ABSENT_AFTER_MS = 90 * 1000; // 90s : un joueur est considéré "absent" si lastSeen est trop ancien
         const FORCE_WARNING_MS = 60 * 1000;  // 60s : bouton force passe en jaune
         const FORCE_URGENT_MS = 90 * 1000;   // 90s : bouton force passe en rouge clignotant
@@ -1139,6 +1146,271 @@
         /**
          * Détecter les parties sauvées dans localStorage et afficher un bouton "Reprendre"
          */
+        // ══════════════════════════════════════════════════════════
+        // ██  SYSTÈME COMMUNAUTAIRE — Détection & Inscription     ██
+        // ══════════════════════════════════════════════════════════
+        
+        /**
+         * Détecter si un membre est enregistré (localStorage)
+         * Si oui → appel getMembre → personnaliser l'accueil
+         */
+        async function detecterMembre() {
+            const savedEmail = localStorage.getItem(MEMBRE_STORAGE_KEY);
+            if (!savedEmail) return;
+            
+            try {
+                const result = await apiCommunaute({ action: 'getMembre', email: savedEmail });
+                if (result.success && result.membre) {
+                    membreVerifie = !!result.membre.statutVerifie;
+                    membreEmail = savedEmail;
+                    membreData = result.membre;
+                    console.log(`✅ Membre reconnu: ${result.membre.prenom} (vérifié: ${membreVerifie})`);
+                    personnaliserAccueil(result.membre);
+                }
+            } catch(e) {
+                console.warn('⚠️ Erreur détection membre:', e);
+            }
+        }
+        
+        /**
+         * Personnaliser l'écran d'accueil pour un membre reconnu
+         */
+        function personnaliserAccueil(membre) {
+            // Pré-remplir le prénom
+            const nameInput = document.getElementById('playerName');
+            if (nameInput && membre.prenom) {
+                nameInput.value = membre.prenom;
+            }
+            
+            // Ajouter le bandeau de bienvenue
+            const welcomeZone = document.getElementById('membreWelcome');
+            if (welcomeZone) {
+                const cote = membre.coteActuelle || 'A';
+                const parties = membre.nbPartiesJouees || 0;
+                const humeurIcon = membre.humeur || '😊';
+                welcomeZone.style.display = 'block';
+                welcomeZone.innerHTML = `
+                    <div style="background: linear-gradient(135deg, #ecfdf5, #dbeafe); padding: 12px; border-radius: 10px; border: 1px solid #a7f3d0;">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <div>
+                                <span style="font-size: 1.1rem; font-weight: bold;">👋 Bonjour ${membre.prenom} !</span>
+                                <div style="font-size: 0.8rem; color: #6b7280; margin-top: 2px;">
+                                    Cote : <strong>${cote}</strong> · ${parties} partie${parties > 1 ? 's' : ''} jouée${parties > 1 ? 's' : ''}
+                                    ${!membreVerifie ? ' · <span style="color:#f59e0b;">⏳ Non vérifié</span>' : ' · <span style="color:#059669;">✅ Vérifié</span>'}
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 6px;">
+                                <button class="btn" style="background:#f0fdf4; color:#059669; font-size:0.8rem; padding:6px 10px;" 
+                                        onclick="showDisponibilitesModal()">📅</button>
+                                <button class="btn" style="background:#fee2e2; color:#dc2626; font-size:0.75rem; padding:6px 8px;" 
+                                        onclick="deconnexionMembre()" title="Se déconnecter">✕</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        
+        /**
+         * Se déconnecter du système membre (effacer localStorage)
+         */
+        function deconnexionMembre() {
+            if (!confirm('Te déconnecter de la communauté ESPOYR ?\n\nTu pourras te reconnecter avec ton email.')) return;
+            localStorage.removeItem(MEMBRE_STORAGE_KEY);
+            membreVerifie = false;
+            membreEmail = '';
+            membreData = null;
+            location.reload();
+        }
+        
+        /**
+         * Proposer l'inscription communautaire après que le joueur donne son email
+         * Appelé depuis demanderEmailOptional quand un email est fourni
+         */
+        function proposerInscriptionCommunautaire(email, prenom) {
+            if (!email || !email.includes('@')) return;
+            
+            // Sauvegarder l'email en localStorage pour la prochaine visite
+            localStorage.setItem(MEMBRE_STORAGE_KEY, email.toLowerCase());
+            
+            // Inscrire silencieusement via l'API (ou reconnaître si déjà inscrit)
+            apiCommunaute({ action: 'inscrire', email: email.toLowerCase(), prenom })
+                .then(result => {
+                    if (result.success) {
+                        if (result.nouveau) {
+                            console.log('✅ Nouveau membre inscrit:', prenom);
+                            // Envoyer le code de vérification
+                            lancerVerificationEmail(email);
+                        } else {
+                            console.log('✅ Membre reconnu:', result.membre?.prenom);
+                            membreVerifie = !!result.membre?.statutVerifie;
+                            membreEmail = email.toLowerCase();
+                            membreData = result.membre;
+                            if (!membreVerifie) {
+                                // Membre existant mais pas encore vérifié
+                                lancerVerificationEmail(email);
+                            }
+                        }
+                    }
+                })
+                .catch(e => console.warn('⚠️ Erreur inscription:', e));
+        }
+        
+        /**
+         * Lancer la vérification email (envoi code + modal de saisie)
+         */
+        async function lancerVerificationEmail(email) {
+            try {
+                const result = await apiCommunaute({ action: 'envoyerCode', email: email.toLowerCase() });
+                if (result.success) {
+                    // Afficher le modal de saisie du code après un délai (ne pas bloquer le jeu)
+                    setTimeout(() => showVerificationCodeModal(email), 3000);
+                }
+            } catch(e) {
+                console.warn('⚠️ Erreur envoi code:', e);
+            }
+        }
+        
+        /**
+         * Modal de saisie du code de vérification
+         */
+        function showVerificationCodeModal(email) {
+            showModal(`
+                <h3>📧 Vérifie ton email</h3>
+                <p style="font-size: 0.9rem; color: var(--gray);">
+                    Un code à 4 chiffres a été envoyé à <strong>${email}</strong>.<br>
+                    Vérifie ta boîte mail (et les spams).
+                </p>
+                <input type="text" id="codeVerification" placeholder="Code à 4 chiffres" 
+                       maxlength="4" style="text-align: center; font-size: 1.5rem; letter-spacing: 8px; width: 100%; padding: 12px;">
+                <p style="font-size: 0.75rem; color: #9ca3af; margin-top: 6px;">
+                    ✅ En te vérifiant, tu rejoins la communauté ESPOYR et tu pourras être prévenu des prochaines parties.
+                </p>
+            `, `
+                <button class="btn btn-primary" onclick="validerCodeVerification('${email}')">✅ Vérifier</button>
+                <button class="btn btn-secondary" onclick="closeModal()">Plus tard</button>
+            `);
+        }
+        
+        /**
+         * Valider le code de vérification
+         */
+        async function validerCodeVerification(email) {
+            const code = (document.getElementById('codeVerification')?.value || '').trim();
+            if (!code || code.length !== 4) { showError('Entre le code à 4 chiffres.'); return; }
+            
+            closeModal();
+            try {
+                const result = await apiCommunaute({ action: 'verifierCode', email: email.toLowerCase(), code });
+                if (result.success) {
+                    membreVerifie = true;
+                    membreEmail = email.toLowerCase();
+                    showModal(`
+                        <h3>✅ Email vérifié !</h3>
+                        <p style="text-align: center; font-size: 0.95rem;">
+                            Bienvenue dans la communauté ESPOYR ! 🎉<br>
+                            Tu seras prévenu par email quand une partie est créée.
+                        </p>
+                    `, `<button class="btn btn-primary" onclick="closeModal()">Super !</button>`);
+                } else {
+                    showError(result.error || 'Code invalide');
+                }
+            } catch(e) {
+                showError('Erreur : ' + e.message);
+            }
+        }
+        
+        /**
+         * Modal de gestion des disponibilités
+         */
+        function showDisponibilitesModal() {
+            const plage1 = membreData?.plageHoraire1 ? tryParse(membreData.plageHoraire1) : null;
+            const plage2 = membreData?.plageHoraire2 ? tryParse(membreData.plageHoraire2) : null;
+            
+            const jours = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+            const optionsJours = jours.map(j => `<option value="${j}">${j.charAt(0).toUpperCase() + j.slice(1)}</option>`).join('');
+            
+            showModal(`
+                <h3>📅 Mes disponibilités</h3>
+                <p style="font-size: 0.85rem; color: var(--gray); margin-bottom: 12px;">
+                    Indique quand tu es disponible pour jouer. Tu seras prévenu par email quand une partie est créée pendant tes créneaux.
+                </p>
+                
+                <div style="background: #f0fdf4; padding: 12px; border-radius: 8px; margin-bottom: 10px;">
+                    <p style="margin: 0 0 8px 0; font-weight: bold; font-size: 0.9rem;">📅 Créneau 1</p>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <select id="dispo1Jour" style="flex:2; padding:6px;">
+                            <option value="">-- Jour --</option>
+                            ${optionsJours}
+                        </select>
+                        <input type="time" id="dispo1Debut" value="${plage1?.heureDebut || '18:00'}" style="flex:1; padding:6px;">
+                        <span>→</span>
+                        <input type="time" id="dispo1Fin" value="${plage1?.heureFin || '22:00'}" style="flex:1; padding:6px;">
+                    </div>
+                </div>
+                
+                <div style="background: #dbeafe; padding: 12px; border-radius: 8px; margin-bottom: 10px;">
+                    <p style="margin: 0 0 8px 0; font-weight: bold; font-size: 0.9rem;">📅 Créneau 2 (optionnel)</p>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <select id="dispo2Jour" style="flex:2; padding:6px;">
+                            <option value="">-- Jour --</option>
+                            ${optionsJours}
+                        </select>
+                        <input type="time" id="dispo2Debut" value="${plage2?.heureDebut || '14:00'}" style="flex:1; padding:6px;">
+                        <span>→</span>
+                        <input type="time" id="dispo2Fin" value="${plage2?.heureFin || '18:00'}" style="flex:1; padding:6px;">
+                    </div>
+                </div>
+            `, `
+                <button class="btn btn-primary" onclick="sauverDisponibilites()">💾 Enregistrer</button>
+                <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+            `);
+            
+            // Pré-sélectionner les jours si déjà définis
+            if (plage1?.jour) document.getElementById('dispo1Jour').value = plage1.jour;
+            if (plage2?.jour) document.getElementById('dispo2Jour').value = plage2.jour;
+        }
+        
+        function tryParse(str) { try { return JSON.parse(str); } catch(e) { return null; } }
+        
+        /**
+         * Sauver les disponibilités via l'API
+         */
+        async function sauverDisponibilites() {
+            if (!membreEmail) { showError('Tu dois être inscrit pour définir tes disponibilités.'); return; }
+            
+            const jour1 = document.getElementById('dispo1Jour')?.value;
+            const debut1 = document.getElementById('dispo1Debut')?.value;
+            const fin1 = document.getElementById('dispo1Fin')?.value;
+            const jour2 = document.getElementById('dispo2Jour')?.value;
+            const debut2 = document.getElementById('dispo2Debut')?.value;
+            const fin2 = document.getElementById('dispo2Fin')?.value;
+            
+            const plage1 = jour1 ? { jour: jour1, heureDebut: debut1, heureFin: fin1 } : null;
+            const plage2 = jour2 ? { jour: jour2, heureDebut: debut2, heureFin: fin2 } : null;
+            
+            closeModal();
+            try {
+                const result = await apiCommunaute({ 
+                    action: 'majPlagesHoraires', 
+                    email: membreEmail, 
+                    plage1, plage2 
+                });
+                if (result.success) {
+                    // Mettre à jour localement
+                    if (membreData) {
+                        membreData.plageHoraire1 = plage1 ? JSON.stringify(plage1) : '';
+                        membreData.plageHoraire2 = plage2 ? JSON.stringify(plage2) : '';
+                    }
+                    sendSystemMessage('📅 Disponibilités enregistrées !');
+                } else {
+                    showError(result.error || 'Erreur');
+                }
+            } catch(e) {
+                showError('Erreur : ' + e.message);
+            }
+        }
+
         function detecterPartiesSauvees() {
             const container = document.getElementById('partiesSauvees');
             if (!container) return;
@@ -1355,7 +1627,7 @@
                 <input type="email" id="emailOptional" placeholder="email@exemple.com" 
                        style="width: 100%; padding: 10px; font-size: 1rem; margin-top: 8px;">
                 <p style="font-size: 0.75rem; color: #9ca3af; margin-top: 6px;">
-                    🔒 Ton email ne sera pas partagé. Il sert uniquement à la reconnexion.
+                    🔒 Ton email ne sera pas partagé. Il sert à la reconnexion et à te prévenir des prochaines parties.
                 </p>
             `, `
                 <button class="btn btn-primary" onclick="(function(){
@@ -1366,7 +1638,13 @@
                 <button class="btn" style="background: #f3f4f6; color: #6b7280;" onclick="closeModal(); window._emailOptionalCallback('');">Passer →</button>
             `);
             
-            window._emailOptionalCallback = callback;
+            // Wrapper le callback pour ajouter l'inscription communautaire
+            window._emailOptionalCallback = (email) => {
+                if (email && email.includes('@')) {
+                    proposerInscriptionCommunautaire(email, myName);
+                }
+                callback(email);
+            };
         }
         
         /**
@@ -4629,6 +4907,13 @@ activiteId: actId
         
         // Modal d'introduction du jeu (avant choix de profil)
         function showIntroModal(callback) {
+            // Si membre vérifié → skip l'intro (il connaît déjà le jeu)
+            if (membreVerifie && membreData) {
+                console.log('⏩ Skip intro pour membre vérifié:', membreData.prenom);
+                callback();
+                return;
+            }
+            
             document.getElementById('modalContainer').innerHTML = `
                 <div class="modal-overlay">
                     <div class="modal" style="max-height: 85vh; overflow-y: auto;">
@@ -15504,7 +15789,7 @@ function initSystemeDe() {
             showBilanFinal();
         }
         
-        // C4: Bilan final puis graphique
+        // C4: Bilan final puis graphique puis analyse puis options fin
         function showBilanFinal() {
             closeModal();
             
@@ -15516,16 +15801,26 @@ function initSystemeDe() {
             // Marquer la partie comme terminée dans Firebase
             if (isHost && gameRef) {
                 gameRef.child('state/ended').set(true).catch(e => console.warn('⚠️', e));
-                // Mettre à jour le statut dans le Sheet communautaire
                 apiCommunaute({ action: 'majStatutPartie', codePartie: currentGameCode, statut: 'terminee', botsUtilises: Object.values(playersData).filter(p => p.isBot).length }).catch(() => {});
             }
             
-            // Afficher le graphique d'évolution avec les boutons de fin
-            showGraphiqueEvolutionFinal();
+            // Étape 1 : Afficher le bilan tableau
+            showBilanModal();
+            
+            // Remplacer les boutons du bilan par un flux séquentiel
+            setTimeout(() => {
+                const footer = document.querySelector('#modal .modal-footer') || document.querySelector('#modal div:last-child');
+                if (footer && footer.querySelectorAll('button').length > 0) {
+                    footer.innerHTML = `
+                        <button class="btn btn-primary" onclick="closeModal(); showGraphiqueEvolutionFinale()">📈 Voir l'évolution</button>
+                        <button class="btn btn-secondary" onclick="closeModal(); showOptionsFinPartie()">⏩ Passer</button>
+                    `;
+                }
+            }, 100);
         }
         
-        // Graphique d'évolution avec boutons de fin de partie
-        function showGraphiqueEvolutionFinal() {
+        // Étape 2 : Graphique d'évolution avec bouton "Continuer"
+        function showGraphiqueEvolutionFinale() {
             // S'assurer qu'on a le bilan actuel
             const currentTour = gameState?.turn || 1;
             if (historiqueBilans.length === 0 || historiqueBilans[historiqueBilans.length - 1].tour !== currentTour) {
@@ -15533,44 +15828,52 @@ function initSystemeDe() {
             }
             
             if (historiqueBilans.length < 2) {
-                showFinPartieButtons('Pas assez de données pour le graphique.');
+                // Pas assez de données → passer à l'analyse
+                lancerAnalyseFinale();
                 return;
             }
             
-            // Réutiliser le graphique normal mais remplacer les boutons
+            // Afficher le graphique normal
             showGraphiqueEvolution();
             
-            // Remplacer les boutons après un court délai (le graphique est déjà affiché)
+            // Remplacer les boutons par "Continuer vers l'analyse"
             setTimeout(() => {
-                const graphBtns = document.querySelector('#graphModal .modal-footer, #graphModal div:last-child');
+                const graphBtns = document.querySelector('#graphModal .modal-footer') || document.querySelector('#graphModal div:last-child');
                 if (graphBtns) {
-                    graphBtns.innerHTML = getFinPartieButtonsHtml();
+                    graphBtns.innerHTML = `
+                        <button class="btn btn-primary" onclick="closeGraphModal(); lancerAnalyseFinale()">💬 Lancer l'analyse</button>
+                        <button class="btn btn-secondary" onclick="closeGraphModal(); showOptionsFinPartie()">⏩ Passer</button>
+                    `;
                 }
             }, 200);
         }
         
-        // Boutons affichés après la fin de partie
-        function getFinPartieButtonsHtml() {
-            const deleteBtn = isHost ? `
-                <button class="btn" style="background:#fee2e2; color:#dc2626;" onclick="confirmerSuppressionPartie()">🗑️ Supprimer la partie</button>
-            ` : '';
-            return `
-                <button class="btn" style="background:#e8f5e9; color:#1b5e20;" onclick="closeGraphModal(); analyserBilanTexte(true);">💬 Analyse</button>
-                <button class="btn btn-primary" onclick="retourAccueil()">🏠 Nouvelle partie</button>
-                ${deleteBtn}
-            `;
+        // Étape 3 : Analyse textuelle dans le chat
+        function lancerAnalyseFinale() {
+            // Compter les commentaires d'abord (sans afficher)
+            const commentaires = analyserBilanTexte(false);
+            // Puis afficher dans le chat
+            analyserBilanTexte(true);
+            // Après l'analyse (délai pour laisser les messages s'afficher), montrer les options finales
+            setTimeout(() => {
+                showOptionsFinPartie();
+            }, (commentaires.length + 2) * 900);
         }
         
-        // Afficher les boutons de fin si pas de graphique
-        function showFinPartieButtons(message) {
+        // Étape 4 : Options finales (accueil, supprimer)
+        function showOptionsFinPartie() {
             const deleteBtn = isHost ? `
                 <button class="btn" style="background:#fee2e2; color:#dc2626;" onclick="confirmerSuppressionPartie()">🗑️ Supprimer la partie</button>
             ` : '';
             showModal(`
-                <h3>🏁 Partie terminée</h3>
-                <p style="color: var(--gray);">${message || 'Merci d\'avoir joué !'}</p>
+                <h3>🏁 Partie terminée !</h3>
+                <p style="text-align: center; color: var(--gray); font-size: 0.9rem;">
+                    Merci d'avoir joué à ESPOYR !<br>
+                    Tu peux créer une nouvelle partie ou supprimer celle-ci.
+                </p>
             `, `
                 <button class="btn btn-primary" onclick="retourAccueil()">🏠 Nouvelle partie</button>
+                <button class="btn" style="background:#dbeafe; color:#2563eb;" onclick="closeModal(); showBilanModal()">📊 Revoir le bilan</button>
                 ${deleteBtn}
             `);
         }
