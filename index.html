@@ -382,6 +382,8 @@
                 ➕ Créer une nouvelle partie
             </button>
             
+            <!-- Parties sauvées détectées automatiquement -->
+            <div id="partiesSauvees" style="display: none; margin-top: 12px;"></div>
            
             
             <div class="divider"><span>ou rejoindre</span></div>
@@ -393,6 +395,7 @@
                        style="margin-top: 8px; text-align: center; font-size: 0.95rem;">
 
                 <button class="btn btn-secondary btn-full" onclick="joinGame()">🚪 Rejoindre une partie</button>
+                <button class="btn btn-full" style="background: #dbeafe; color: #1d4ed8; margin-top: 6px; font-size: 0.85rem;" onclick="showReconnexionEmailModal('')">📧 Me reconnecter par email</button>
             </div>
         </div>
         
@@ -551,6 +554,11 @@
         firebase.auth().signInAnonymously()
           .then(() => {
             console.log("✅ Connecté anonymement à Firebase");
+            // Vérifier si reconnexion depuis un lien email
+            if (!verifierURLReconnexion()) {
+                // Détecter les parties sauvées localement
+                detecterPartiesSauvees();
+            }
           })
           .catch((error) => {
             console.error("❌ Erreur connexion anonyme :", error);
@@ -1018,6 +1026,9 @@
 
         // ========== REPRISE / TICKET JOUEUR (A+B) ==========
         const RESUME_KEY_PREFIX = 'ESPOYR_RESUME_';
+        const API_URL = 'https://script.google.com/macros/s/AKfycby_u0XpPkw5ANLD-o6L7dgPn2ACdHXQcQNfIfGAMPJDSbdOs2arsNIe-opvDq0lOdaDyw/exec';
+        let membreVerifie = false;
+        let membreEmail = '';
         const ABSENT_AFTER_MS = 90 * 1000; // 90s : un joueur est considéré "absent" si lastSeen est trop ancien
         const FORCE_WARNING_MS = 60 * 1000;  // 60s : bouton force passe en jaune
         const FORCE_URGENT_MS = 90 * 1000;   // 90s : bouton force passe en rouge clignotant
@@ -1101,6 +1112,293 @@
             document.body.appendChild(a); a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+        }
+
+        // ══════════════════════════════════════════════════════════
+        // ██  API COMMUNAUTAIRE                                  ██
+        // ══════════════════════════════════════════════════════════
+        
+        async function apiCommunaute(data) {
+            try {
+                const resp = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: JSON.stringify(data)
+                });
+                return await resp.json();
+            } catch(e) {
+                console.warn('⚠️ API communautaire indisponible:', e);
+                return { success: false, error: 'API indisponible' };
+            }
+        }
+        
+        // ══════════════════════════════════════════════════════════
+        // ██  SYSTÈME DE RECONNEXION                             ██
+        // ══════════════════════════════════════════════════════════
+        
+        /**
+         * Détecter les parties sauvées dans localStorage et afficher un bouton "Reprendre"
+         */
+        function detecterPartiesSauvees() {
+            const container = document.getElementById('partiesSauvees');
+            if (!container) return;
+            
+            const sauvees = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith(RESUME_KEY_PREFIX)) {
+                    try {
+                        const data = JSON.parse(localStorage.getItem(key));
+                        if (data && data.code && data.playerId && data.secret) {
+                            const age = Date.now() - (data.savedAt || 0);
+                            if (age < 7 * 24 * 60 * 60 * 1000) {
+                                sauvees.push(data);
+                            }
+                        }
+                    } catch(e) {}
+                }
+            }
+            
+            if (sauvees.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+            
+            sauvees.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+            
+            container.style.display = 'block';
+            container.innerHTML = `
+                <h3 style="font-size: 0.9rem; color: #059669; margin-bottom: 8px;">🔄 Reprendre ta partie</h3>
+                ${sauvees.map(s => `
+                    <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; padding: 10px; margin-bottom: 6px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <div>
+                                <strong>${s.name || 'Joueur'}</strong>
+                                <span style="font-family: monospace; color: #059669; font-weight: bold; margin-left: 8px;">${s.code}</span>
+                                <div style="font-size: 0.75rem; color: #6b7280;">${s.avatar || '⬜'} Sauvé ${new Date(s.savedAt).toLocaleString('fr-BE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+                            </div>
+                            <button class="btn" style="background: #059669; color: white; font-size: 0.85rem; padding: 8px 16px;"
+                                    onclick="reprendrePartieSauvee('${s.code}')">
+                                🔄 Reprendre
+                            </button>
+                        </div>
+                    </div>
+                `).join('')}
+            `;
+        }
+        
+        async function reprendrePartieSauvee(code) {
+            const saved = loadResume(code);
+            if (!saved) { showError('Sauvegarde introuvable.'); return; }
+            document.getElementById('playerName').value = saved.name || '';
+            document.getElementById('gameCode').value = code;
+            myName = saved.name;
+            myAvatar = saved.avatar || '🐤';
+            await joinGame();
+        }
+        
+        /**
+         * Reconnexion via token (depuis lien email)
+         */
+        async function reconnecterViaToken(code, playerId, token) {
+            showModal(
+                `<h3>🔄 Reconnexion en cours...</h3>
+                 <p>Vérification de ton lien...</p>
+                 <div class="loading"></div>`,
+                ''
+            );
+            
+            try {
+                const result = await apiCommunaute({
+                    action: 'validerTokenReconnexion',
+                    codePartie: code,
+                    playerId: playerId,
+                    token: token
+                });
+                
+                if (result.success) {
+                    const secret = generateSecret(24);
+                    const secretHash = await sha256Hex(secret);
+                    
+                    const pSnap = await db.ref(`parties/${code}/players/${result.playerId}`).once('value');
+                    if (!pSnap.exists()) {
+                        closeModal();
+                        showError('Joueur introuvable dans la partie. Elle est peut-être terminée.');
+                        return;
+                    }
+                    
+                    const p = pSnap.val();
+                    
+                    await db.ref(`parties/${code}/players/${result.playerId}`).update({ 
+                        secretHash, isConnected: true, lastSeen: firebase.database.ServerValue.TIMESTAMP 
+                    });
+                    
+                    myName = p.name;
+                    myAvatar = p.avatar;
+                    myPlayerId = p.id;
+                    currentGameCode = code;
+                    isHost = !!p.isHost;
+                    myProfil = p.profil || 'contributif';
+                    
+                    saveResume(code, { code, name: myName, playerId: myPlayerId, secret, avatar: myAvatar, savedAt: Date.now() });
+                    
+                    gameRef = db.ref(`parties/${code}`);
+                    subscribeToGame(code);
+                    
+                    const gameSnap = await db.ref(`parties/${code}`).once('value');
+                    showLobbyOrGame(gameSnap.val());
+                    startHeartbeat();
+                    
+                    closeModal();
+                    sendSystemMessage(`🔄 ${myName} s'est reconnecté !`);
+                } else {
+                    closeModal();
+                    showError(result.error || 'Lien invalide ou expiré.');
+                }
+            } catch(e) {
+                closeModal();
+                showError('Erreur de reconnexion : ' + e.message);
+            }
+        }
+        
+        /**
+         * Modal de demande de reconnexion par email
+         */
+        function showReconnexionEmailModal(codePartie) {
+            showModal(`
+                <h3>📧 Reconnexion par email</h3>
+                <p style="font-size: 0.9rem; color: #6b7280;">
+                    Tu as été déconnecté ? Donne ton prénom et l'email que tu avais utilisé, et on t'envoie un lien pour reprendre ta place.
+                </p>
+                <div style="margin-top: 10px;">
+                    <input type="text" id="reconnPrenom" placeholder="Ton prénom dans la partie" 
+                           style="width: 100%; padding: 8px; margin-bottom: 8px;">
+                    <input type="email" id="reconnEmail" placeholder="Ton email" 
+                           style="width: 100%; padding: 8px; margin-bottom: 8px;">
+                    <input type="text" id="reconnCode" placeholder="Code de la partie" value="${codePartie || ''}"
+                           style="width: 100%; padding: 8px; text-transform: uppercase; letter-spacing: 2px; text-align: center; ${codePartie ? 'background: #f3f4f6;' : ''}"
+                           ${codePartie ? 'readonly' : ''}>
+                </div>
+            `, `
+                <button class="btn btn-primary" onclick="envoyerDemandeReconnexion()">📧 Envoyer le lien</button>
+                <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+            `);
+        }
+        
+        async function envoyerDemandeReconnexion() {
+            const prenom = (document.getElementById('reconnPrenom')?.value || '').trim();
+            const email = (document.getElementById('reconnEmail')?.value || '').trim().toLowerCase();
+            const code = (document.getElementById('reconnCode')?.value || '').trim().toUpperCase();
+            
+            if (!prenom || !email || !code) {
+                showError('Remplis tous les champs.');
+                return;
+            }
+            
+            closeModal();
+            showModal(`<h3>📧 Envoi en cours...</h3><div class="loading"></div>`, '');
+            
+            try {
+                const result = await apiCommunaute({
+                    action: 'demanderReconnexion',
+                    codePartie: code,
+                    email: email,
+                    prenom: prenom
+                });
+                
+                closeModal();
+                
+                if (result.success) {
+                    showModal(
+                        `<h3>✅ Email envoyé !</h3>
+                         <p style="font-size: 0.95rem;">${result.message}</p>
+                         <p style="font-size: 0.85rem; color: #6b7280;">Vérifie ta boîte mail (et les spams). Le lien est valable 30 minutes.</p>`,
+                        `<button class="btn btn-primary" onclick="closeModal()">OK</button>`
+                    );
+                } else {
+                    showError(result.error || 'Erreur de reconnexion');
+                }
+            } catch(e) {
+                closeModal();
+                showError('Erreur : ' + e.message);
+            }
+        }
+        
+        /**
+         * Modal pour demander l'email (optionnel) après choix de profil
+         */
+        function demanderEmailOptional(callback) {
+            // Si membre vérifié, on a déjà l'email → skip
+            if (membreVerifie && membreEmail) {
+                callback(membreEmail);
+                return;
+            }
+            
+            showModal(`
+                <h3>📧 Ton email (optionnel)</h3>
+                <p style="font-size: 0.9rem; color: #6b7280;">
+                    Si tu donnes ton email, tu pourras reprendre ta partie même en cas de déconnexion ou en changeant d'appareil.
+                </p>
+                <input type="email" id="emailOptional" placeholder="email@exemple.com" 
+                       style="width: 100%; padding: 10px; font-size: 1rem; margin-top: 8px;">
+                <p style="font-size: 0.75rem; color: #9ca3af; margin-top: 6px;">
+                    🔒 Ton email ne sera pas partagé. Il sert uniquement à la reconnexion.
+                </p>
+            `, `
+                <button class="btn btn-primary" onclick="(function(){
+                    const email = (document.getElementById('emailOptional')?.value || '').trim().toLowerCase();
+                    closeModal();
+                    window._emailOptionalCallback(email);
+                })()">Continuer</button>
+                <button class="btn" style="background: #f3f4f6; color: #6b7280;" onclick="closeModal(); window._emailOptionalCallback('');">Passer →</button>
+            `);
+            
+            window._emailOptionalCallback = callback;
+        }
+        
+        /**
+         * Enregistrer l'email du joueur dans Firebase (hashé) + Sheet (clair via API)
+         */
+        async function enregistrerEmailJoueurAPI(codePartie, playerId, email, prenom) {
+            if (!email || !email.includes('@')) return;
+            
+            try {
+                // 1) Stocker le hash dans Firebase
+                const emailHash = await sha256Hex(email.toLowerCase());
+                await db.ref(`parties/${codePartie}/players/${playerId}`).update({ emailHash });
+                
+                // 2) Stocker en clair dans le Sheet via API
+                await apiCommunaute({
+                    action: 'enregistrerEmailJoueur',
+                    codePartie,
+                    playerId,
+                    email: email.toLowerCase(),
+                    prenom
+                });
+                
+                console.log('✅ Email joueur enregistré pour reconnexion');
+            } catch(e) {
+                console.warn('⚠️ Erreur enregistrement email:', e);
+            }
+        }
+        
+        /**
+         * Vérifier les paramètres URL pour reconnexion depuis email
+         */
+        function verifierURLReconnexion() {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('reconnecter') === '1') {
+                const code = params.get('code');
+                const playerId = params.get('playerId');
+                const token = params.get('token');
+                if (code && playerId && token) {
+                    // Nettoyer l'URL
+                    window.history.replaceState({}, '', window.location.pathname);
+                    reconnecterViaToken(code, playerId, token);
+                    return true;
+                }
+            }
+            return false;
         }
 
 
@@ -4272,17 +4570,15 @@ activiteId: actId
 
                 // Sauvegarde locale + ticket de reprise
                 saveResume(code, { code, name: myName, playerId: myPlayerId, secret, avatar: myAvatar, savedAt: Date.now() });
-                const ticket = `${myPlayerId}|${secret}`;
                 LAST_RESUME_CODE = code;
                 LAST_RESUME_NAME = myName;
-                showModal(
-                    `<h3>🎟️ Ticket de reprise</h3>
-                     <p style="color: var(--gray); font-size: 0.9rem;">Garde ce ticket pour reprendre la partie même en changeant d'appareil.</p>
-                     <div id="ticketValue" style="background:#f3f4f6; padding:12px; border-radius:12px; font-family: monospace; word-break: break-all;">${ticket}</div>`,
-                    `<button class="btn btn-primary" onclick="copyToClipboard(document.getElementById('ticketValue').textContent)">📋 Copier</button>
-                     <button class="btn" onclick="downloadResumeTicket()">💾 Télécharger</button>
-                     <button class="btn" onclick="closeModal()">OK</button>`
-                );
+                
+                // Demander email (optionnel) pour la reconnexion
+                demanderEmailOptional(async (emailJoueur) => {
+                    if (emailJoueur) {
+                        await enregistrerEmailJoueurAPI(code, myPlayerId, emailJoueur, myName);
+                    }
+                });
 
                 
                 // Écriture capital initial - gameRef est maintenant initialisé !
@@ -4530,17 +4826,14 @@ activiteId: actId
                 showLobbyOrGame(gameData);
                 startHeartbeat();
 
-                const ticket = `${myPlayerId}|${secret}`;
                 LAST_RESUME_CODE = code;
                 LAST_RESUME_NAME = myName;
-                showModal(
-                    `<h3>🎟️ Ticket de reprise</h3>
-                     <p style="color: var(--gray); font-size: 0.9rem;">Garde ce ticket pour reprendre la partie même en changeant d'appareil.</p>
-                     <div id="ticketValue" style="background:#f3f4f6; padding:12px; border-radius:12px; font-family: monospace; word-break: break-all;">${ticket}</div>`,
-                    `<button class="btn btn-primary" onclick="copyToClipboard(document.getElementById('ticketValue').textContent)">📋 Copier</button>
-                     <button class="btn" onclick="downloadResumeTicket()">💾 Télécharger</button>
-                     <button class="btn" onclick="closeModal()">OK</button>`
-                );
+                // Demander email pour reconnexion future
+                demanderEmailOptional(async (emailJoueur) => {
+                    if (emailJoueur) {
+                        await enregistrerEmailJoueurAPI(code, myPlayerId, emailJoueur, myName);
+                    }
+                });
                 return;
             }
 
@@ -4588,6 +4881,18 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                 document.getElementById('waitingMessage').classList.remove('hidden');
                 
                 sendSystemMessage(`${myName} (${profil === 'creatif' ? '🎨 Créatif' : '🏛️ Contributif'}) a rejoint !`);
+                
+                // Sauvegarde locale
+                saveResume(code, { code, name: myName, playerId: myPlayerId, secret, avatar: myAvatar, savedAt: Date.now() });
+                LAST_RESUME_CODE = code;
+                LAST_RESUME_NAME = myName;
+                
+                // Demander email (optionnel) pour la reconnexion
+                demanderEmailOptional(async (emailJoueur) => {
+                    if (emailJoueur) {
+                        await enregistrerEmailJoueurAPI(code, myPlayerId, emailJoueur, myName);
+                    }
+                });
             }));
         }
         
