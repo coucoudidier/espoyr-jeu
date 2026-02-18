@@ -428,6 +428,7 @@
                     <button class="btn" style="flex:1; background: #dbeafe; color: #2563eb;" onclick="showAddBotModal()">👥 Joueur complémentaire</button>
                     <button class="btn" style="flex:1; background: #fef3c7; color: #92400e;" onclick="showConfigModal()">⚙️ Config</button>
                 </div>
+                <button id="lobbyDeleteBtn" class="btn hidden" style="width:100%; margin-top: 10px; background: #fee2e2; color: #dc2626; font-size: 0.85rem;" onclick="confirmerSuppressionLobby()">🗑️ Supprimer cette partie</button>
             </div>
             <div id="waitingMessage" style="text-align: center; margin-top: 15px; color: var(--gray);">
                 <div class="loading"></div>
@@ -6058,6 +6059,16 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                     </div>
                 `).join('');
             }
+            // Bouton suppression lobby : visible si hôte ET seul (ou aucun autre joueur humain non-bot)
+            const lobbyDeleteBtn = document.getElementById('lobbyDeleteBtn');
+            if (lobbyDeleteBtn && isHost) {
+                const autresJoueurs = playerArray.filter(p => p.id !== myPlayerId && !p.isBot);
+                if (autresJoueurs.length === 0) {
+                    lobbyDeleteBtn.classList.remove('hidden');
+                } else {
+                    lobbyDeleteBtn.classList.add('hidden');
+                }
+            }
             
             // Game
             const gameEl = document.getElementById('gamePlayers');
@@ -6173,6 +6184,47 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             
             const sensText = '🎯 Chaque joueur choisira son sens de déplacement';
             sendSystemMessage(`🚀 La partie commence ! ${sensText}`);
+            
+            // 📥 Téléchargement automatique du fichier de la partie pour l'hôte
+            try {
+                const maintenant = new Date();
+                const dateStr = maintenant.toLocaleDateString('fr-BE', { day:'2-digit', month:'2-digit', year:'numeric' });
+                const heureStr = maintenant.toLocaleTimeString('fr-BE', { hour:'2-digit', minute:'2-digit' });
+                const dateFile = maintenant.toISOString().slice(0, 10); // YYYY-MM-DD
+                
+                const joueursList = Object.values(playersData)
+                    .sort((a, b) => (a.playOrder || 0) - (b.playOrder || 0))
+                    .map(p => `  ${p.isHost ? '👑' : p.isBot ? '🤖' : '🧑'} ${p.name}${p.isHost ? ' (Hôte)' : p.isBot ? ` (Bot ${p.botProfil || ''})` : ''}`)
+                    .join('\n');
+                
+                const contenu = `=== PARTIE ESPOYR ===
+
+Code de la partie : ${currentGameCode}
+Date/heure       : ${dateStr} ${heureStr}
+Hôte             : ${playersData[myPlayerId]?.name || 'Hôte'}
+
+Joueurs :
+${joueursList}
+
+🔗 Lien de reconnexion :
+https://doucoudier.github.io/ESPOYR/?code=${currentGameCode}
+
+---
+Conserve ce fichier pour rejoindre la partie en cas de déconnexion.`;
+                
+                const blob = new Blob([contenu], { type: 'text/plain;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `espoyr-${currentGameCode}-${dateFile}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                console.log(`📥 Fichier de partie téléchargé : espoyr-${currentGameCode}-${dateFile}.txt`);
+            } catch(e) {
+                console.warn('⚠️ Téléchargement fichier partie échoué :', e);
+            }
             
             // LOG EVENT: GAME_START
             logEvent('GAME_START', myPlayerId, {
@@ -16580,6 +16632,24 @@ function initSystemeDe() {
                         ⚠️ Les sauvegardes locales et l'historique seront aussi nettoyés.<br>
                         Cette action est irréversible.
                     </p>
+                </div>
+            `, `
+                <button class="btn" style="background:#dc2626; color:white;" onclick="executerSuppressionPartie()">🗑️ Oui, supprimer</button>
+                <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+            `);
+        }
+        
+        // Suppression depuis le lobby (hôte seul)
+        function confirmerSuppressionLobby() {
+            if (!isHost || !currentGameCode) return;
+            showModal(`
+                <h3>🗑️ Supprimer la partie ?</h3>
+                <p style="font-size: 0.9rem; color: var(--gray);">
+                    La partie <strong style="font-family: monospace; color: #dc2626;">${currentGameCode}</strong> 
+                    sera définitivement supprimée.
+                </p>
+                <div style="background: #fef3c7; padding: 10px; border-radius: 8px; margin-top: 10px;">
+                    <p style="margin: 0; font-size: 0.85rem;">⚠️ Cette action est irréversible.</p>
                 </div>
             `, `
                 <button class="btn" style="background:#dc2626; color:white;" onclick="executerSuppressionPartie()">🗑️ Oui, supprimer</button>
