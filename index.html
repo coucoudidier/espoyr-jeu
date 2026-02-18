@@ -577,15 +577,15 @@
         firebase.initializeApp(firebaseConfig);
         // 🔐 Connexion anonyme (nécessaire si règles = auth != null)
         firebase.auth().signInAnonymously()
-          .then(() => {
+          .then(async () => {
             console.log("✅ Connecté anonymement à Firebase");
             // Vérifier si reconnexion depuis un lien email
             if (!verifierURLReconnexion()) {
-                // Détecter membre enregistré
-                detecterMembre();
-                // Détecter les parties sauvées localement
+                // 1) Détecter membre enregistré (AWAIT — nécessaire avant chargerPartiesAVenir)
+                await detecterMembre();
+                // 2) Détecter les parties sauvées localement (sync, pré-remplit prénom si pas déjà fait)
                 detecterPartiesSauvees();
-                // Charger les parties planifiées à venir
+                // 3) Charger les parties planifiées (utilise membreEmail pour identifier l'organisateur)
                 chargerPartiesAVenir();
             }
           })
@@ -1055,7 +1055,7 @@
 
         // ========== REPRISE / TICKET JOUEUR (A+B) ==========
         const RESUME_KEY_PREFIX = 'ESPOYR_RESUME_';
-        const API_URL = 'https://script.google.com/macros/s/AKfycbyNqa_sRHbTPCMyc9V7GEZhVHPw8S90TKGGVHRUAOAQyXHva5JNJW0ob0oijU4UKfw85A/exec';
+        const API_URL = 'https://script.google.com/macros/s/AKfycbz15Wq8KG-R4LfzaH2u7wzUZu4-aP2J_pFqHCJpBtUaMWXafhjOH55bayM9KvPU-liELQ/exec';
         let membreVerifie = false;
         let membreEmail = '';
         let membreData = null; // Données complètes du membre (prenom, cote, humeur, etc.)
@@ -1353,10 +1353,13 @@
                 showModal(`
                     <h3>🕐 Mes disponibilités</h3>
                     <p style="font-size: 0.9rem; color: var(--gray);">
-                        Pour enregistrer tes disponibilités et être prévenu des prochaines parties, entre ton email :
+                        Pour enregistrer tes disponibilités et être prévenu des prochaines parties, tu dois être <strong>membre vérifié</strong>.
                     </p>
                     <input type="email" id="dispoEmail" placeholder="email@exemple.com" 
                            style="width: 100%; padding: 10px; font-size: 1rem; margin-top: 8px;">
+                    <p style="font-size: 0.75rem; color: #9ca3af; margin-top: 6px;">
+                        📧 Tu recevras un code de vérification par email.
+                    </p>
                 `, `
                     <button class="btn btn-primary" onclick="(function(){
                         const email = (document.getElementById('dispoEmail')?.value || '').trim();
@@ -1365,9 +1368,25 @@
                         proposerInscriptionCommunautaire(email, prenom);
                         membreEmail = email.toLowerCase();
                         closeModal();
-                        setTimeout(() => showDisponibilitesModal(), 500);
-                    })()">Continuer</button>
+                    })()">📧 S'inscrire</button>
                     <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+                `);
+                return;
+            }
+            
+            // Si email donné mais pas encore vérifié → bloquer
+            if (!membreVerifie) {
+                showModal(`
+                    <h3>🕐 Mes disponibilités</h3>
+                    <p style="font-size: 0.9rem; color: var(--gray);">
+                        Tu dois d'abord <strong>vérifier ton email</strong> pour accéder aux disponibilités.
+                    </p>
+                    <p style="font-size: 0.85rem; color: #6b7280;">
+                        Vérifie ta boîte mail pour le code à 4 chiffres, ou demande un nouveau code.
+                    </p>
+                `, `
+                    <button class="btn btn-primary" onclick="closeModal(); lancerVerificationEmail('${membreEmail}');">📧 Renvoyer le code</button>
+                    <button class="btn btn-secondary" onclick="closeModal()">Plus tard</button>
                 `);
                 return;
             }
@@ -1468,59 +1487,180 @@
         // ══════════════════════════════════════════════════════════
         
         /**
-         * Modal pour programmer une partie à une date/heure précise
+         * Modal pour programmer une partie — avec tableau des disponibilités 7 jours
          */
         function showProgrammerPartieModal() {
             const prenom = document.getElementById('playerName')?.value?.trim() || myName || '';
             if (!prenom) { showError('Entre ton prénom d\'abord.'); return; }
             
-            // Date par défaut : demain à 19h
-            const demain = new Date();
-            demain.setDate(demain.getDate() + 1);
-            const dateDefaut = demain.toISOString().split('T')[0];
-            
+            // Afficher le modal avec chargement, puis charger les dispos
             showModal(`
                 <h3>📅 Programmer une partie</h3>
-                <p style="font-size: 0.85rem; color: var(--gray); margin-bottom: 12px;">
-                    Choisis une date et heure. Tous les membres disponibles seront prévenus par email.
-                </p>
-                
-                <div style="background: #f0fdf4; padding: 12px; border-radius: 8px; margin-bottom: 10px;">
-                    <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-                        <div style="flex: 1;">
-                            <label style="font-size: 0.8rem; color: #6b7280; display: block; margin-bottom: 4px;">📆 Date</label>
-                            <input type="date" id="planifDate" value="${dateDefaut}" style="width: 100%; padding: 8px;">
-                        </div>
-                        <div style="flex: 1;">
-                            <label style="font-size: 0.8rem; color: #6b7280; display: block; margin-bottom: 4px;">🕐 Heure</label>
-                            <input type="time" id="planifHeure" value="19:00" style="width: 100%; padding: 8px;">
-                        </div>
-                    </div>
-                    <div>
-                        <label style="font-size: 0.8rem; color: #6b7280; display: block; margin-bottom: 4px;">👥 Nombre de places</label>
-                        <select id="planifPlaces" style="width: 100%; padding: 8px;">
-                            <option value="2">2 joueurs</option>
-                            <option value="3">3 joueurs</option>
-                            <option value="4" selected>4 joueurs</option>
-                            <option value="5">5 joueurs</option>
-                            <option value="6">6 joueurs</option>
-                        </select>
+                <div id="dispoTableZone" style="margin-bottom: 12px;">
+                    <div style="text-align: center; padding: 20px; color: var(--gray);">
+                        <div class="loading"></div>
+                        <p style="font-size: 0.85rem; margin-top: 8px;">Chargement des disponibilités...</p>
                     </div>
                 </div>
-                
-                ${!membreEmail ? `
-                    <div style="background: #fef3c7; padding: 10px; border-radius: 8px; margin-bottom: 10px;">
-                        <p style="margin: 0; font-size: 0.8rem;">
-                            📧 Pour notifier les autres joueurs, entre ton email :
-                        </p>
-                        <input type="email" id="planifEmail" placeholder="email@exemple.com" 
-                               style="width: 100%; padding: 8px; margin-top: 6px;">
+                <div id="planifFormZone" style="display: none;">
+                    <div style="background: #f0fdf4; padding: 12px; border-radius: 8px; margin-bottom: 10px;">
+                        <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                            <div style="flex: 1;">
+                                <label style="font-size: 0.8rem; color: #6b7280; display: block; margin-bottom: 4px;">📆 Date</label>
+                                <input type="date" id="planifDate" style="width: 100%; padding: 8px;">
+                            </div>
+                            <div style="flex: 1;">
+                                <label style="font-size: 0.8rem; color: #6b7280; display: block; margin-bottom: 4px;">🕐 Heure</label>
+                                <input type="time" id="planifHeure" value="19:00" style="width: 100%; padding: 8px;">
+                            </div>
+                        </div>
+                        <div>
+                            <label style="font-size: 0.8rem; color: #6b7280; display: block; margin-bottom: 4px;">👥 Nombre de places</label>
+                            <select id="planifPlaces" style="width: 100%; padding: 8px;">
+                                <option value="2">2 joueurs</option>
+                                <option value="3">3 joueurs</option>
+                                <option value="4" selected>4 joueurs</option>
+                                <option value="5">5 joueurs</option>
+                                <option value="6">6 joueurs</option>
+                            </select>
+                        </div>
                     </div>
-                ` : ''}
+                    ${!membreEmail ? `
+                        <div style="background: #fef3c7; padding: 10px; border-radius: 8px; margin-bottom: 10px;">
+                            <p style="margin: 0; font-size: 0.8rem;">📧 Pour notifier les joueurs :</p>
+                            <input type="email" id="planifEmail" placeholder="email@exemple.com" 
+                                   style="width: 100%; padding: 8px; margin-top: 6px;">
+                        </div>
+                    ` : ''}
+                </div>
             `, `
-                <button class="btn btn-primary" onclick="confirmerProgrammation()">📅 Programmer & notifier</button>
+                <button class="btn btn-primary" id="btnConfirmerProgrammation" onclick="confirmerProgrammation()" style="display:none;">📅 Programmer & notifier</button>
                 <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
             `);
+            
+            // Charger les disponibilités
+            chargerTableauDispos();
+        }
+        
+        /**
+         * Charger et afficher le tableau des disponibilités 7 jours
+         */
+        async function chargerTableauDispos() {
+            const zone = document.getElementById('dispoTableZone');
+            if (!zone) return;
+            
+            try {
+                const result = await apiCommunaute({ action: 'getDisponibilites7Jours' });
+                
+                if (!result.success || !result.jours) {
+                    zone.innerHTML = '<p style="font-size: 0.85rem; color: #6b7280; text-align: center;">Aucune donnée de disponibilité.</p>';
+                    afficherFormPlanif();
+                    return;
+                }
+                
+                const jours = result.jours;
+                const hasDispos = jours.some(j => j.dispos.length > 0);
+                
+                if (!hasDispos) {
+                    zone.innerHTML = `
+                        <div style="background: #fef3c7; padding: 10px; border-radius: 8px; text-align: center;">
+                            <p style="margin: 0; font-size: 0.85rem; color: #92400e;">
+                                Aucun membre n'a défini de disponibilités.<br>
+                                <span style="font-size: 0.8rem;">Choisis ta date librement et les membres seront notifiés.</span>
+                            </p>
+                        </div>
+                    `;
+                    afficherFormPlanif();
+                    return;
+                }
+                
+                // Construire le tableau
+                let tableHTML = `
+                    <p style="font-size: 0.85rem; color: var(--gray); margin-bottom: 8px;">
+                        👥 <strong>${result.nbMembresTotal}</strong> membre${result.nbMembresTotal > 1 ? 's' : ''} avec disponibilités — clique un créneau :
+                    </p>
+                    <div style="max-height: 200px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 8px;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.8rem;">
+                            <thead>
+                                <tr style="background: #f3f4f6; position: sticky; top: 0;">
+                                    <th style="padding: 6px 8px; text-align: left; border-bottom: 1px solid #e5e7eb;">Jour</th>
+                                    <th style="padding: 6px 8px; text-align: left; border-bottom: 1px solid #e5e7eb;">Disponibles</th>
+                                    <th style="padding: 6px 4px; text-align: center; border-bottom: 1px solid #e5e7eb;"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                for (const jour of jours) {
+                    const nbDispos = jour.dispos.length;
+                    const bg = nbDispos >= 3 ? '#ecfdf5' : nbDispos > 0 ? '#fffbeb' : '#f9fafb';
+                    const noms = jour.dispos.map(d => `${d.prenom} <span style="color:#9ca3af;">(${d.heureDebut}-${d.heureFin})</span>`).join(', ');
+                    
+                    // Heure par défaut = heure de début de la première plage
+                    const heureDefaut = jour.dispos.length > 0 ? jour.dispos[0].heureDebut : '19:00';
+                    
+                    tableHTML += `
+                        <tr style="background: ${bg}; cursor: ${nbDispos > 0 ? 'pointer' : 'default'};" 
+                            ${nbDispos > 0 ? `onclick="selectionnerCreneauPlanif('${jour.date}', '${heureDefaut}')"` : ''}
+                            ${nbDispos > 0 ? `onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='${bg}'"` : ''}>
+                            <td style="padding: 6px 8px; border-bottom: 1px solid #f3f4f6; white-space: nowrap;">
+                                <strong>${jour.dateAff}</strong>
+                            </td>
+                            <td style="padding: 6px 8px; border-bottom: 1px solid #f3f4f6;">
+                                ${nbDispos > 0 ? noms : '<span style="color:#d1d5db;">—</span>'}
+                            </td>
+                            <td style="padding: 6px 4px; border-bottom: 1px solid #f3f4f6; text-align: center;">
+                                ${nbDispos >= 3 ? '🟢' : nbDispos > 0 ? '🟡' : '⚪'}
+                                <span style="font-weight: bold;">${nbDispos}</span>
+                            </td>
+                        </tr>
+                    `;
+                }
+                
+                tableHTML += `</tbody></table></div>`;
+                zone.innerHTML = tableHTML;
+                afficherFormPlanif();
+                
+            } catch(e) {
+                zone.innerHTML = '<p style="font-size: 0.85rem; color: #dc2626;">Erreur chargement des disponibilités.</p>';
+                afficherFormPlanif();
+            }
+        }
+        
+        /**
+         * Afficher le formulaire de planification + bouton confirmer
+         */
+        function afficherFormPlanif() {
+            const formZone = document.getElementById('planifFormZone');
+            const btn = document.getElementById('btnConfirmerProgrammation');
+            if (formZone) formZone.style.display = 'block';
+            if (btn) btn.style.display = '';
+            
+            // Date par défaut : demain
+            const demain = new Date();
+            demain.setDate(demain.getDate() + 1);
+            const dateInput = document.getElementById('planifDate');
+            if (dateInput && !dateInput.value) {
+                dateInput.value = demain.toISOString().split('T')[0];
+            }
+        }
+        
+        /**
+         * Quand l'hôte clique sur un créneau dans le tableau → pré-remplit date/heure
+         */
+        function selectionnerCreneauPlanif(dateISO, heure) {
+            const dateInput = document.getElementById('planifDate');
+            const heureInput = document.getElementById('planifHeure');
+            if (dateInput) dateInput.value = dateISO;
+            if (heureInput) heureInput.value = heure;
+            
+            // Feedback visuel
+            const formZone = document.getElementById('planifFormZone');
+            if (formZone) {
+                formZone.style.transition = 'background 0.3s';
+                formZone.style.background = '#ecfdf5';
+                setTimeout(() => { formZone.style.background = ''; }, 800);
+            }
         }
         
         /**
@@ -1641,14 +1781,17 @@
                 // Filtrer : ne garder que les parties futures ou du jour
                 const maintenant = new Date();
                 const partiesFutures = result.parties.filter(p => {
-                    if (!p.datePrevue) return true; // Pas de date = toujours affichée
-                    return new Date(p.datePrevue) > new Date(maintenant.getTime() - 2 * 60 * 60 * 1000); // Encore valide 2h après
+                    if (!p.datePrevue) return true;
+                    return new Date(p.datePrevue) > new Date(maintenant.getTime() - 2 * 60 * 60 * 1000);
                 });
                 
                 if (partiesFutures.length === 0) {
                     container.style.display = 'none';
                     return;
                 }
+                
+                const monPrenom = document.getElementById('playerName')?.value?.trim() || myName || '';
+                const monEmail = membreEmail || '';
                 
                 container.style.display = 'block';
                 container.innerHTML = `
@@ -1663,21 +1806,54 @@
                         const confirmes = p.confirmes && p.confirmes.length > 0 
                             ? p.confirmes.join(', ') 
                             : 'aucun confirmé';
+                        
+                        // Suis-je l'organisateur ?
+                        const estOrganisateur = (monEmail && p.emailOrganisateur && monEmail === p.emailOrganisateur.toLowerCase()) 
+                            || (monPrenom && p.prenomOrganisateur && monPrenom.toLowerCase() === p.prenomOrganisateur.toLowerCase());
+                        
+                        // Boutons selon le rôle et le statut
+                        let boutons = '';
+                        const estOuverte = p.statut === 'ouverte';
+                        
+                        if (estOrganisateur && !estOuverte) {
+                            boutons = `
+                                <button class="btn" style="background: #059669; color: white; font-size: 0.8rem; padding: 8px 12px;"
+                                        onclick="ouvrirSalonProgramme('${p.codePartie}', ${p.nbPlaces})">
+                                    🚀 Ouvrir le salon
+                                </button>
+                            `;
+                        } else if (estOuverte) {
+                            boutons = `
+                                <button class="btn" style="background: #2563eb; color: white; font-size: 0.8rem; padding: 8px 12px;"
+                                        onclick="rejoindreSalonProgramme('${p.codePartie}')">
+                                    🚪 Rejoindre
+                                </button>
+                            `;
+                        } else {
+                            boutons = `
+                                <button class="btn" style="background: #f0fdf4; color: #059669; font-size: 0.8rem; padding: 8px 12px;"
+                                        onclick="rejoindrePartiePlanifiee('${p.codePartie}')">
+                                    ✅ J'y serai
+                                </button>
+                            `;
+                        }
+                        
+                        const statutBadge = estOuverte 
+                            ? '<span style="font-size: 0.7rem; background: #dcfce7; color: #059669; padding: 1px 6px; border-radius: 10px; margin-left: 4px;">🟢 Ouvert</span>'
+                            : '';
+                        
                         return `
-                            <div style="background: #dbeafe; border: 1px solid #93c5fd; border-radius: 8px; padding: 10px; margin-bottom: 6px;">
+                            <div style="background: ${estOrganisateur ? '#ecfdf5' : '#dbeafe'}; border: 1px solid ${estOrganisateur ? '#a7f3d0' : '#93c5fd'}; border-radius: 8px; padding: 10px; margin-bottom: 6px;">
                                 <div style="display: flex; align-items: center; justify-content: space-between;">
                                     <div>
                                         <strong>${p.prenomOrganisateur}</strong>
+                                        ${estOrganisateur ? '<span style="font-size: 0.7rem; background: #dcfce7; color: #059669; padding: 1px 6px; border-radius: 10px; margin-left: 4px;">Toi</span>' : ''}
+                                        ${statutBadge}
                                         <span style="font-size: 0.75rem; background: #e0e7ff; color: #3730a3; padding: 1px 6px; border-radius: 10px; margin-left: 4px;">Cote ${p.coteOrganisateur}</span>
                                         <div style="font-size: 0.8rem; color: #374151;">📅 ${dateAff}</div>
                                         <div style="font-size: 0.75rem; color: #6b7280;">👥 ${p.nbConfirmes}/${p.nbPlaces} · ${places} · ${confirmes}</div>
                                     </div>
-                                    ${p.placesRestantes > 0 ? `
-                                        <button class="btn" style="background: #059669; color: white; font-size: 0.8rem; padding: 8px 12px;"
-                                                onclick="rejoindrePartiePlanifiee('${p.codePartie}')">
-                                            ✅ J'y serai
-                                        </button>
-                                    ` : ''}
+                                    ${boutons}
                                 </div>
                             </div>
                         `;
@@ -1690,8 +1866,144 @@
         }
         
         /**
-         * Confirmer sa participation à une partie planifiée
+         * L'organisateur ouvre le salon pour une partie programmée
+         * Crée la partie Firebase avec LE MÊME CODE que celui programmé
+         * et la MÊME structure que createGame()
          */
+        async function ouvrirSalonProgramme(code, nbPlaces) {
+            myName = document.getElementById('playerName')?.value?.trim() || myName || '';
+            if (!myName) { showError('Entre ton prénom d\'abord.'); return; }
+            
+            // Vérifier si la partie existe déjà dans Firebase
+            const snap = await db.ref(`parties/${code}`).once('value');
+            if (snap.exists()) {
+                // Le salon est déjà ouvert → rejoindre directement
+                document.getElementById('gameCode').value = code;
+                await joinGame();
+                return;
+            }
+            
+            // Partie programmée = toujours MULTI, skip le choix de mode
+            const partyConfig = { ...CONFIG, mode: 'MULTI', minPlayers: 2, diceMode: 'VIRTUEL', nbPlaces: nbPlaces || 4 };
+            gameConfig = { ...partyConfig };
+            
+            // Direct au choix de profil (skip intro — organisateur connaît le jeu)
+            showProfilChoiceModal(async (profil) => {
+                    currentGameCode = code; // ← MÊME CODE que le programmé
+                    isHost = true;
+                    myPlayerId = 'p_' + Date.now() + '_' + Math.floor(Math.random()*1000);
+                    const secret = generateSecret(24);
+                    const secretHash = await sha256Hex(secret);
+                    myProfil = profil;
+                    
+                    // Initialiser gameRef
+                    gameRef = db.ref(`parties/${code}`);
+                    
+                    // Initialiser GAME_SAVE (audit + replay)
+                    historiqueBilans = [];
+                    GAME_SAVE = {
+                        schemaVersion: SCHEMA_VERSION,
+                        gameId: `ESPOYR_${code}`,
+                        createdAt: new Date().toISOString(),
+                        lastSavedAt: null,
+                        rng: { mode: "seeded", seed: generateSeed(), consumed: 0, rolls: [] },
+                        state: null, events: [], eventCounter: 0,
+                        ledger: [], ledgerCounter: 0, snapshots: [],
+                        indexes: { byTurn: {}, byPlayer: {}, byEntity: {}, byAction: {} }
+                    };
+                    
+                    // Initialiser comptabilité (identique à createGame)
+                    COMPTABILITE = {
+                        journal: [], numeroEcriture: 0, grandLivre: {},
+                        caisseJoueurs: {}, caisseActivites: {}, parJoueur: {},
+                        dettesEntreJoueurs: [], smartContracts: [],
+                        banque: { creancesJoueurs: 0, masseMonetaire: 0, interetsRecus: 0, capital: 0, reductionValeur: 0, journal: [] },
+                        potAAA: { solde: CONFIG.potAAAInitial, circulationHash: 0, membres: [], creances: {}, journal: [] },
+                        etat: { tresor: 0, taxesRecues: 0, salairesVerses: 0, journal: [] },
+                        exportation: { solde: 0, recettes: 0, salairesVerses: 0, journal: [] },
+                        horsCircuit: { solde: 0, recettes: 0, journal: [], grandLivre: { 550: 0, 792: 0 }, journalHorsCircuit: [] }
+                    };
+                    
+                    // Créer la partie dans Firebase (MÊME structure que createGame)
+                    await db.ref(`parties/${code}`).set({
+                        code, hostId: myPlayerId, status: 'waiting',
+                        createdAt: firebase.database.ServerValue.TIMESTAMP,
+                        config: partyConfig,
+                        state: { turn: 1, phase: 1, currentPlayerIndex: 0, started: false, toursComplets: 0, passagesLigne1Total: 0 },
+                        activites: {}, equipements: {},
+                        comptabilite: COMPTABILITE
+                    });
+                    
+                    // Créer le joueur hôte
+                    await db.ref(`parties/${code}/players/${myPlayerId}`).set({
+                        id: myPlayerId, name: myName, avatar: myAvatar,
+                        position: 0, euro: CONFIG.capitalInitial, espoyr: 0, emprunt: 0,
+                        isHost: true, isBot: false, membreAAA: false,
+                        profil: profil,
+                        passagesDepart: 0, passagesDepuisPhase2: 0,
+                        joinedAt: firebase.database.ServerValue.TIMESTAMP,
+                        isConnected: true,
+                        lastSeen: firebase.database.ServerValue.TIMESTAMP,
+                        secretHash: secretHash
+                    });
+                    
+                    // Sauvegarde locale
+                    saveResume(code, { code, name: myName, playerId: myPlayerId, secret, avatar: myAvatar, savedAt: Date.now() });
+                    LAST_RESUME_CODE = code;
+                    LAST_RESUME_NAME = myName;
+                    
+                    // S'abonner et afficher le lobby
+                    subscribeToGame(code);
+                    document.getElementById('lobbyCode').textContent = code;
+                    showScreen('lobbyScreen');
+                    document.getElementById('hostControls').classList.remove('hidden');
+                    document.getElementById('waitingMessage').classList.add('hidden');
+                    startHeartbeat();
+                    
+                    sendSystemMessage(`🚀 ${myName} a ouvert le salon pour la partie programmée !`);
+                    sendSystemMessage(`💬 Bienvenue ! Discutez en attendant les autres joueurs.`);
+                    
+                    // Email optionnel
+                    demanderEmailOptional(async (emailJoueur) => {
+                        if (emailJoueur) {
+                            await enregistrerEmailJoueurAPI(code, myPlayerId, emailJoueur, myName);
+                        }
+                    });
+                    
+                    // Mettre à jour le statut dans le Sheet
+                    apiCommunaute({ action: 'majStatutPartie', codePartie: code, statut: 'ouverte' }).catch(() => {});
+                });
+        }
+        
+        /**
+         * Un joueur rejoint le salon d'une partie programmée
+         * Pré-remplit le code et lance joinGame()
+         */
+        async function rejoindreSalonProgramme(code) {
+            myName = document.getElementById('playerName')?.value?.trim() || myName || '';
+            if (!myName) { showError('Entre ton prénom d\'abord.'); return; }
+            
+            // Vérifier si la partie existe dans Firebase
+            const snap = await db.ref(`parties/${code}`).once('value');
+            if (!snap.exists()) {
+                showModal(`
+                    <h3>⏳ Salon pas encore ouvert</h3>
+                    <p style="font-size: 0.9rem; color: var(--gray); text-align: center;">
+                        L'organisateur n'a pas encore ouvert le salon pour la partie <strong style="font-family: monospace; color: #2563eb;">${code}</strong>.
+                    </p>
+                    <p style="font-size: 0.85rem; color: #6b7280; text-align: center;">
+                        Reviens quelques minutes avant l'heure prévue !
+                    </p>
+                `, `
+                    <button class="btn btn-primary" onclick="closeModal()">OK</button>
+                `);
+                return;
+            }
+            
+            // Le salon est ouvert → rejoindre
+            document.getElementById('gameCode').value = code;
+            await joinGame();
+        }
         async function rejoindrePartiePlanifiee(codePartie) {
             const prenom = document.getElementById('playerName')?.value?.trim() || myName || '';
             const email = membreEmail || '';
@@ -1755,15 +2067,15 @@
             
             sauvees.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
             
-            // ── Le joueur a déjà joué → pré-remplir le prénom + marquer comme connu ──
+            // ── Le joueur a déjà joué → pré-remplir le prénom si pas déjà fait par detecterMembre ──
             const dernierNom = sauvees[0].name;
             const dernierAvatar = sauvees[0].avatar;
             if (dernierNom) {
                 const nameInput = document.getElementById('playerName');
                 if (nameInput && !nameInput.value) {
                     nameInput.value = dernierNom;
-                    myName = dernierNom;
                 }
+                if (!myName) myName = dernierNom;
                 if (dernierAvatar) {
                     myAvatar = dernierAvatar;
                     // Sélectionner visuellement l'avatar
