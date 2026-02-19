@@ -934,17 +934,17 @@
         
         // ========== TRAVAUX COOPÉRATIFS (Actions Contributives) ==========
         const TRAVAUX_COOP = [
-            { id: 1,  nom: '🌱 Participer au jardin communautaire', gain: 200 },
-            { id: 2,  nom: '🌾 Maintenir la meunerie locale',        gain: 200 },
-            { id: 3,  nom: '🥬 Cultiver le maraîchage local',        gain: 200 },
-            { id: 4,  nom: '🏥 Soutenir la santé de proximité',      gain: 200 },
-            { id: 5,  nom: '🐄 Soutenir l\'élevage de proximité',    gain: 200 },
-            { id: 6,  nom: '🤝 Structurer l\'entraide citoyenne',    gain: 200 },
-            { id: 7,  nom: '📚 Aider à l\'école',                    gain: 200 },
-            { id: 8,  nom: '🌲 Protéger la forêt préventive',        gain: 200 },
-            { id: 9,  nom: '⚡ Développer l\'énergie coopérative',   gain: 200 },
-            { id: 10, nom: '💧 Sécuriser l\'eau collective',          gain: 200 },
-            { id: 11, nom: '🌿 Préserver les semences paysannes',     gain: 200 }
+            { id: 1, nom: '🌱 Participer au jardin communautaire', gain: 200 },
+            { id: 2, nom: '🌾 Maintenir la meunerie locale', gain: 200 },
+            { id: 3, nom: '🌾 Cultiver le maraîchage local', gain: 200 },
+            { id: 4, nom: '🏥Soutenir la santé de proximité', gain: 200 },
+            { id: 5, nom: '🐄 Soutenir l’élevage de proximité', gain: 200 },
+            { id: 6, nom: '🤝 Structurer l’entraide citoyenne', gain: 200 },
+            { id: 7, nom: '📚 Aider à l\'école', gain: 200 },
+            { id: 8, nom: '🌲 Protéger la forêt préventive', gain: 200 },
+            { id: 9, nom: '⚡ Développer l’énergie coopérative', gain: 200 },
+            { id: 10, nom: '💧 Sécuriser l’eau collective', gain: 200 },
+            { id: 11, nom: '🌱 Préserver les semences paysannes', gain: 200 }
         ];
         
         const PLAYER_COLORS = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
@@ -5569,26 +5569,6 @@ activiteId: actId
                     <div class="modal" style="max-height: 85vh; overflow-y: auto;">
                         <h3 style="text-align:center; font-size:1.3rem;">🎮 ESPOYR</h3>
                         
-                        <div style="background:#0f172a; padding:14px; border-radius:10px; margin-bottom:12px; border-left:4px solid #3b82f6;">
-                            <p style="margin:0 0 8px 0; font-weight:bold; color:#60a5fa; font-size:1.05rem;">🌍 2050 commence aujourd'hui</p>
-                            <p style="margin:0; font-size:0.85rem; color:#e2e8f0; line-height:1.6;">
-                                Notre monde change. 2050, c'est demain.<br><br>
-                                Climat, énergie, ressources… Tout évolue vite. Et dans ce système, on a parfois l'impression de ne rien pouvoir y faire. La montée des extrêmes n'a jamais résolu les problèmes ; elle nourrit la haine, l'exclusion et les divisions.<br><br>
-                                <strong style="color:#93c5fd;">Ce jeu propose une autre voie.</strong><br><br>
-                                Il s'appuie sur un constat simple : le système d'échange dominant s'est construit sans intégrer pleinement que nous sommes des êtres vivants, dépendants d'un environnement fini.<br><br>
-                                Ici, et maintenant, chaque décision que tu prends compte. Tu es plongé dans la réalité : pour survivre, il faut investir, anticiper, choisir. Le temps s'accélère. Auras-tu pris les bonnes décisions ?<br><br>
-                                Ton salaire, tes investissements, tes emprunts influencent ta stabilité, ton avenir, ta pension, l'accès à la nourriture et aux services essentiels.<br><br>
-                                Tu vas comprendre comment fonctionne réellement l'économie. Et surtout comment des choix simples peuvent, progressivement, transformer un système.<br><br>
-                                En équipe, si vous franchissez les 3 étapes du jeu, vous pourrez analyser concrètement l'impact de vos décisions sur l'adaptation de la société aux défis à venir. Saurez-vous maintenir la cohésion sociale et préserver les acquis remarquables de notre civilisation ?<br><br>
-                                Ce jeu permet de comprendre et d'analyser les mécanismes économiques. Mais il porte aussi un message : <em>anticiper plutôt que subir</em>.<br><br>
-                                <strong style="color:#93c5fd;">Ce n'est pas un rêve.</strong><br><br>
-                                À Sprimont, en Belgique, des personnes utilisent déjà les bons Espoyr # pour réaliser des échanges autrement. Nous sommes à l'aube d'une évolution pacifique et complémentaire. Cette démarche peut exister partout dans le monde : utiliser des bons Espoyr pour échanger, agir collectivement et orienter l'évolution vers une société plus respectueuse de la nature et des relations humaines.<br><br>
-                                <strong style="color:#fbbf24;">Alors pourquoi pas toi ?</strong><br>
-                                Teste. Comprends. Et parle-en autour de toi.<br><br>
-                                <span style="display:block; text-align:center; color:#60a5fa; font-weight:bold;">espoyr.com</span>
-                            </p>
-                        </div>
-
                         <div style="background:#f0fdf4; padding:12px; border-radius:10px; margin-bottom:10px;">
                             <p style="margin:0; font-weight:bold; color:#059669;">👤 Ta situation</p>
                             <p style="margin:6px 0 0 0; font-size:0.9rem;">
@@ -6182,36 +6162,14 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                 console.warn('⚠️ Erreur init capital banque:', e);
             }
 
-// Mélanger l'ordre des joueurs en intercalant humains et bots
-        // Règle : jamais deux bots consécutifs si possible
-        const shuffleArr = arr => arr.sort(() => Math.random() - 0.5);
-
-        const humains = shuffleArr(Object.keys(playersData).filter(id => !playersData[id].isBot));
-        const bots    = shuffleArr(Object.keys(playersData).filter(id =>  playersData[id].isBot));
-        const total   = humains.length + bots.length;
-        const ordre   = new Array(total).fill(null);
-
-        if (humains.length === 0) {
-            // Que des bots : ordre aléatoire pur
-            bots.forEach((id, i) => { ordre[i] = id; });
-        } else {
-            // Placer les humains aux positions équidistantes
-            // ex: 2H + 4B → positions 0 et 3 → H B B H B B
-            const pas = Math.floor(total / humains.length);
-            humains.forEach((id, i) => { ordre[i * pas] = id; });
-            // Remplir les trous avec les bots dans l'ordre mélangé
-            let bi = 0;
-            for (let i = 0; i < total; i++) {
-                if (ordre[i] === null) ordre[i] = bots[bi++];
-            }
-        }
-
+// Mélanger l'ordre des joueurs
+        const joueurs = Object.keys(playersData);
+        const melange = joueurs.sort(() => Math.random() - 0.5);
         const updates = {};
-        ordre.forEach((id, index) => {
+        melange.forEach((id, index) => {
             updates[`players/${id}/playOrder`] = index;
         });
         await gameRef.update(updates);
-        console.log('🎲 Ordre intercalé:', ordre.map(id => `${playersData[id]?.isBot ? '🤖' : '🧑'} ${playersData[id]?.name}`).join(' → '));
 
 
 
