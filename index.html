@@ -1038,7 +1038,8 @@
             timingDecision: 60,      // Temps pour décider (acheter/passer) - 1 minute
             timingEnchere: 60,       // Temps par tour d'enchère
             timingNegociation: 45,   // Temps pour négocier
-            timingBot: 2             // Délai avant action robot
+            timingBot: 2,            // Délai avant action robot
+            toastDelay: 800          // Délai entre les messages (ms) : 0=rapide, 800=normal, 1500=lent
         };
         
         // Config modifiable par l'host
@@ -6088,28 +6089,47 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
         let liveToastsReady = false;
         const MAX_TOASTS = 4;
         
-        function showLiveToast(text) {
+        // File d'attente pour espacer les toasts
+        const _toastQueue = [];
+        let _toastBusy = false;
+
+        function _processToastQueue() {
+            if (_toastQueue.length === 0) { _toastBusy = false; return; }
+            _toastBusy = true;
+            const text = _toastQueue.shift();
+            _afficherUnToast(text);
+            const delai = gameConfig.toastDelay ?? CONFIG.toastDelay ?? 800;
+            setTimeout(_processToastQueue, delai);
+        }
+
+        function _afficherUnToast(text) {
             const container = document.getElementById('liveToastContainer');
             if (!container) return;
-            
-            // Strip HTML tags (ex: LOGO_AAA SVG) pour texte pur
-            const cleanText = text.replace(/<[^>]*>/g, '').trim();
-            if (!cleanText) return;
-            
-            // Limiter le nombre de toasts visibles
             while (container.children.length >= MAX_TOASTS) {
                 container.removeChild(container.firstChild);
             }
-            
             const toast = document.createElement('div');
             toast.className = 'live-toast';
-            toast.textContent = cleanText;
+            toast.textContent = text;
             container.appendChild(toast);
-            
-            // Supprimer après animation (3.2s visible + 0.6s fade)
             setTimeout(() => {
                 if (toast.parentNode) toast.parentNode.removeChild(toast);
             }, 3900);
+        }
+
+        function showLiveToast(text) {
+            const container = document.getElementById('liveToastContainer');
+            if (!container) return;
+            const cleanText = text.replace(/<[^>]*>/g, '').trim();
+            if (!cleanText) return;
+            const delai = gameConfig.toastDelay ?? CONFIG.toastDelay ?? 800;
+            if (delai === 0) {
+                // Mode rapide : affichage direct sans file
+                _afficherUnToast(cleanText);
+            } else {
+                _toastQueue.push(cleanText);
+                if (!_toastBusy) _processToastQueue();
+            }
         }
         
         // Activer les toasts après le chargement initial des messages
@@ -6417,6 +6437,16 @@ Conserve ce fichier pour rejoindre la partie en cas de déconnexion.`;
                     </div>
                     
                     <div>
+                        <label style="font-size: 0.85rem; font-weight: bold;">💬 Vitesse des messages</label>
+                        <select id="configToastDelay" style="width: 100%; padding: 8px; margin-top: 4px;">
+                            <option value="0"   ${(gameConfig.toastDelay??800)===0    ? 'selected' : ''}>⚡ Rapide (instantané)</option>
+                            <option value="800" ${(gameConfig.toastDelay??800)===800  ? 'selected' : ''}>🐢 Normal (800ms)</option>
+                            <option value="1500" ${(gameConfig.toastDelay??800)===1500 ? 'selected' : ''}>🐌 Lent (1.5s)</option>
+                        </select>
+                        <p style="font-size: 0.75rem; color: #6b7280;">Délai entre chaque message des autres joueurs</p>
+                    </div>
+                    
+                    <div>
                         <label style="font-size: 0.85rem; font-weight: bold;">💰 Capital initial (€)</label>
                         <input type="number" id="configCapital" value="${gameConfig.capitalInitial}" min="100" max="1000" step="50" style="width: 100%; padding: 8px; margin-top: 4px;">
                     </div>
@@ -6482,6 +6512,7 @@ Conserve ce fichier pour rejoindre la partie en cas de déconnexion.`;
             gameConfig.timingEnchere = parseInt(document.getElementById('configTimingEnchere').value) || 60;
             gameConfig.timingNegociation = parseInt(document.getElementById('configTimingNego').value) || 45;
             gameConfig.timingBot = parseFloat(document.getElementById('configTimingBot').value) || 2;
+            gameConfig.toastDelay = parseInt(document.getElementById('configToastDelay').value);
             gameConfig.capitalInitial = parseInt(document.getElementById('configCapital').value) || 450;
             gameConfig.tauxInteret = (parseInt(document.getElementById('configInteret').value) || 10) / 100;
             gameConfig.phase2_passagesMin = parseInt(document.getElementById('configPhase2Passages').value) || CONFIG.phase2_passagesMin;
@@ -15330,7 +15361,7 @@ function initSystemeDe() {
                     <h3>${LOGO_AAA} Tu es membre AAA</h3>
                     <p>Tes avantages actifs :</p>
                     <ul style="font-size: 0.9rem;">
-                        <li>+50# créés dans le Pot à chaque lancer de dé</li>
+                        <li>À chaque lancé de ton dé, 50# sont ajoutés au pot commun AAA pour soutenir les services communs et les investissements utiles à tous.</li>
                         <li>Demander un crédit en # (0%, validé par les membres)</li>
                         <li>Complément de salaire en # si érosion (Phase 2+)</li>
                         <li>Aide en cas de faillite</li>
@@ -15352,7 +15383,7 @@ function initSystemeDe() {
                     <div style="background:#f0fdf4; padding:10px; border-radius:8px; margin-top:10px;">
                         <p style="margin:0 0 6px 0; font-weight:bold; color:#059669;">✨ En pratique dans le jeu :</p>
                         <ul style="font-size:0.85rem; margin:0; padding-left:20px;">
-                            <li>+50# créés dans le Pot AAA à chaque lancer de dé</li>
+                            <li>À chaque lancé de ton dé, 50# sont ajoutés au pot commun AAA pour soutenir les services communs et les investissements utiles à tous.</li>
                             <li>Demander un crédit en # (0%, validé par les membres)</li>
                             <li>Complément de salaire en # si érosion (Phase 2+)</li>
                             <li>Aide en cas de faillite (dette annulée + prêt de relance)</li>
