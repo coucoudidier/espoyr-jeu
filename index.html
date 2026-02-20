@@ -1241,15 +1241,7 @@
         /**
          * Se déconnecter du système membre (effacer localStorage)
          */
-        function deconnexionMembre() {
-            if (!confirm('Te déconnecter de la communauté ESPOYR ?\n\nTu pourras te reconnecter avec ton email.')) return;
-            localStorage.removeItem(MEMBRE_STORAGE_KEY);
-            membreVerifie = false;
-            membreEmail = '';
-            membreData = null;
-            location.reload();
-        }
-        
+
         /**
          * RGPD — Afficher la confirmation de suppression du compte
          */
@@ -1281,18 +1273,12 @@
             closeModal();
             if (!membreEmail) return;
             const emailASupprimer = membreEmail;
-            const confirme = confirm(`Dernière confirmation :
-
-Supprimer définitivement le compte "${emailASupprimer}" ?
-
-Cette action est irréversible.`);
+            const confirme = confirm(`Dernière confirmation :\n\nSupprimer définitivement le compte "${emailASupprimer}" ?\n\nCette action est irréversible.`);
             if (!confirme) return;
             try {
                 const result = await apiCommunaute({ action: 'desinscrire', email: emailASupprimer });
                 if (!result.success) {
-                    alert(`Erreur : ${result.error || 'Erreur inconnue'}
-
-Contacte asbl@espoyr.be`);
+                    alert(`Erreur : ${result.error || 'Erreur inconnue'}\n\nContacte asbl@espoyr.be`);
                     return;
                 }
                 localStorage.removeItem(MEMBRE_STORAGE_KEY);
@@ -1300,9 +1286,7 @@ Contacte asbl@espoyr.be`);
                 alert('✅ Compte supprimé définitivement. Toutes tes données ont été effacées (RGPD).');
                 location.reload();
             } catch (e) {
-                const forcerLocal = confirm(`Serveur inaccessible.
-Supprimer au moins tes données locales ?
-(Envoie un email à asbl@espoyr.be pour la suppression serveur)`);
+                const forcerLocal = confirm(`Serveur inaccessible.\nSupprimer au moins tes données locales ?\n(Envoie un email à asbl@espoyr.be pour la suppression serveur)`);
                 if (forcerLocal) {
                     localStorage.removeItem(MEMBRE_STORAGE_KEY);
                     membreVerifie = false; membreEmail = ''; membreData = null;
@@ -1311,6 +1295,15 @@ Supprimer au moins tes données locales ?
             }
         }
 
+        function deconnexionMembre() {
+            if (!confirm('Te déconnecter de la communauté ESPOYR ?\n\nTu pourras te reconnecter avec ton email.')) return;
+            localStorage.removeItem(MEMBRE_STORAGE_KEY);
+            membreVerifie = false;
+            membreEmail = '';
+            membreData = null;
+            location.reload();
+        }
+        
         /**
          * Proposer l'inscription communautaire après que le joueur donne son email
          * Appelé depuis demanderEmailOptional quand un email est fourni
@@ -7141,11 +7134,6 @@ async function rollDice() {
             await gameRef.child(`difficulteConsecutive/${joueurActuel.id}`).set(0);
         }
 
-            // Choix du sens AVANT le lancer
-        if (!joueurASens(joueurActuel.id)) {
-            await choisirSens(joueurActuel, null);
-        }
-        
         // ── Déterminer la valeur du dé ──
         let valeurDe;
         const modeDe = gameConfig.diceMode || 'AUTO';
@@ -7181,6 +7169,11 @@ async function rollDice() {
         await animerDe(valeurDe);
         document.getElementById('diceMessage').textContent =
             `${joueurActuel.avatar} ${joueurActuel.name} : ${emojiDe(valeurDe)} (${valeurDe})`;
+
+        // ── Choix du sens APRÈS le lancer (avec la vraie valeur du dé) ──
+        if (!joueurASens(joueurActuel.id)) {
+            await choisirSens(joueurActuel, valeurDe);
+        }
 
         // ── BONUS AAA : Si le joueur est membre, +50# créés dans le Pot AAA ──
         const isMembreAAA = COMPTABILITE.potAAA.membres?.includes(joueurActuel.id);
