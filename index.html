@@ -1056,7 +1056,7 @@
 
         // ========== REPRISE / TICKET JOUEUR (A+B) ==========
         const RESUME_KEY_PREFIX = 'ESPOYR_RESUME_';
-        const API_URL = 'https://script.google.com/macros/s/AKfycbz15Wq8KG-R4LfzaH2u7wzUZu4-aP2J_pFqHCJpBtUaMWXafhjOH55bayM9KvPU-liELQ/exec';
+        const API_URL = 'https://script.google.com/macros/s/AKfycbw_Vvu93bdXu3gPo0Ft65gION3a_htpjh5TQtgp8HPUMMTUtKLqdaF6MQzqUf7ZdaVLsQ/exec';
         let membreVerifie = false;
         let membreEmail = '';
         let membreData = null; // Données complètes du membre (prenom, cote, humeur, etc.)
@@ -1229,6 +1229,8 @@
                                         onclick="showDisponibilitesModal()">📅</button>
                                 <button class="btn" style="background:#fee2e2; color:#dc2626; font-size:0.75rem; padding:6px 8px;" 
                                         onclick="deconnexionMembre()" title="Se déconnecter">✕</button>
+                                <button class="btn" style="background:#fef2f2; color:#991b1b; font-size:0.75rem; padding:6px 8px; border:1px solid #fca5a5;" 
+                                        onclick="supprimerCompteModal()" title="Supprimer mon compte (RGPD)">🗑️</button>
                             </div>
                         </div>
                     </div>
@@ -1248,6 +1250,67 @@
             location.reload();
         }
         
+        /**
+         * RGPD — Afficher la confirmation de suppression du compte
+         */
+        function supprimerCompteModal() {
+            if (!membreEmail) return;
+            showModal(`
+                <h3 style="color:#991b1b;">🗑️ Supprimer mon compte</h3>
+                <p>Tu es sur le point de supprimer définitivement toutes tes données personnelles de la communauté ESPOYR.</p>
+                <div style="background:#fef2f2; border:1px solid #fca5a5; border-radius:8px; padding:12px; margin:10px 0;">
+                    <p style="margin:0; font-weight:bold; color:#991b1b;">Ce qui sera supprimé :</p>
+                    <ul style="margin:6px 0 0 0; padding-left:18px; color:#7f1d1d; font-size:0.9rem;">
+                        <li>Ton adresse email (<strong>${membreEmail}</strong>)</li>
+                        <li>Ton profil et prénom</li>
+                        <li>Tes disponibilités et historique de parties</li>
+                        <li>Tes données locales (localStorage)</li>
+                    </ul>
+                </div>
+                <p style="font-size:0.85rem; color:#6b7280;">Cette action est irréversible. Conformément au RGPD (art. 17 — droit à l effacement).</p>
+            `, `
+                <button class="btn" style="background:#991b1b; color:white;" onclick="supprimerCompteDefinitif()">🗑️ Supprimer définitivement</button>
+                <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+            `);
+        }
+
+        /**
+         * RGPD — Supprimer le compte côté serveur ET en local
+         */
+        async function supprimerCompteDefinitif() {
+            closeModal();
+            if (!membreEmail) return;
+            const emailASupprimer = membreEmail;
+            const confirme = confirm(`Dernière confirmation :
+
+Supprimer définitivement le compte "${emailASupprimer}" ?
+
+Cette action est irréversible.`);
+            if (!confirme) return;
+            try {
+                const result = await apiCommunaute({ action: 'desinscrire', email: emailASupprimer });
+                if (!result.success) {
+                    alert(`Erreur : ${result.error || 'Erreur inconnue'}
+
+Contacte asbl@espoyr.be`);
+                    return;
+                }
+                localStorage.removeItem(MEMBRE_STORAGE_KEY);
+                membreVerifie = false; membreEmail = ''; membreData = null;
+                alert('✅ Compte supprimé définitivement. Toutes tes données ont été effacées (RGPD).');
+                location.reload();
+            } catch (e) {
+                const forcerLocal = confirm(`Serveur inaccessible.
+Supprimer au moins tes données locales ?
+(Envoie un email à asbl@espoyr.be pour la suppression serveur)`);
+                if (forcerLocal) {
+                    localStorage.removeItem(MEMBRE_STORAGE_KEY);
+                    membreVerifie = false; membreEmail = ''; membreData = null;
+                    location.reload();
+                }
+            }
+        }
+
         /**
          * Proposer l'inscription communautaire après que le joueur donne son email
          * Appelé depuis demanderEmailOptional quand un email est fourni
