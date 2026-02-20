@@ -7118,10 +7118,10 @@ async function rollDice() {
     const btnLancer = document.getElementById('rollDiceBtn');
     if (btnLancer) btnLancer.disabled = true;
     
-    // Timeout de sécurité — déverrouille si bloqué > 15s
+    // Timeout de sécurité — déverrouille si bloqué > 15s (sauf si modal de choix de sens ouvert)
     if (window._turnActionTimeout) clearTimeout(window._turnActionTimeout);
     window._turnActionTimeout = setTimeout(() => {
-        if (turnActionInProgress) {
+        if (turnActionInProgress && !window.__choixSensEnCours) {
             console.warn('⚠️ turnActionInProgress bloqué > 15s — reset forcé');
             turnActionInProgress = false;
             const btn = document.getElementById('rollDiceBtn');
@@ -7241,8 +7241,12 @@ async function rollDice() {
             `${joueurActuel.avatar} ${joueurActuel.name} : ${emojiDe(valeurDe)} (${valeurDe})`;
 
         // ── Choix du sens APRÈS le lancer (avec la vraie valeur du dé) ──
+        // choisirSens retourne le sens choisi ; getSensJoueur si déjà défini
+        let sens;
         if (!joueurASens(joueurActuel.id)) {
-            await choisirSens(joueurActuel, valeurDe);
+            sens = await choisirSens(joueurActuel, valeurDe);
+        } else {
+            sens = getSensJoueur(joueurActuel.id);
         }
 
         // ── BONUS AAA : Si le joueur est membre, +50# créés dans le Pot AAA ──
@@ -7252,8 +7256,7 @@ async function rollDice() {
             sendSystemMessage(`${LOGO_AAA} +${bonusCree}# créés dans le Pot AAA (${joueurActuel.name} membre)`);
         }
 
-        // ── Déplacement normal ──
-        const sens = getSensJoueur(joueurActuel.id);
+        // ── Déplacement normal (unique point d'appel) ──
         await effectuerDeplacement(joueurActuel, valeurDe, sens);
 
     } catch (err) {
@@ -7276,7 +7279,8 @@ function choisirSens(joueur, valeurDe) {
         // Si c'est un bot, choisir aléatoirement
         if (joueur.isBot) {
             const sens = Math.random() > 0.5 ? 1 : -1;
-            confirmerSens(joueur, valeurDe, sens).then(resolve);
+            await confirmerSens(joueur, valeurDe, sens);
+            resolve(sens);
             return;
         }
 
@@ -7293,8 +7297,9 @@ function choisirSens(joueur, valeurDe) {
                 .on('value', (snap) => {
                     if (snap.val() === 1 || snap.val() === -1) {
                         gameRef.child(`players/${joueur.id}/sensDeplacement`).off('value', ecouteur);
-                        // Le sens est choisi, continuer le déplacement
-                        effectuerDeplacement(joueur, valeurDe, snap.val()).then(resolve);
+                        // Mettre à jour le cache local immédiatement (évite race condition)
+                        if (playersData[joueur.id]) playersData[joueur.id].sensDeplacement = snap.val();
+                        resolve(snap.val());
                     }
                 });
             return;
@@ -7369,13 +7374,16 @@ function choisirSens(joueur, valeurDe) {
         `, '');
 
         window.__avatarChoisi = null; // Forcer le joueur à cliquer sur un avatar
+        window.__choixSensEnCours = true; // Empêche le timeout 15s de déverrouiller pendant le modal
         // Callback global pour le modal
-       window.__callbackChoixSens = (sens) => {
+        window.__callbackChoixSens = async (sens) => {
             closeModal();
+            window.__choixSensEnCours = false;
             window.__callbackChoixSens = null;
             const avatar = window.__avatarChoisi || joueur.avatar;
             myAvatar = avatar;
-            confirmerSens(joueur, valeurDe, sens, avatar).then(resolve);
+            await confirmerSens(joueur, valeurDe, sens, avatar);
+            resolve(sens);
         };
     });
 }
@@ -7405,11 +7413,7 @@ if (avatar) {
         valeurDe,
         position: joueur.position || 0
     });
-
-    // Enchaîner le déplacement seulement si on a une valeur de dé
-        if (valeurDe !== null && valeurDe !== undefined) {
-            await effectuerDeplacement(joueur, valeurDe, sens);
-        }
+    // confirmerSens retourne le sens — c'est l'appelant (rollDice ou choisirSens) qui effectue le déplacement
 }
 
 // ============================================================
@@ -7637,8 +7641,13 @@ function ecouterReponsesDe() {
         document.getElementById('diceMessage').textContent =
             `${joueurActuel.avatar} ${joueurActuel.name} : ${emojiDe(valeurDe)} (${valeurDe})`;
 
-       // Le sens a déjà été choisi avant le lancer
-        const sens = getSensJoueur(joueurActuel.id);
+       // Choix du sens si premier lancer du joueur (bug 4 : mode PHYSIQUE)
+        let sens;
+        if (!joueurASens(joueurActuel.id)) {
+            sens = await choisirSens(joueurActuel, valeurDe);
+        } else {
+            sens = getSensJoueur(joueurActuel.id);
+        }
         await effectuerDeplacement(joueurActuel, valeurDe, sens);
 
         // Nettoyer la réponse traitée
