@@ -11018,9 +11018,21 @@ function initSystemeDe() {
         }
         
         async function handleMalchance() {
-            // Tirage du dé pour déterminer le bien à acquérir
-            const de = Math.floor(Math.random() * 6) + 1;
-            const bien = BIENS_MALCHANCE[de - 1];
+            // Biens déjà possédés (unicité : max 1 par bienId, cap 6)
+            initCaisseJoueur(myPlayerId);
+            const caisseMalch = COMPTABILITE.caisseJoueurs[myPlayerId];
+            const biensDejaIds = (caisseMalch.biensPersonnels || []).map(b => b.bienId);
+            const biensDisponibles = BIENS_MALCHANCE.filter(b => !biensDejaIds.includes(b.id));
+
+            if (biensDisponibles.length === 0) {
+                sendSystemMessage(`👨‍👩‍👧‍👦 ${myName} possède déjà tous les biens — case Merci ignorée`);
+                safeNextTurn();
+                return;
+            }
+
+            // Tirer parmi les biens encore disponibles
+            const bien = biensDisponibles[Math.floor(Math.random() * biensDisponibles.length)];
+            const de = bien.id; // pour cohérence message
             
             sendSystemMessage(`👨‍👩‍👧‍👦 ${myName} tire un ${de} → ${bien.icon} ${bien.nom}`);
             
@@ -12577,34 +12589,39 @@ function initSystemeDe() {
                     await syncComptabiliteToFirebase();
                 }
             } else if (c.type === 'malchance') {
-                // Bot: acquisition bien personnel (même logique que humain)
-                const de = Math.floor(Math.random() * 6) + 1;
-                const bien = BIENS_MALCHANCE[de - 1];
-                
+                // Bot: acquisition bien personnel — unicité (max 1 par bienId, cap 6)
                 initCaisseJoueur(botId);
                 const botCaisse = COMPTABILITE.caisseJoueurs[botId];
-                
-                botCaisse.biensPersonnels.push({
-                    bienId: bien.id, nom: bien.nom, icon: bien.icon,
-                    valeur: bien.valeur, tourAchat: gameState?.toursComplets || 0
-                });
-                
-                botCaisse.dettesPersonnelles.push({
-                    bienId: bien.id, nom: bien.nom, icon: bien.icon,
-                    mensualite: bien.mensualite, toursRestants: bien.duree,
-                    capitalRestant: bien.total, tauxInteret: bien.interets
-                });
-                
-                enregistrerEcriture({
-                    joueurId: botId,
-                    libelle: `Acquisition ${bien.icon} ${bien.nom} (dette: ${fmt(bien.total)}€)`,
-                    compteDebit: 231, compteCredit: 400, montantEuro: bien.total,
-                    contexte: 'bienPersonnel',
-                    details: { bienId: bien.id, nom: bien.nom }
-                });
-                
-                await syncComptabiliteToFirebase();
-                sendSystemMessage(`👨‍👩‍👧‍👦 ${bot.name} acquiert ${bien.icon} ${bien.nom} (${fmt(bien.mensualite)}€/tour)`);
+                const botBiensDejaIds = (botCaisse.biensPersonnels || []).map(b => b.bienId);
+                const botBiensDisponibles = BIENS_MALCHANCE.filter(b => !botBiensDejaIds.includes(b.id));
+
+                if (botBiensDisponibles.length === 0) {
+                    sendSystemMessage(`👨‍👩‍👧‍👦 ${bot.name} possède déjà tous les biens — case Merci ignorée`);
+                } else {
+                    const bien = botBiensDisponibles[Math.floor(Math.random() * botBiensDisponibles.length)];
+
+                    botCaisse.biensPersonnels.push({
+                        bienId: bien.id, nom: bien.nom, icon: bien.icon,
+                        valeur: bien.valeur, tourAchat: gameState?.toursComplets || 0
+                    });
+
+                    botCaisse.dettesPersonnelles.push({
+                        bienId: bien.id, nom: bien.nom, icon: bien.icon,
+                        mensualite: bien.mensualite, toursRestants: bien.duree,
+                        capitalRestant: bien.total, tauxInteret: bien.interets
+                    });
+
+                    enregistrerEcriture({
+                        joueurId: botId,
+                        libelle: `Acquisition ${bien.icon} ${bien.nom} (dette: ${fmt(bien.total)}€)`,
+                        compteDebit: 231, compteCredit: 400, montantEuro: bien.total,
+                        contexte: 'bienPersonnel',
+                        details: { bienId: bien.id, nom: bien.nom }
+                    });
+
+                    await syncComptabiliteToFirebase();
+                    sendSystemMessage(`👨‍👩‍👧‍👦 ${bot.name} acquiert ${bien.icon} ${bien.nom} (${fmt(bien.mensualite)}€/tour)`);
+                }
             }
             
             // Petit délai visuel puis passage de tour (dans la chaîne async)
