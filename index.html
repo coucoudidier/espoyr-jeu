@@ -365,8 +365,9 @@
             <div class="error-message" id="errorMessage"></div>
             
             <div style="margin-bottom: 15px; text-align: center; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-                <a href="https://docs.google.com/document/d/1fTV-keDtwbxwTQPUuj4JCEN-sUBkqvRx/edit?usp=sharing&ouid=114447202650775631504&rtpof=true&sd=true" 
-                   target="_blank" rel="noopener noreferrer"
+                <a href="https://docs.google.com/document/d/1fTV-keDtwbxwTQPUuj4JCEN-sUBkqvRx/export?format=pdf"
+                   target="_blank" 
+                   rel="noopener noreferrer"
                    style="display: inline-block; padding: 10px 20px; background: #f0fdf4; border: 2px solid #059669; border-radius: 8px; color: #065f46; font-weight: 600; text-decoration: none; font-size: 0.95rem;">
                     📖 Explications détaillées et règles
                 </a>
@@ -439,6 +440,11 @@
                 <p style="margin-top: 8px; font-size: 0.9rem;">En attente du lancement...</p>
             </div>
             
+            <!-- Vidéo conférence -->
+            <div style="margin-top: 12px;">
+                <button class="btn" style="width:100%; background: #ecfdf5; color: #065f46; font-weight: 600;" onclick="partagerLienVideo()">📹 Lancer la vidéo conférence</button>
+            </div>
+
             <!-- Chat du lobby -->
             <div style="margin-top: 12px;">
                 <h3 style="color: var(--gray); margin-bottom: 6px; font-size: 0.85rem;">💬 Chat</h3>
@@ -524,6 +530,9 @@
                     <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;">
                         <button class="btn" id="configBtn" style="background: #e5e7eb; color: #374151; flex: 1; display: none;" onclick="showConfigModal()">⚙️ Config</button>
                         <button class="btn" id="endGameBtn" style="background: #fee2e2; color: #dc2626; flex: 1; display: none;" onclick="showEndGameConfirm()">🏁 Fin de partie</button>
+                    </div>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;">
+                        <button class="btn" style="background: #ecfdf5; color: #065f46; flex: 1; font-weight: 600;" onclick="partagerLienVideo()">📹 Vidéo conférence</button>
                     </div>
                 </div>
                 
@@ -16793,6 +16802,73 @@ function initSystemeDe() {
         }
         
         // Retour à l'accueil (sans supprimer la partie)
+        // ========== VIDÉO CONFÉRENCE ==========
+        function partagerLienVideo() {
+            const code = currentGameCode || 'ESPOYR';
+            const lien = `https://meet.jit.si/ESPOYR_${code}`;
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+            // Envoyer dans le chat pour que tous les joueurs le voient
+            if (gameRef) {
+                sendSystemMessage(`📹 Vidéo conférence — lien : ${lien}`);
+            }
+
+            // Sur mobile : utiliser l'API Web Share si disponible
+            if (isMobile && navigator.share) {
+                navigator.share({
+                    title: 'ESPOYR — Vidéo conférence',
+                    text: `Rejoins la vidéo conférence de la partie ESPOYR !`,
+                    url: lien
+                }).catch(() => {
+                    // Si l'utilisateur annule, on affiche quand même le modal
+                    afficherModalVideo(lien, isMobile);
+                });
+                return;
+            }
+
+            // Sur desktop : copier dans le presse-papiers
+            if (!isMobile) {
+                copyToClipboard(lien);
+            }
+
+            afficherModalVideo(lien, isMobile);
+        }
+
+        function afficherModalVideo(lien, isMobile) {
+            showModal(`
+                <h3>📹 Vidéo conférence</h3>
+                <p style="font-size:0.9rem; margin-bottom:12px;">
+                    ${isMobile
+                        ? 'Appuie sur le lien ci-dessous pour rejoindre ou le partager.'
+                        : 'Lien copié dans ton presse-papiers et partagé dans le chat.'}
+                </p>
+                <div style="background:#f0fdf4; border:2px solid #10b981; border-radius:10px; padding:14px; text-align:center; margin-bottom:12px;">
+                    <a href="${lien}" target="_blank"
+                       style="color:#059669; font-weight:bold; font-size:0.9rem; word-break:break-all; text-decoration:underline;">
+                        ${lien}
+                    </a>
+                </div>
+                ${isMobile ? `
+                <div style="background:#fef3c7; border-radius:8px; padding:10px; margin-bottom:10px; font-size:0.82rem; color:#92400e;">
+                    📱 <strong>Sur smartphone :</strong><br>
+                    1. Appuie sur "Rejoindre" — s'ouvre dans ton navigateur<br>
+                    2. Ou appuie sur "Partager" pour envoyer le lien par SMS / WhatsApp
+                </div>
+                ` : `
+                <p style="font-size:0.82rem; color:#6b7280;">
+                    Chaque joueur clique sur ce lien pour rejoindre.<br>
+                    Aucun compte requis. Fonctionne sur tous les appareils.
+                </p>
+                `}
+            `, `
+                <button class="btn btn-primary" onclick="window.open('${lien}', '_blank'); closeModal();">📹 Rejoindre</button>
+                ${isMobile && navigator.share ? `
+                <button class="btn" style="background:#dbeafe;color:#2563eb;" onclick="navigator.share({title:'ESPOYR Vidéo',url:'${lien}'})">📤 Partager</button>
+                ` : ''}
+                <button class="btn btn-secondary" onclick="closeModal()">Fermer</button>
+            `);
+        }
+
         function retourAccueil() {
             closeModal();
             closeGraphModal();
