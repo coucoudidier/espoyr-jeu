@@ -1103,7 +1103,15 @@
     } catch (e) {
         return false;
     }
+     }
+function saveResume(code, data) {
+    try {
+        if (!storageDisponible()) return;
+        localStorage.setItem(getResumeKey(code), JSON.stringify(data));
+    } catch (e) {}
 }
+        
+
 
      
        function loadResume(code) {
