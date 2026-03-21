@@ -26,11 +26,15 @@
         h2 { color: var(--green-dark); margin-bottom: 12px; font-size: 1.2rem; }
         .subtitle { text-align: center; color: var(--gray); margin-bottom: 20px; font-size: 0.9rem; }
         .btn {
-            padding: 10px 20px; border: none; border-radius: 10px;
-            font-size: 0.95rem; font-weight: 600; cursor: pointer;
-            transition: all 0.2s; display: inline-flex; align-items: center; gap: 8px;
-        }
-        .btn:hover { transform: translateY(-2px); }
+    padding: 10px 20px; border: none; border-radius: 10px;
+    font-size: 0.95rem; font-weight: 600; cursor: pointer;
+    transition: all 0.2s; display: inline-flex; align-items: center; gap: 8px;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+       @media (hover: hover) and (pointer: fine) {
+    .btn:hover { transform: translateY(-2px); }
+}
         .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
         .btn-primary { background: linear-gradient(135deg, var(--green), var(--green-dark)); color: white; }
         .btn-secondary { background: linear-gradient(135deg, var(--blue), #2563eb); color: white; }
@@ -97,7 +101,9 @@
             align-items: center; justify-content: flex-start; padding-top: 4px; font-size: 0.65rem;
             position: relative; cursor: pointer; transition: all 0.2s;
         }
-        .case:hover { transform: scale(1.08); box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 10; }
+        @media (hover: hover) and (pointer: fine) {
+    .case:hover { transform: scale(1.08); box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 10; }
+}
         .case.start { background: linear-gradient(135deg, #dcfce7, #bbf7d0); }
         .case.activite { background: linear-gradient(135deg, #fef3c7, #fde68a); border: 2px solid #d97706; }
         .case.activite.owned { border-width: 3px; border-color: #059669; }
@@ -494,6 +500,10 @@
                         <div class="dice" id="dice">🎲</div>
                         <button class="btn btn-orange" id="rollDiceBtn" onclick="rollDice()">🎲 Lancer</button>
                     </div>
+
+                  <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;">
+                        <button class="btn" style="background: #ecfdf5; color: #065f46; flex: 1; font-weight: 600;" onclick="partagerLienVideo()">📹 Vidéo conférence</button>
+                    </div>
                     
                     <!-- ACTIONS RAPIDES -->
                     <div style="background: #f8fafc; padding: 8px; border-radius: 8px; margin: 10px 0;">
@@ -531,9 +541,9 @@
                         <button class="btn" id="configBtn" style="background: #e5e7eb; color: #374151; flex: 1; display: none;" onclick="showConfigModal()">⚙️ Config</button>
                         <button class="btn" id="endGameBtn" style="background: #fee2e2; color: #dc2626; flex: 1; display: none;" onclick="showEndGameConfirm()">🏁 Fin de partie</button>
                     </div>
-                    <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;">
-                        <button class="btn" style="background: #ecfdf5; color: #065f46; flex: 1; font-weight: 600;" onclick="partagerLienVideo()">📹 Vidéo conférence</button>
-                    </div>
+
+
+                 
                 </div>
                 
                 <div class="side-panel">
@@ -1084,16 +1094,27 @@
 
         function getResumeKey(code) { return `${RESUME_KEY_PREFIX}${code}`; }
 
-        function saveResume(code, data) {
-            try { localStorage.setItem(getResumeKey(code), JSON.stringify(data)); } catch(e) {}
-        }
+       function storageDisponible() {
+    try {
+        const testKey = '__test_storage__';
+        localStorage.setItem(testKey, 'ok');
+        localStorage.removeItem(testKey);
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
 
-        function loadResume(code) {
-            try {
-                const raw = localStorage.getItem(getResumeKey(code));
-                return raw ? JSON.parse(raw) : null;
-            } catch(e) { return null; }
-        }
+     
+       function loadResume(code) {
+    try {
+        if (!storageDisponible()) return null;
+        const raw = localStorage.getItem(getResumeKey(code));
+        return raw ? JSON.parse(raw) : null;
+    } catch(e) { 
+        return null; 
+    }
+}
 
         function parseResumeTicket(ticketRaw) {
             if (!ticketRaw) return null;
