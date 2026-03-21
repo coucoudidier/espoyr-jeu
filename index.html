@@ -500,6 +500,9 @@
                         <div class="dice" id="dice">🎲</div>
                         <button class="btn btn-orange" id="rollDiceBtn" onclick="rollDice()">🎲 Lancer</button>
                     </div>
+                 <div id="gameCodeDisplay" style="display: none; text-align: center; margin-top: 8px; padding: 8px 12px; background: #dcfce7; color: #065f46; border-radius: 10px; font-weight: 600;">
+    Connecté · Code ------
+</div>
 
                   <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;">
                         <button class="btn" style="background: #ecfdf5; color: #065f46; flex: 1; font-weight: 600;" onclick="partagerLienVideo()">📹 Vidéo conférence</button>
@@ -5422,9 +5425,19 @@ activiteId: actId
         // ========== UI HELPERS ==========
         
         function showScreen(screenId) {
-            document.querySelectorAll('.card').forEach(c => c.classList.add('hidden'));
-            document.getElementById(screenId).classList.remove('hidden');
+    document.querySelectorAll('.card').forEach(c => c.classList.add('hidden'));
+    document.getElementById(screenId).classList.remove('hidden');
+
+    const gameCodeDisplay = document.getElementById('gameCodeDisplay');
+    if (gameCodeDisplay) {
+        if (screenId === 'gameScreen' && currentGameCode) {
+            gameCodeDisplay.textContent = ` Connecté · Code ${currentGameCode}`;
+            gameCodeDisplay.style.display = 'block';
+        } else {
+            gameCodeDisplay.style.display = 'none';
         }
+    }
+}
         
         function showLobbyOrGame(gameData) {
             const state = gameData?.state || gameData?.status;
