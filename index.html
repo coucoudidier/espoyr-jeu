@@ -7257,9 +7257,41 @@ async function rollDice() {
                 const decouvert = Math.abs(caisseSk.euro);
                 const interetsDec = arrondir2(decouvert * 0.03);
                 caisseSk.euro -= interetsDec;
+
+                // Écriture comptable banque
+                enregistrerEcritureBanque({
+                    event_type: 'OVERDRAFT_INTEREST',
+                    debit_account: 1010,
+                    credit_account: 4000,
+                    amount: interetsDec,
+                    playerId: joueurActuel.id,
+                    description: `Intérêts découvert 3% (tour passé) sur ${decouvert.toFixed(2)}€`
+                });
+
                 await db.ref(`parties/${currentGameCode}/players/${joueurActuel.id}/euro`).set(caisseSk.euro);
                 await syncComptabiliteToFirebase();
                 sendSystemMessage(`📉 ${joueurActuel.name} : intérêts découvert 3% = -${fmt(interetsDec)}€ (solde: ${fmt(caisseSk.euro)}€)`);
+
+                // Modal bloquant pour le joueur local
+                if (joueurActuel.id === myPlayerId) {
+                    await new Promise(resolve => {
+                        window.__resolveDecouvert = resolve;
+                        showModal(`
+                            <h3>📉 Découvert bancaire</h3>
+                            <div style="background:#fee2e2;padding:12px;border-radius:8px;margin:10px 0;">
+                                <p style="margin:0;font-weight:bold;color:#dc2626;">⚠️ Ton compte est en négatif</p>
+                                <p style="margin:8px 0 0 0;font-size:0.9rem;">
+                                    Découvert : <strong>${fmt(decouvert)}€</strong><br>
+                                    Intérêts 3% prélevés : <strong style="color:#dc2626;">-${fmt(interetsDec)}€</strong><br>
+                                    Nouveau solde : <strong style="color:#dc2626;">${fmt(caisseSk.euro)}€</strong>
+                                </p>
+                            </div>
+                            <div style="background:#fef3c7;padding:10px;border-radius:8px;font-size:0.85rem;">
+                                💡 Tu peux convertir ce découvert en prêt bancaire via le bouton <strong>Emprunter</strong>.
+                            </div>
+                        `, `<button class="btn btn-primary" style="width:100%;" onclick="closeModal(); if(window.__resolveDecouvert){window.__resolveDecouvert(); window.__resolveDecouvert=null;}">✓ Compris</button>`);
+                    });
+                }
             }
             // Décrémenter et passer
             await gameRef.child(`skipTurns/${joueurActuel.id}`).set(skipCount - 1);
@@ -7282,6 +7314,16 @@ async function rollDice() {
             const interetsDecouvert = arrondir2(decouvertAvant * 0.03);
             caisseAvantLancer.euro -= interetsDecouvert;
             
+            // Écriture comptable banque : D:1010 Réserves / C:4000 Produits intérêts
+            enregistrerEcritureBanque({
+                event_type: 'OVERDRAFT_INTEREST',
+                debit_account: 1010,
+                credit_account: 4000,
+                amount: interetsDecouvert,
+                playerId: joueurActuel.id,
+                description: `Intérêts découvert 3% sur ${decouvertAvant.toFixed(2)}€`
+            });
+
             // Compteur de difficultés consécutives (déclencheur social Phase 2)
             const diffSnap = await gameRef.child(`difficulteConsecutive/${joueurActuel.id}`).once('value');
             const diffCount = (diffSnap.val() || 0) + 1;
@@ -7291,6 +7333,29 @@ async function rollDice() {
             await syncComptabiliteToFirebase();
             
             sendSystemMessage(`📉 ${joueurActuel.name} : intérêts découvert 3% = -${fmt(interetsDecouvert)}€ (solde: ${fmt(caisseAvantLancer.euro)}€)`);
+
+            // Modal bloquant — le joueur doit valider avant de lancer
+            if (joueurActuel.id === myPlayerId) {
+                await new Promise(resolve => {
+                    window.__resolveDecouvert = resolve;
+                    showModal(`
+                        <h3>📉 Découvert bancaire</h3>
+                        <div style="background:#fee2e2;padding:12px;border-radius:8px;margin:10px 0;">
+                            <p style="margin:0;font-weight:bold;color:#dc2626;">
+                                ⚠️ Ton compte est en négatif
+                            </p>
+                            <p style="margin:8px 0 0 0;font-size:0.9rem;">
+                                Découvert : <strong>${fmt(decouvertAvant)}€</strong><br>
+                                Intérêts 3% prélevés : <strong style="color:#dc2626;">-${fmt(interetsDecouvert)}€</strong><br>
+                                Nouveau solde : <strong style="color:#dc2626;">${fmt(caisseAvantLancer.euro)}€</strong>
+                            </p>
+                        </div>
+                        <div style="background:#fef3c7;padding:10px;border-radius:8px;font-size:0.85rem;">
+                            💡 Tu peux convertir ce découvert en prêt bancaire (10%/passage Ligne 1) via le bouton <strong>Emprunter</strong>.
+                        </div>
+                    `, `<button class="btn btn-primary" style="width:100%;" onclick="closeModal(); if(window.__resolveDecouvert){window.__resolveDecouvert(); window.__resolveDecouvert=null;}">✓ Compris — Lancer le dé</button>`);
+                });
+            }
             
             // Déclencheur social : 2x de suite en difficulté → Phase 2
             const phase = gameState?.phase || 1;
@@ -12208,8 +12273,18 @@ function initSystemeDe() {
                 // Intérêts découvert même quand on passe
                 const caisseSk = COMPTABILITE.caisseJoueurs[bot.id] || {};
                 if ((caisseSk.euro || 0) < 0) {
-                    const interetsDec = arrondir2(Math.abs(caisseSk.euro) * 0.03);
+                    const decouvertSk = Math.abs(caisseSk.euro);
+                    const interetsDec = arrondir2(decouvertSk * 0.03);
                     caisseSk.euro -= interetsDec;
+                    // Écriture comptable banque
+                    enregistrerEcritureBanque({
+                        event_type: 'OVERDRAFT_INTEREST',
+                        debit_account: 1010,
+                        credit_account: 4000,
+                        amount: interetsDec,
+                        playerId: bot.id,
+                        description: `Intérêts découvert 3% bot (tour passé) sur ${decouvertSk.toFixed(2)}€`
+                    });
                     await db.ref(`parties/${currentGameCode}/players/${bot.id}/euro`).set(caisseSk.euro);
                     sendSystemMessage(`📉 ${bot.name} : intérêts découvert 3% = -${fmt(interetsDec)}€`);
                 }
@@ -12223,8 +12298,18 @@ function initSystemeDe() {
             // ── INTÉRÊTS DÉCOUVERT 3% BOT ──
             const caisseBot = COMPTABILITE.caisseJoueurs[bot.id] || {};
             if ((caisseBot.euro || 0) < 0) {
-                const interetsDecBot = arrondir2(Math.abs(caisseBot.euro) * 0.03);
+                const decouvertBot = Math.abs(caisseBot.euro);
+                const interetsDecBot = arrondir2(decouvertBot * 0.03);
                 caisseBot.euro -= interetsDecBot;
+                // Écriture comptable banque
+                enregistrerEcritureBanque({
+                    event_type: 'OVERDRAFT_INTEREST',
+                    debit_account: 1010,
+                    credit_account: 4000,
+                    amount: interetsDecBot,
+                    playerId: bot.id,
+                    description: `Intérêts découvert 3% bot sur ${decouvertBot.toFixed(2)}€`
+                });
                 await db.ref(`parties/${currentGameCode}/players/${bot.id}/euro`).set(caisseBot.euro);
                 await syncComptabiliteToFirebase();
                 sendSystemMessage(`📉 ${bot.name} : intérêts découvert 3% = -${fmt(interetsDecBot)}€ (solde: ${fmt(caisseBot.euro)}€)`);
