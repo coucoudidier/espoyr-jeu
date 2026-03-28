@@ -680,6 +680,174 @@
             console.error("❌ Erreur connexion anonyme :", error);
           });
         const db = firebase.database();
+
+        // ╔══════════════════════════════════════════════════════════════════╗
+        // ║  ESPOYR — CONFIGURATION CENTRALISÉE (tous les paramètres)       ║
+        // ╚══════════════════════════════════════════════════════════════════╝
+        const CONFIG = {
+            // ═══ 💰 ÉCONOMIE DE BASE ═══
+            salaireBase: 350,                    // Salaire net par passage Ligne 1
+            capitalInitial: 450,                 // Cash de départ joueur
+            potAAAInitial: 1000,                 // Solde initial Pot AAA (#)
+            banqueCapitalInitial: 1000,          // Capital de départ banque
+            tauxInteret: 0.10,                   // Intérêt bancaire/passage (10%)
+            remboursementAutoCapitalPct: 0.10,   // % capital remboursé auto/cycle
+            limiteEmpruntMin: 750,               // Plancher emprunt = max(ceci, masse/nbJoueurs)
+
+            // ═══ 🏛️ FISCALITÉ & TAXES ═══
+            tvaTaux: 0.21,                       // TVA (21%)
+            droitsActivite: 0.26,                // Droits d'enregistrement activités (26%)
+            travauxPctDuPrix: 0.16,              // Part travaux dans prix activité (16%)
+            activitePctDuPrix: 0.64,             // Part activité dans prix (64%)
+            tauxTaxeLigne3: 0.10,                // Taxe Ligne 3 sur patrimoine (10%)
+            augmentationTaxeP3: 0.02,            // Hausse taxe/passage en Phase 3 (+2%)
+            penaliteNonDeclaration: 1.50,        // Multiplicateur pénalité (dé 1,3,4,6)
+            reductionNonDeclaration: 0.80,       // Multiplicateur réduction (dé 2,5)
+            desPenalite: [1, 3, 4, 6],           // Faces dé → pénalité
+            desReduction: [2, 5],                // Faces dé → réduction
+
+            // ═══ 📊 TRANSITIONS DE PHASE ═══
+            phase2_passagesMin: 6,               // Passages Ligne 1 avant Phase 2
+            phase3_passagesMin: 12,              // Passages Ligne 1 avant Phase 3
+            phase3_tauxEmploiMin: 50,            // % emploi min en Phase 2
+            phase3_detteMax: 1500,               // Dette max avant Phase 3
+            facteurErosionP2: 0.92,              // Érosion salaire Phase 2 (×0.92^n)
+            malusP3: 0.80,                       // Malus supplémentaire Phase 3 (×0.80)
+            salaireMinimum: 100,                 // Plancher absolu salaire
+
+            // ═══ 🔧 ÉQUIPEMENTS & ACTIVITÉS ═══
+            prixEquipA_pct: 0.70,                // Équipement A = 70% du prix activité
+            prixEquipB_pct: 0.50,                // Équipement B = 50% du prix activité
+            factureActivite_pct: 0.05,           // Facture = 5% du total investi
+            bonusHash_BversA_pct: 0.50,          // Bonus # conversion B→A = 50% diff
+            maxEquipParActivite: 3,              // Max équipements par activité
+            maxB_Phase1: 2,                      // Max B en Phase 1
+            capitalRegBanque: 0.10,              // Capital réglementaire = 10% × encours
+            provisionBanque: 0.05,               // Provision pertes = 5% × encours
+
+            // ═══ 💼 SALAIRES CRÉATIFS (par face de dé) ═══
+            salaire_creatif: { 1: 1.50, 2: 0.70, 3: 1.00, 4: 0.80, 5: 1.10, 6: 0.45 },
+
+            // ═══ 🗺️ PRIX DES ACTIVITÉS (par case id) ═══
+            prixActivites: {
+                1: 200, 3: 220, 5: 240, 6: 180, 7: 200, 8: 160,
+                10: 150, 11: 200, 12: 280, 14: 300, 15: 320,
+                16: 260, 17: 220, 19: 240, 21: 320, 22: 350
+            },
+
+            // ═══ 💸 FRAIS (par case id) ═══
+            fraisCases: { 2: 50, 9: 50, 20: 75 },
+
+            // ═══ 🍀 CARTES CHANCE ═══
+            chanceCards: [
+                { text: "🎉 Fête du village ! Tous reçoivent {0}€", amount: 60, all: true },
+                { text: "🌱 Bonus écologique collectif +{0}€", amount: 45, all: true },
+                { text: "📦 Bonne récolte ! Tous +{0}€", amount: 75, all: true },
+                { text: "🎁 Don anonyme +{0}€", amount: 150, all: false },
+                { text: "📰 Bonne nouvelle +{0}€", amount: 105, all: false },
+                { text: "🍀 Coup de chance +{0}€", amount: 150, all: false }
+            ],
+
+            // ═══ 👨‍👩‍👧‍👦 CARTES MALCHANCE ═══
+            malchanceCards: [
+                { text: "💸 Intérêts imprévus -{0}€", amount: 50 },
+                { text: "🏦 Frais bancaires -{0}€", amount: 120 },
+                { text: "⏰ Pénalités retard -{0}€", amount: 150 },
+                { text: "📋 Amendes -{0}€", amount: 100 },
+                { text: "📉 Découvert -{0}€", amount: 50 },
+                { text: "💱 Frais change -{0}€", amount: 75 }
+            ],
+
+            // ═══ 🏠 BIENS PERSONNELS (case Merci, par dé 1-6) ═══
+            biensPersonnels: [
+                { id: 1, nom: "Maison familiale", icon: "🏠", description: "Votre famille s'agrandit !", valeur: 3500, interets: 30, total: 4550, mensualite: 152, duree: 30 },
+                { id: 2, nom: "Voiture familiale", icon: "🚗", description: "Votre vieille voiture rend l'âme.", valeur: 800, interets: 25, total: 1000, mensualite: 143, duree: 7 },
+                { id: 3, nom: "Cheval + équipement", icon: "🐴", description: "Votre enfant est passionné d'équitation !", valeur: 700, interets: 20, total: 840, mensualite: 70, duree: 12 },
+                { id: 4, nom: "Maison de campagne", icon: "🏡", description: "Héritage familial à racheter.", valeur: 1200, interets: 28, total: 1536, mensualite: 77, duree: 20 },
+                { id: 5, nom: "Caravane", icon: "🚐", description: "Les enfants adorent !", valeur: 500, interets: 22, total: 610, mensualite: 61, duree: 10 },
+                { id: 6, nom: "Études enfant", icon: "🎓", description: "Votre enfant entre en études supérieures.", valeur: 600, interets: 15, total: 690, mensualite: 69, duree: 10 }
+            ],
+
+            // ═══ 🌱 TRAVAUX COOPÉRATIFS ═══
+            travauxCoopGain: 200,                // Gain # par travail coopératif
+
+            // ═══ ⏱️ TIMINGS ═══
+            timingDecision: 60,
+            timingEnchere: 60,
+            timingNegociation: 45,
+            timingBot: 2,
+            toastDelay: 800,
+            toastVisible: 4000
+        };
+
+        // ════════════════════════════════════════════════════════════════
+        // MÉTADONNÉES DES PARAMÈTRES (descriptions, min, max, catégories)
+        // Utilisé par le modal de configuration pour générer l'UI
+        // ════════════════════════════════════════════════════════════════
+        const PARAM_DEFS = {
+            // ═══ 💰 Économie ═══
+            salaireBase:                 { cat: 'economie', label: '💰 Salaire de base', unit: '€', min: 100, max: 1000, step: 10, desc: 'Salaire net payé au joueur à chaque passage Ligne 1.' },
+            capitalInitial:              { cat: 'economie', label: '🏦 Capital initial joueur', unit: '€', min: 100, max: 2000, step: 50, desc: 'Cash de départ de chaque joueur.' },
+            potAAAInitial:               { cat: 'economie', label: '# Pot AAA initial', unit: '#', min: 0, max: 5000, step: 100, desc: 'Solde initial du Pot AAA.' },
+            banqueCapitalInitial:        { cat: 'economie', label: '🏦 Capital banque', unit: '€', min: 500, max: 5000, step: 100, desc: 'Capital de départ de la banque.' },
+            tauxInteret:                 { cat: 'economie', label: '📈 Taux d\'intérêt', unit: '%', pct: true, min: 0, max: 50, step: 1, desc: 'Intérêt bancaire par passage Ligne 1.' },
+            remboursementAutoCapitalPct: { cat: 'economie', label: '🔄 Remboursement auto', unit: '%', pct: true, min: 0, max: 50, step: 1, desc: '% du capital remboursé automatiquement.' },
+            limiteEmpruntMin:            { cat: 'economie', label: '📊 Plancher emprunt', unit: '€', min: 300, max: 3000, step: 50, desc: 'Limite emprunt = max(ceci, masse÷joueurs).' },
+
+            // ═══ 🏛️ Fiscalité ═══
+            tvaTaux:                     { cat: 'fiscalite', label: '🏛️ TVA', unit: '%', pct: true, min: 0, max: 40, step: 1, desc: 'TVA appliquée sur achats et services.' },
+            droitsActivite:              { cat: 'fiscalite', label: '📋 Droits activité', unit: '%', pct: true, min: 0, max: 50, step: 1, desc: 'Droits d\'enregistrement sur achat activités.' },
+            travauxPctDuPrix:            { cat: 'fiscalite', label: '🔨 Part travaux', unit: '%', pct: true, min: 5, max: 40, step: 1, desc: 'Part travaux dans prix activité (soumise TVA).' },
+            activitePctDuPrix:           { cat: 'fiscalite', label: '🏪 Part activité', unit: '%', pct: true, min: 30, max: 80, step: 1, desc: 'Part activité dans prix (soumise droits).' },
+            tauxTaxeLigne3:              { cat: 'fiscalite', label: '🏛️ Taxe Ligne 3', unit: '%', pct: true, min: 5, max: 30, step: 1, desc: 'Taxe sur patrimoine à la Ligne 3.' },
+            augmentationTaxeP3:          { cat: 'fiscalite', label: '📈 Hausse taxe P3', unit: '%', pct: true, min: 1, max: 15, step: 1, desc: 'Augmentation taxe/passage en Phase 3.' },
+            penaliteNonDeclaration:      { cat: 'fiscalite', label: '⚠️ Pénalité (×)', unit: '×', min: 1.0, max: 3.0, step: 0.1, desc: 'Multiplicateur si pas de déclaration fiscale (dé 1,3,4,6).' },
+            reductionNonDeclaration:     { cat: 'fiscalite', label: '🍀 Réduction (×)', unit: '×', min: 0.3, max: 1.0, step: 0.05, desc: 'Multiplicateur réduction (dé 2,5).' },
+
+            // ═══ 📊 Phases ═══
+            phase2_passagesMin:          { cat: 'phases', label: '📊 Phase 2 après', unit: ' passages', min: 2, max: 20, step: 1, desc: 'Passages Ligne 1 avant Phase 2.' },
+            phase3_passagesMin:          { cat: 'phases', label: '🌍 Phase 3 après', unit: ' passages', min: 6, max: 40, step: 1, desc: 'Passages Ligne 1 avant Phase 3.' },
+            phase3_tauxEmploiMin:        { cat: 'phases', label: '📉 Emploi min P3', unit: '%', min: 10, max: 80, step: 5, desc: 'Taux emploi min — en dessous → Phase 3.' },
+            phase3_detteMax:             { cat: 'phases', label: '💸 Dette max P3', unit: '€', min: 500, max: 10000, step: 100, desc: 'Dette totale déclenchant Phase 3.' },
+            facteurErosionP2:            { cat: 'phases', label: '📉 Érosion P2', unit: '×/passage', min: 0.80, max: 0.99, step: 0.01, desc: 'Salaire × ce facteur^n en Phase 2.' },
+            malusP3:                     { cat: 'phases', label: '💀 Malus P3', unit: '×', min: 0.50, max: 1.00, step: 0.05, desc: 'Multiplicateur supplémentaire en Phase 3.' },
+            salaireMinimum:              { cat: 'phases', label: '🛡️ Salaire minimum', unit: '€', min: 0, max: 300, step: 10, desc: 'Plancher absolu du salaire.' },
+
+            // ═══ 🔧 Équipements ═══
+            prixEquipA_pct:              { cat: 'equipements', label: '🌿 Prix Équip. A', unit: '%', pct: true, min: 30, max: 100, step: 5, desc: 'Équipement A = ce % du prix activité.' },
+            prixEquipB_pct:              { cat: 'equipements', label: '❄️ Prix Équip. B', unit: '%', pct: true, min: 20, max: 80, step: 5, desc: 'Équipement B = ce % du prix activité.' },
+            factureActivite_pct:         { cat: 'equipements', label: '🧾 Taux facture', unit: '%', pct: true, min: 1, max: 15, step: 1, desc: 'Facture = ce % du total investi.' },
+            bonusHash_BversA_pct:        { cat: 'equipements', label: '# Bonus B→A', unit: '%', pct: true, min: 20, max: 100, step: 10, desc: 'Bonus # conversion B→A (% de diff).' },
+            maxEquipParActivite:         { cat: 'equipements', label: '🔧 Max équipements', unit: '', min: 1, max: 5, step: 1, desc: 'Maximum équipements par activité.' },
+            maxB_Phase1:                 { cat: 'equipements', label: '❄️ Max B (Phase 1)', unit: '', min: 0, max: 4, step: 1, desc: 'Maximum B autorisés en Phase 1.' },
+            capitalRegBanque:            { cat: 'equipements', label: '🏦 Capital rég.', unit: '%', pct: true, min: 5, max: 20, step: 1, desc: 'Capital réglementaire banque (% encours).' },
+            provisionBanque:             { cat: 'equipements', label: '🛡️ Provision', unit: '%', pct: true, min: 1, max: 15, step: 1, desc: 'Provision pour pertes (% encours).' },
+
+            // ═══ 🌱 Travaux ═══
+            travauxCoopGain:             { cat: 'travaux', label: '🌱 Gain travaux coop', unit: '#', min: 50, max: 500, step: 10, desc: 'Gain en # par travail coopératif.' },
+
+            // ═══ ⏱️ Timings ═══
+            timingDecision:              { cat: 'timers', label: '⏱️ Temps décision', unit: 's', min: 10, max: 180, step: 5, desc: 'Temps pour décider (acheter/passer).' },
+            timingEnchere:               { cat: 'timers', label: '🔨 Temps enchère', unit: 's', min: 20, max: 300, step: 10, desc: 'Temps par tour d\'enchère.' },
+            timingNegociation:           { cat: 'timers', label: '🤝 Temps négociation', unit: 's', min: 15, max: 120, step: 5, desc: 'Temps pour négocier un paiement.' },
+            timingBot:                   { cat: 'timers', label: '🤖 Délai bot', unit: 's', min: 0.5, max: 15, step: 0.5, desc: 'Pause avant action joueur complémentaire.' },
+            toastDelay:                  { cat: 'timers', label: '💬 Délai messages', unit: 'ms', min: 0, max: 3000, step: 100, desc: 'Délai entre les messages toast.' },
+            toastVisible:                { cat: 'timers', label: '💬 Durée visible', unit: 'ms', min: 2000, max: 10000, step: 500, desc: 'Durée de visibilité des messages.' }
+        };
+
+        const PARAM_CATEGORIES = [
+            { id: 'economie',    label: '💰 Économie',    color: '#059669' },
+            { id: 'fiscalite',   label: '🏛️ Fiscalité',   color: '#7c3aed' },
+            { id: 'phases',      label: '📊 Phases',      color: '#dc2626' },
+            { id: 'equipements', label: '🔧 Équipements', color: '#d97706' },
+            { id: 'travaux',     label: '🌱 Travaux',     color: '#15803d' },
+            { id: 'timers',      label: '⏱️ Timings',     color: '#6b7280' }
+        ];
+        
+        // Config modifiable par l'host
+        let gameConfig = { ...CONFIG };
+        
+
         
         // ========== PLAN COMPTABLE ==========
         const PLAN_COMPTABLE = {
@@ -970,23 +1138,27 @@
         }
         // Cartes Chance — montants lus depuis gameConfig.chanceCards
         function getChanceCards() {
-            return (gameConfig.chanceCards || CONFIG.chanceCards).map(c => ({
+            let src;
+            try { src = gameConfig.chanceCards || CONFIG.chanceCards; } catch(e) { src = CONFIG.chanceCards; }
+            return src.map(c => ({
                 ...c, text: c.text.replace('{0}', c.amount)
             }));
         }
-        const CHANCE_CARDS = getChanceCards();
+        const CHANCE_CARDS = CONFIG.chanceCards.map(c => ({ ...c, text: c.text.replace('{0}', c.amount) }));
         
         // Cartes Malchance — montants lus depuis gameConfig.malchanceCards
         function getMalchanceCards() {
-            return (gameConfig.malchanceCards || CONFIG.malchanceCards).map(c => ({
+            let src;
+            try { src = gameConfig.malchanceCards || CONFIG.malchanceCards; } catch(e) { src = CONFIG.malchanceCards; }
+            return src.map(c => ({
                 ...c, text: c.text.replace('{0}', c.amount)
             }));
         }
-        const MALCHANCE_CARDS = getMalchanceCards();
+        const MALCHANCE_CARDS = CONFIG.malchanceCards.map(c => ({ ...c, text: c.text.replace('{0}', c.amount) }));
         
         // Biens personnels — lus depuis gameConfig.biensPersonnels
-        function getBiensPersonnels() { return gameConfig.biensPersonnels || CONFIG.biensPersonnels; }
-        const BIENS_MALCHANCE = getBiensPersonnels();
+        function getBiensPersonnels() { try { return gameConfig.biensPersonnels || CONFIG.biensPersonnels; } catch(e) { return CONFIG.biensPersonnels; } }
+        const BIENS_MALCHANCE = CONFIG.biensPersonnels;
         
         // Logo AAA (SVG inline jaune #FDDB31, texte noir)
         const LOGO_AAA = `<svg style="display:inline-block;width:1.1em;height:1.1em;vertical-align:middle;" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="#FDDB31" stroke="#C4A800" stroke-width="3"/><text x="50" y="58" text-anchor="middle" font-size="48" font-weight="bold" fill="#000" font-family="Arial">#</text><text x="50" y="82" text-anchor="middle" font-size="18" font-weight="bold" fill="#000" font-family="Arial">AAA</text></svg>`;
@@ -1013,7 +1185,8 @@
         // ========== TRAVAUX COOPÉRATIFS (Actions Contributives) ==========
         // Travaux coopératifs — gain lu depuis gameConfig.travauxCoopGain
         function getTravauxCoop() {
-            const g = gameConfig.travauxCoopGain || 200;
+            let g;
+            try { g = gameConfig.travauxCoopGain || CONFIG.travauxCoopGain; } catch(e) { g = CONFIG.travauxCoopGain; }
             return [
                 { id: 1,  nom: '🌱 Participer au jardin communautaire', gain: g },
                 { id: 2,  nom: '🌾 Maintenir la meunerie locale',        gain: g },
@@ -1103,172 +1276,6 @@
             setTimeout(() => { if (delta.parentNode) delta.remove(); }, 1600);
             setTimeout(() => { bar.classList.remove('flash-green', 'flash-red'); }, 1300);
         }
-        
-        // ╔══════════════════════════════════════════════════════════════════╗
-        // ║  ESPOYR — CONFIGURATION CENTRALISÉE (tous les paramètres)       ║
-        // ╚══════════════════════════════════════════════════════════════════╝
-        const CONFIG = {
-            // ═══ 💰 ÉCONOMIE DE BASE ═══
-            salaireBase: 350,                    // Salaire net par passage Ligne 1
-            capitalInitial: 450,                 // Cash de départ joueur
-            potAAAInitial: 1000,                 // Solde initial Pot AAA (#)
-            banqueCapitalInitial: 1000,          // Capital de départ banque
-            tauxInteret: 0.10,                   // Intérêt bancaire/passage (10%)
-            remboursementAutoCapitalPct: 0.10,   // % capital remboursé auto/cycle
-            limiteEmpruntMin: 750,               // Plancher emprunt = max(ceci, masse/nbJoueurs)
-
-            // ═══ 🏛️ FISCALITÉ & TAXES ═══
-            tvaTaux: 0.21,                       // TVA (21%)
-            droitsActivite: 0.26,                // Droits d'enregistrement activités (26%)
-            travauxPctDuPrix: 0.16,              // Part travaux dans prix activité (16%)
-            activitePctDuPrix: 0.64,             // Part activité dans prix (64%)
-            tauxTaxeLigne3: 0.10,                // Taxe Ligne 3 sur patrimoine (10%)
-            augmentationTaxeP3: 0.02,            // Hausse taxe/passage en Phase 3 (+2%)
-            penaliteNonDeclaration: 1.50,        // Multiplicateur pénalité (dé 1,3,4,6)
-            reductionNonDeclaration: 0.80,       // Multiplicateur réduction (dé 2,5)
-            desPenalite: [1, 3, 4, 6],           // Faces dé → pénalité
-            desReduction: [2, 5],                // Faces dé → réduction
-
-            // ═══ 📊 TRANSITIONS DE PHASE ═══
-            phase2_passagesMin: 6,               // Passages Ligne 1 avant Phase 2
-            phase3_passagesMin: 12,              // Passages Ligne 1 avant Phase 3
-            phase3_tauxEmploiMin: 50,            // % emploi min en Phase 2
-            phase3_detteMax: 1500,               // Dette max avant Phase 3
-            facteurErosionP2: 0.92,              // Érosion salaire Phase 2 (×0.92^n)
-            malusP3: 0.80,                       // Malus supplémentaire Phase 3 (×0.80)
-            salaireMinimum: 100,                 // Plancher absolu salaire
-
-            // ═══ 🔧 ÉQUIPEMENTS & ACTIVITÉS ═══
-            prixEquipA_pct: 0.70,                // Équipement A = 70% du prix activité
-            prixEquipB_pct: 0.50,                // Équipement B = 50% du prix activité
-            factureActivite_pct: 0.05,           // Facture = 5% du total investi
-            bonusHash_BversA_pct: 0.50,          // Bonus # conversion B→A = 50% diff
-            maxEquipParActivite: 3,              // Max équipements par activité
-            maxB_Phase1: 2,                      // Max B en Phase 1
-            capitalRegBanque: 0.10,              // Capital réglementaire = 10% × encours
-            provisionBanque: 0.05,               // Provision pertes = 5% × encours
-
-            // ═══ 💼 SALAIRES CRÉATIFS (par face de dé) ═══
-            salaire_creatif: { 1: 1.50, 2: 0.70, 3: 1.00, 4: 0.80, 5: 1.10, 6: 0.45 },
-
-            // ═══ 🗺️ PRIX DES ACTIVITÉS (par case id) ═══
-            prixActivites: {
-                1: 200, 3: 220, 5: 240, 6: 180, 7: 200, 8: 160,
-                10: 150, 11: 200, 12: 280, 14: 300, 15: 320,
-                16: 260, 17: 220, 19: 240, 21: 320, 22: 350
-            },
-
-            // ═══ 💸 FRAIS (par case id) ═══
-            fraisCases: { 2: 50, 9: 50, 20: 75 },
-
-            // ═══ 🍀 CARTES CHANCE ═══
-            chanceCards: [
-                { text: "🎉 Fête du village ! Tous reçoivent {0}€", amount: 60, all: true },
-                { text: "🌱 Bonus écologique collectif +{0}€", amount: 45, all: true },
-                { text: "📦 Bonne récolte ! Tous +{0}€", amount: 75, all: true },
-                { text: "🎁 Don anonyme +{0}€", amount: 150, all: false },
-                { text: "📰 Bonne nouvelle +{0}€", amount: 105, all: false },
-                { text: "🍀 Coup de chance +{0}€", amount: 150, all: false }
-            ],
-
-            // ═══ 👨‍👩‍👧‍👦 CARTES MALCHANCE ═══
-            malchanceCards: [
-                { text: "💸 Intérêts imprévus -{0}€", amount: 50 },
-                { text: "🏦 Frais bancaires -{0}€", amount: 120 },
-                { text: "⏰ Pénalités retard -{0}€", amount: 150 },
-                { text: "📋 Amendes -{0}€", amount: 100 },
-                { text: "📉 Découvert -{0}€", amount: 50 },
-                { text: "💱 Frais change -{0}€", amount: 75 }
-            ],
-
-            // ═══ 🏠 BIENS PERSONNELS (case Merci, par dé 1-6) ═══
-            biensPersonnels: [
-                { id: 1, nom: "Maison familiale", icon: "🏠", description: "Votre famille s'agrandit !", valeur: 3500, interets: 30, total: 4550, mensualite: 152, duree: 30 },
-                { id: 2, nom: "Voiture familiale", icon: "🚗", description: "Votre vieille voiture rend l'âme.", valeur: 800, interets: 25, total: 1000, mensualite: 143, duree: 7 },
-                { id: 3, nom: "Cheval + équipement", icon: "🐴", description: "Votre enfant est passionné d'équitation !", valeur: 700, interets: 20, total: 840, mensualite: 70, duree: 12 },
-                { id: 4, nom: "Maison de campagne", icon: "🏡", description: "Héritage familial à racheter.", valeur: 1200, interets: 28, total: 1536, mensualite: 77, duree: 20 },
-                { id: 5, nom: "Caravane", icon: "🚐", description: "Les enfants adorent !", valeur: 500, interets: 22, total: 610, mensualite: 61, duree: 10 },
-                { id: 6, nom: "Études enfant", icon: "🎓", description: "Votre enfant entre en études supérieures.", valeur: 600, interets: 15, total: 690, mensualite: 69, duree: 10 }
-            ],
-
-            // ═══ 🌱 TRAVAUX COOPÉRATIFS ═══
-            travauxCoopGain: 200,                // Gain # par travail coopératif
-
-            // ═══ ⏱️ TIMINGS ═══
-            timingDecision: 60,
-            timingEnchere: 60,
-            timingNegociation: 45,
-            timingBot: 2,
-            toastDelay: 800,
-            toastVisible: 4000
-        };
-
-        // ════════════════════════════════════════════════════════════════
-        // MÉTADONNÉES DES PARAMÈTRES (descriptions, min, max, catégories)
-        // Utilisé par le modal de configuration pour générer l'UI
-        // ════════════════════════════════════════════════════════════════
-        const PARAM_DEFS = {
-            // ═══ 💰 Économie ═══
-            salaireBase:                 { cat: 'economie', label: '💰 Salaire de base', unit: '€', min: 100, max: 1000, step: 10, desc: 'Salaire net payé au joueur à chaque passage Ligne 1.' },
-            capitalInitial:              { cat: 'economie', label: '🏦 Capital initial joueur', unit: '€', min: 100, max: 2000, step: 50, desc: 'Cash de départ de chaque joueur.' },
-            potAAAInitial:               { cat: 'economie', label: '# Pot AAA initial', unit: '#', min: 0, max: 5000, step: 100, desc: 'Solde initial du Pot AAA.' },
-            banqueCapitalInitial:        { cat: 'economie', label: '🏦 Capital banque', unit: '€', min: 500, max: 5000, step: 100, desc: 'Capital de départ de la banque.' },
-            tauxInteret:                 { cat: 'economie', label: '📈 Taux d\'intérêt', unit: '%', pct: true, min: 0, max: 50, step: 1, desc: 'Intérêt bancaire par passage Ligne 1.' },
-            remboursementAutoCapitalPct: { cat: 'economie', label: '🔄 Remboursement auto', unit: '%', pct: true, min: 0, max: 50, step: 1, desc: '% du capital remboursé automatiquement.' },
-            limiteEmpruntMin:            { cat: 'economie', label: '📊 Plancher emprunt', unit: '€', min: 300, max: 3000, step: 50, desc: 'Limite emprunt = max(ceci, masse÷joueurs).' },
-
-            // ═══ 🏛️ Fiscalité ═══
-            tvaTaux:                     { cat: 'fiscalite', label: '🏛️ TVA', unit: '%', pct: true, min: 0, max: 40, step: 1, desc: 'TVA appliquée sur achats et services.' },
-            droitsActivite:              { cat: 'fiscalite', label: '📋 Droits activité', unit: '%', pct: true, min: 0, max: 50, step: 1, desc: 'Droits d\'enregistrement sur achat activités.' },
-            travauxPctDuPrix:            { cat: 'fiscalite', label: '🔨 Part travaux', unit: '%', pct: true, min: 5, max: 40, step: 1, desc: 'Part travaux dans prix activité (soumise TVA).' },
-            activitePctDuPrix:           { cat: 'fiscalite', label: '🏪 Part activité', unit: '%', pct: true, min: 30, max: 80, step: 1, desc: 'Part activité dans prix (soumise droits).' },
-            tauxTaxeLigne3:              { cat: 'fiscalite', label: '🏛️ Taxe Ligne 3', unit: '%', pct: true, min: 5, max: 30, step: 1, desc: 'Taxe sur patrimoine à la Ligne 3.' },
-            augmentationTaxeP3:          { cat: 'fiscalite', label: '📈 Hausse taxe P3', unit: '%', pct: true, min: 1, max: 15, step: 1, desc: 'Augmentation taxe/passage en Phase 3.' },
-            penaliteNonDeclaration:      { cat: 'fiscalite', label: '⚠️ Pénalité (×)', unit: '×', min: 1.0, max: 3.0, step: 0.1, desc: 'Multiplicateur si pas de déclaration fiscale (dé 1,3,4,6).' },
-            reductionNonDeclaration:     { cat: 'fiscalite', label: '🍀 Réduction (×)', unit: '×', min: 0.3, max: 1.0, step: 0.05, desc: 'Multiplicateur réduction (dé 2,5).' },
-
-            // ═══ 📊 Phases ═══
-            phase2_passagesMin:          { cat: 'phases', label: '📊 Phase 2 après', unit: ' passages', min: 2, max: 20, step: 1, desc: 'Passages Ligne 1 avant Phase 2.' },
-            phase3_passagesMin:          { cat: 'phases', label: '🌍 Phase 3 après', unit: ' passages', min: 6, max: 40, step: 1, desc: 'Passages Ligne 1 avant Phase 3.' },
-            phase3_tauxEmploiMin:        { cat: 'phases', label: '📉 Emploi min P3', unit: '%', min: 10, max: 80, step: 5, desc: 'Taux emploi min — en dessous → Phase 3.' },
-            phase3_detteMax:             { cat: 'phases', label: '💸 Dette max P3', unit: '€', min: 500, max: 10000, step: 100, desc: 'Dette totale déclenchant Phase 3.' },
-            facteurErosionP2:            { cat: 'phases', label: '📉 Érosion P2', unit: '×/passage', min: 0.80, max: 0.99, step: 0.01, desc: 'Salaire × ce facteur^n en Phase 2.' },
-            malusP3:                     { cat: 'phases', label: '💀 Malus P3', unit: '×', min: 0.50, max: 1.00, step: 0.05, desc: 'Multiplicateur supplémentaire en Phase 3.' },
-            salaireMinimum:              { cat: 'phases', label: '🛡️ Salaire minimum', unit: '€', min: 0, max: 300, step: 10, desc: 'Plancher absolu du salaire.' },
-
-            // ═══ 🔧 Équipements ═══
-            prixEquipA_pct:              { cat: 'equipements', label: '🌿 Prix Équip. A', unit: '%', pct: true, min: 30, max: 100, step: 5, desc: 'Équipement A = ce % du prix activité.' },
-            prixEquipB_pct:              { cat: 'equipements', label: '❄️ Prix Équip. B', unit: '%', pct: true, min: 20, max: 80, step: 5, desc: 'Équipement B = ce % du prix activité.' },
-            factureActivite_pct:         { cat: 'equipements', label: '🧾 Taux facture', unit: '%', pct: true, min: 1, max: 15, step: 1, desc: 'Facture = ce % du total investi.' },
-            bonusHash_BversA_pct:        { cat: 'equipements', label: '# Bonus B→A', unit: '%', pct: true, min: 20, max: 100, step: 10, desc: 'Bonus # conversion B→A (% de diff).' },
-            maxEquipParActivite:         { cat: 'equipements', label: '🔧 Max équipements', unit: '', min: 1, max: 5, step: 1, desc: 'Maximum équipements par activité.' },
-            maxB_Phase1:                 { cat: 'equipements', label: '❄️ Max B (Phase 1)', unit: '', min: 0, max: 4, step: 1, desc: 'Maximum B autorisés en Phase 1.' },
-            capitalRegBanque:            { cat: 'equipements', label: '🏦 Capital rég.', unit: '%', pct: true, min: 5, max: 20, step: 1, desc: 'Capital réglementaire banque (% encours).' },
-            provisionBanque:             { cat: 'equipements', label: '🛡️ Provision', unit: '%', pct: true, min: 1, max: 15, step: 1, desc: 'Provision pour pertes (% encours).' },
-
-            // ═══ 🌱 Travaux ═══
-            travauxCoopGain:             { cat: 'travaux', label: '🌱 Gain travaux coop', unit: '#', min: 50, max: 500, step: 10, desc: 'Gain en # par travail coopératif.' },
-
-            // ═══ ⏱️ Timings ═══
-            timingDecision:              { cat: 'timers', label: '⏱️ Temps décision', unit: 's', min: 10, max: 180, step: 5, desc: 'Temps pour décider (acheter/passer).' },
-            timingEnchere:               { cat: 'timers', label: '🔨 Temps enchère', unit: 's', min: 20, max: 300, step: 10, desc: 'Temps par tour d\'enchère.' },
-            timingNegociation:           { cat: 'timers', label: '🤝 Temps négociation', unit: 's', min: 15, max: 120, step: 5, desc: 'Temps pour négocier un paiement.' },
-            timingBot:                   { cat: 'timers', label: '🤖 Délai bot', unit: 's', min: 0.5, max: 15, step: 0.5, desc: 'Pause avant action joueur complémentaire.' },
-            toastDelay:                  { cat: 'timers', label: '💬 Délai messages', unit: 'ms', min: 0, max: 3000, step: 100, desc: 'Délai entre les messages toast.' },
-            toastVisible:                { cat: 'timers', label: '💬 Durée visible', unit: 'ms', min: 2000, max: 10000, step: 500, desc: 'Durée de visibilité des messages.' }
-        };
-
-        const PARAM_CATEGORIES = [
-            { id: 'economie',    label: '💰 Économie',    color: '#059669' },
-            { id: 'fiscalite',   label: '🏛️ Fiscalité',   color: '#7c3aed' },
-            { id: 'phases',      label: '📊 Phases',      color: '#dc2626' },
-            { id: 'equipements', label: '🔧 Équipements', color: '#d97706' },
-            { id: 'travaux',     label: '🌱 Travaux',     color: '#15803d' },
-            { id: 'timers',      label: '⏱️ Timings',     color: '#6b7280' }
-        ];
-        
-        // Config modifiable par l'host
-        let gameConfig = { ...CONFIG };
         
         // ========== ÉTAT LOCAL ==========
         let myPlayerId = null;
