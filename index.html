@@ -771,13 +771,19 @@
             // ═══ 🌱 TRAVAUX COOPÉRATIFS ═══
             travauxCoopGain: 200,                // Gain # par travail coopératif
 
+            // ═══ 🎯 CIBLES TEMPORELLES ADAPTATIVES ═══
+            phase2_cible_minutes: 45,            // Phase 2 à 45 minutes de jeu effectif
+            phase3_cible_minutes: 75,            // Phase 3 à 75 minutes de jeu effectif
+            adaptative: true,                    // Activer le système adaptatif (sinon seuils statiques)
+
             // ═══ ⏱️ TIMINGS ═══
             timingDecision: 60,
             timingEnchere: 60,
             timingNegociation: 45,
             timingBot: 2,
             toastDelay: 800,
-            toastVisible: 4000
+            toastVisible: 4000,
+            toastPosition: false
         };
 
         // ════════════════════════════════════════════════════════════════
@@ -826,13 +832,18 @@
             // ═══ 🌱 Travaux ═══
             travauxCoopGain:             { cat: 'travaux', label: '🌱 Gain travaux coop', unit: '#', min: 50, max: 500, step: 10, desc: 'Gain en # par travail coopératif.' },
 
+            // ═══ 🎯 Adaptatif ═══
+            phase2_cible_minutes:        { cat: 'phases', label: '🎯 Cible Phase 2', unit: ' min', min: 15, max: 90, step: 5, desc: 'Temps de jeu effectif (en minutes) avant Phase 2. Le système ajuste les passages dynamiquement.' },
+            phase3_cible_minutes:        { cat: 'phases', label: '🎯 Cible Phase 3', unit: ' min', min: 30, max: 120, step: 5, desc: 'Temps de jeu effectif avant Phase 3. Exclut automatiquement les pauses entre sessions.' },
+
             // ═══ ⏱️ Timings ═══
             timingDecision:              { cat: 'timers', label: '⏱️ Temps décision', unit: 's', min: 10, max: 180, step: 5, desc: 'Temps pour décider (acheter/passer).' },
             timingEnchere:               { cat: 'timers', label: '🔨 Temps enchère', unit: 's', min: 20, max: 300, step: 10, desc: 'Temps par tour d\'enchère.' },
             timingNegociation:           { cat: 'timers', label: '🤝 Temps négociation', unit: 's', min: 15, max: 120, step: 5, desc: 'Temps pour négocier un paiement.' },
             timingBot:                   { cat: 'timers', label: '🤖 Délai bot', unit: 's', min: 0.5, max: 15, step: 0.5, desc: 'Pause avant action joueur complémentaire.' },
             toastDelay:                  { cat: 'timers', label: '💬 Délai messages', unit: 'ms', min: 0, max: 3000, step: 100, desc: 'Délai entre les messages toast.' },
-            toastVisible:                { cat: 'timers', label: '💬 Durée visible', unit: 'ms', min: 2000, max: 10000, step: 500, desc: 'Durée de visibilité des messages.' }
+            toastVisible:                { cat: 'timers', label: '💬 Durée visible', unit: 'ms', min: 2000, max: 10000, step: 500, desc: 'Durée de visibilité des messages.' },
+            toastPosition:               { cat: 'timers', label: '📍 Afficher déplacements', bool: true, desc: 'Afficher les toasts de déplacement des autres joueurs (ex: "fait 3 → Boulangerie").' }
         };
 
         const PARAM_CATEGORIES = [
@@ -1277,6 +1288,105 @@
             setTimeout(() => { bar.classList.remove('flash-green', 'flash-red'); }, 1300);
         }
         
+        // ========== SYSTÈME ADAPTATIF DE PHASES ==========
+        // Gère le temps de jeu effectif (survit aux interruptions)
+        let sessionStartTimestamp = null;          // Quand cette session a démarré
+        let tempsJeuEffectifAvantSession = 0;      // Temps accumulé des sessions précédentes (ms)
+        let passageHistoryLocal = [];              // Historique local [{tempsJeu_ms, passages}]
+        
+        // Retourne le temps de jeu effectif en ms (exclut les pauses entre sessions)
+        function getTempsJeuEffectif() {
+            if (!sessionStartTimestamp) return tempsJeuEffectifAvantSession;
+            return tempsJeuEffectifAvantSession + (Date.now() - sessionStartTimestamp);
+        }
+        
+        // Calcule la vitesse de passages Ligne 1 (passages/minute)
+        function getVitessePassages() {
+            if (passageHistoryLocal.length < 2) {
+                // Estimation par défaut: ~1 passage L1 par joueur toutes les ~2.7 min
+                const nj = Object.keys(playersData).length || 4;
+                return nj * 0.37;
+            }
+            const first = passageHistoryLocal[Math.max(0, passageHistoryLocal.length - 12)];
+            const last = passageHistoryLocal[passageHistoryLocal.length - 1];
+            const deltaMin = (last.tempsJeu_ms - first.tempsJeu_ms) / 60000;
+            const deltaPass = last.passages - first.passages;
+            if (deltaMin <= 0.5) return passageHistoryLocal.length > 2 ? 1.5 : (Object.keys(playersData).length || 4) * 0.37;
+            return deltaPass / deltaMin;
+        }
+        
+        // Calcule le seuil dynamique pour une cible temporelle
+        function getSeuilAdaptatif(cibleMinutes) {
+            const tempsJeuMin = getTempsJeuEffectif() / 60000;
+            const tempsRestant = Math.max(0, cibleMinutes - tempsJeuMin);
+            const vitesse = getVitessePassages();
+            const passagesActuels = gameState?.passagesLigne1Total || 0;
+            
+            if (tempsRestant <= 0) return passagesActuels; // Cible dépassée → déclencher
+            
+            const passagesRestants = Math.round(tempsRestant * vitesse);
+            return Math.max(passagesActuels + 2, passagesActuels + passagesRestants);
+        }
+        
+        // Enregistre un passage Ligne 1 dans le système adaptatif
+        async function enregistrerPassageAdaptatif() {
+            const tempsJeu = getTempsJeuEffectif();
+            const passages = gameState?.passagesLigne1Total || 0;
+            
+            passageHistoryLocal.push({ tempsJeu_ms: tempsJeu, passages });
+            if (passageHistoryLocal.length > 20) passageHistoryLocal.shift();
+            
+            // Sauvegarder dans Firebase (survit aux interruptions)
+            const adaptState = {
+                tempsJeuEffectif_ms: tempsJeu,
+                dernierPassageTimestamp: Date.now(),
+                vitessePassages: getVitessePassages(),
+                passageHistory: passageHistoryLocal.slice(-10) // Garder les 10 derniers
+            };
+            await gameRef.child('state/adaptatif').set(adaptState);
+            
+            console.log(`📊 Adaptatif: ${(tempsJeu/60000).toFixed(1)}min jeu effectif | `
+                + `${passages} passages | vitesse: ${getVitessePassages().toFixed(2)} pass/min`);
+        }
+        
+        // Initialise le système adaptatif (au démarrage ou à la reprise)
+        function initialiserAdaptatif(fromFirebase) {
+            sessionStartTimestamp = Date.now();
+            
+            if (fromFirebase && fromFirebase.tempsJeuEffectif_ms) {
+                // REPRISE de partie: charger le temps effectif sauvegardé
+                tempsJeuEffectifAvantSession = fromFirebase.tempsJeuEffectif_ms;
+                passageHistoryLocal = fromFirebase.passageHistory || [];
+                console.log(`🔄 Adaptatif repris: ${(tempsJeuEffectifAvantSession/60000).toFixed(1)}min accumulées, `
+                    + `${passageHistoryLocal.length} passages en historique`);
+            } else {
+                // NOUVELLE partie
+                tempsJeuEffectifAvantSession = 0;
+                passageHistoryLocal = [];
+                console.log('🆕 Adaptatif initialisé (nouvelle partie)');
+            }
+        }
+        
+        // Jauge de progression pour l'UI (optionnel, pour le status bar)
+        function getPhaseProgression() {
+            const tempsMin = getTempsJeuEffectif() / 60000;
+            const phase = gameState?.phase || 1;
+            const cibleP2 = gameConfig.phase2_cible_minutes || 45;
+            const cibleP3 = gameConfig.phase3_cible_minutes || 75;
+            
+            if (phase === 1) {
+                const pct = Math.min(100, Math.round(tempsMin / cibleP2 * 100));
+                const eta = Math.max(0, Math.round(cibleP2 - tempsMin));
+                return { phase: 1, pct, eta, label: `Phase 1 — ${pct}% (~${eta}min)` };
+            }
+            if (phase === 2) {
+                const pct = Math.min(100, Math.round((tempsMin - cibleP2) / (cibleP3 - cibleP2) * 100));
+                const eta = Math.max(0, Math.round(cibleP3 - tempsMin));
+                return { phase: 2, pct: Math.max(0, pct), eta, label: `Phase 2 — ${Math.max(0, pct)}% (~${eta}min)` };
+            }
+            return { phase: 3, pct: 100, eta: 0, label: 'Phase 3 — Austérité' };
+        }
+
         // ========== ÉTAT LOCAL ==========
         let myPlayerId = null;
         let myName = '';
@@ -3470,6 +3580,61 @@ function isAbsent(player) {
             if (c.impaye === undefined) c.impaye = 0;
             if (!c.biensPersonnels) c.biensPersonnels = [];
             if (!c.dettesPersonnelles) c.dettesPersonnelles = [];
+            // Arriérés structurés (migration dual system)
+            if (!c.arrieres || !Array.isArray(c.arrieres)) {
+                c.arrieres = [];
+                // Migration: si impaye > 0 sans arrieres[], créer une entrée legacy
+                if ((c.impaye || 0) > 0) {
+                    c.arrieres.push({
+                        id: 'ARR_LEGACY_' + joueurId.substring(0, 6),
+                        origine: 'legacy',
+                        creancierType: 'HORS_CIRCUIT',
+                        creancierId: 'HORS_CIRCUIT',
+                        montant: c.impaye,
+                        devise: 'euro',
+                        libelle: 'Arriérés pré-migration',
+                        tour: (typeof gameState !== 'undefined' ? gameState?.turn : 1) || 1
+                    });
+                }
+            }
+        }
+        
+        // Créer un arriéré structuré avec traçabilité complète
+        // Dual system: met à jour AUSSI caisse.impaye (nombre) pour compatibilité
+        function creerArriere(joueurId, { origine, creancierType, creancierId, montant, devise, libelle, details }) {
+            initCaisseJoueur(joueurId);
+            const caisse = COMPTABILITE.caisseJoueurs[joueurId];
+            const tour = (typeof gameState !== 'undefined' ? gameState?.turn : 1) || 1;
+            
+            const arriere = {
+                id: 'ARR_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6),
+                origine,          // 'taxeLigne3' | 'frais' | 'mensualite' | 'smartContract' | 'legacy'
+                creancierType,    // 'ETAT' | 'JOUEUR' | 'HORS_CIRCUIT'
+                creancierId,      // 'ETAT' | joueurId | 'HORS_CIRCUIT'
+                montant,          // Montant dû
+                devise: devise || 'euro',  // 'euro' | 'espoyr'
+                libelle: libelle || 'Arriéré',
+                tour,
+                details: details || null
+            };
+            
+            caisse.arrieres.push(arriere);
+            
+            // Dual system: sync impaye (seulement €, les # restent séparés dans arrieres)
+            if (devise !== 'espoyr') {
+                caisse.impaye = (caisse.impaye || 0) + montant;
+            }
+            
+            return arriere;
+        }
+        
+        // Calculer le total des arriérés par devise depuis le tableau structuré
+        function totalArrieres(joueurId, devise) {
+            const caisse = COMPTABILITE.caisseJoueurs?.[joueurId];
+            if (!caisse?.arrieres) return 0;
+            return caisse.arrieres
+                .filter(a => !devise || a.devise === devise)
+                .reduce((sum, a) => sum + (a.montant || 0), 0);
         }
         
         // Initialiser comptabilité complète joueur (grand-livre)
@@ -3747,6 +3912,7 @@ function isAbsent(player) {
             // Passifs
             let totalEmprunts = 0;
             let totalCapitaux = 0;
+            let totalArrieresGlobal = 0;
             
             // Par joueur
             const bilansJoueurs = {};
@@ -3758,12 +3924,14 @@ function isAbsent(player) {
                 const emprunt = caisse.emprunt || p.emprunt || 0;
                 const capital = caisse.capital || 0;
                 const apportsActivites = caisse.apportsActivites || 0;
+                const arrieres = totalArrieres(p.id);
                 
                 totalCaisseEuro += euro;
                 totalCaisseEspoyr += espoyr;
                 totalActivites += apportsActivites;
                 totalEmprunts += emprunt;
                 totalCapitaux += capital;
+                totalArrieresGlobal += arrieres;
                 
                 // Créances AAA
                 const creanceAAA = COMPTABILITE.potAAA.creances?.[p.id] || 0;
@@ -3772,8 +3940,8 @@ function isAbsent(player) {
                 bilansJoueurs[p.id] = {
                     nom: p.name,
                     actif: { euro, espoyr, activites: apportsActivites },
-                    passif: { emprunt, capital },
-                    net: euro + espoyr + apportsActivites - emprunt,
+                    passif: { emprunt, capital, arrieres },
+                    net: euro + espoyr + apportsActivites - emprunt - arrieres,
                     creanceAAA
                 };
             });
@@ -3790,7 +3958,7 @@ function isAbsent(player) {
             
             // Bilan global
             const actifTotal = totalCaisseEuro + totalCaisseEspoyr + totalActivites + totalEquipements;
-            const passifTotal = totalEmprunts + totalCapitaux;
+            const passifTotal = totalEmprunts + totalCapitaux + totalArrieresGlobal;
             
             // Bilan Banque (avec RDV)
             const reductionValeur = COMPTABILITE.banque.reductionValeur || 0;
@@ -3853,6 +4021,7 @@ function isAbsent(player) {
                 passif: {
                     emprunts: totalEmprunts,
                     capitaux: totalCapitaux,
+                    arrieres: totalArrieresGlobal,
                     total: passifTotal
                 },
                 equilibre: actifTotal - passifTotal,
@@ -5424,7 +5593,16 @@ activiteId: actId
             }
             
             if (impaye > 0) {
-                caisse.impaye = (caisse.impaye || 0) + impaye;
+                // Arriéré structuré vers l'État (creerArriere gère aussi caisse.impaye)
+                creerArriere(joueurId, {
+                    origine: 'taxeLigne3',
+                    creancierType: 'ETAT',
+                    creancierId: 'ETAT',
+                    montant: impaye,
+                    devise: 'euro',
+                    libelle: `Taxe Ligne 3 impayée (${fmt(impaye)}€)`,
+                    details: { patrimoine, taxeBase, taxe, modificateur }
+                });
                 
                 // Écriture joueur: taxe impayée → arriérés
                 enregistrerEcriture({
@@ -5453,62 +5631,101 @@ activiteId: actId
             const facture = calculerFacture('frais', montant);
             const ledgerEntryIds = [];
             
-            // Joueur paie le montant TTC
-            COMPTABILITE.caisseJoueurs[joueurId].euro -= montant;
-            COMPTABILITE.caisseJoueurs[joueurId].taxesPayees += montant;  // Cumul (100% vers État)
+            // Joueur paie ce qu'il peut, le reste → arriérés
+            const disponible = Math.max(0, COMPTABILITE.caisseJoueurs[joueurId].euro || 0);
+            const paye = Math.min(disponible, montant);
+            const impaye = montant - paye;
             
-            // Écriture 1: Joueur - Frais HT (charge)
-            let e = enregistrerEcriture({
+            COMPTABILITE.caisseJoueurs[joueurId].euro -= paye;
+            COMPTABILITE.caisseJoueurs[joueurId].taxesPayees += paye;
+            
+            // Arriérés si pas assez
+            if (impaye > 0) {
+                creerArriere(joueurId, {
+                    origine: 'frais',
+                    creancierType: 'ETAT',
+                    creancierId: 'ETAT',
+                    montant: impaye,
+                    devise: 'euro',
+                    libelle: `${libelle || 'Frais'} impayés`,
+                    details: { libelle }
+                });
+            }
+            
+            // Écritures pour la partie payée (proportionnelle)
+            const facturePayee = paye > 0 ? calculerFacture('frais', paye) : { ht: 0, tva: 0 };
+            
+            // Écriture 1: Joueur - Frais HT (charge) — seulement partie payée
+            let e = paye > 0 ? enregistrerEcriture({
                 joueurId, 
                 libelle: `${libelle || 'Frais'} HT`,
                 compteDebit: 613,   // Frais (charge +)
                 compteCredit: 500,  // Caisse (actif -)
-                montantEuro: facture.ht
-            });
+                montantEuro: facturePayee.ht
+            }) : null;
             if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
             
-            // Écriture 2: Joueur - TVA (charge)
-            e = enregistrerEcriture({
+            // Écriture 2: Joueur - TVA (charge) — seulement partie payée
+            e = paye > 0 ? enregistrerEcriture({
                 joueurId, 
                 libelle: `TVA ${libelle || 'Frais'}`,
                 compteDebit: 635,   // Taxes (charge +)
                 compteCredit: 500,  // Caisse (actif -)
-                montantEuro: facture.tva
-            });
+                montantEuro: facturePayee.tva
+            }) : null;
             if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
             
-            // État reçoit 100% (HT + TVA)
-            COMPTABILITE.etat.tresor += montant;
-            COMPTABILITE.etat.recettes.tva += facture.tva;
-            COMPTABILITE.etat.recettes.frais += facture.ht;
-            COMPTABILITE.etat.recettes.total += montant;
-            COMPTABILITE.etat.grandLivre[500] += montant;
-            COMPTABILITE.etat.grandLivre[704] += facture.tva;
-            COMPTABILITE.etat.grandLivre[702] += facture.ht;
+            // Écriture 3: Arriérés si impayé
+            if (impaye > 0) {
+                e = enregistrerEcriture({
+                    joueurId, 
+                    libelle: `${libelle || 'Frais'} impayés → arriérés (${fmt(impaye)}€)`,
+                    compteDebit: 613, compteCredit: 401, montantEuro: impaye
+                });
+                if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
+            }
             
-            // Écriture 3: État - Recette TVA
-            e = enregistrerEcriture({
-                joueurId: 'ETAT', 
-                libelle: `Recette TVA ${libelle || 'Frais'}`,
-                compteDebit: 500,   // Caisse État (actif +)
-                compteCredit: 704,  // Produits TVA (produit +)
-                montantEuro: facture.tva,
-                contexte: 'etat'
-            });
-            if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
+            // État reçoit seulement la partie payée
+            COMPTABILITE.etat.tresor += paye;
+            COMPTABILITE.etat.recettes.tva += facturePayee.tva;
+            COMPTABILITE.etat.recettes.frais += facturePayee.ht;
+            COMPTABILITE.etat.recettes.total += paye;
+            COMPTABILITE.etat.grandLivre[500] += paye;
+            COMPTABILITE.etat.grandLivre[704] += facturePayee.tva;
+            COMPTABILITE.etat.grandLivre[702] += facturePayee.ht;
             
-            // Écriture 4: État - Recette Frais HT
-            e = enregistrerEcriture({
-                joueurId: 'ETAT', 
-                libelle: `Recette ${libelle || 'Frais'} HT`,
-                compteDebit: 500,   // Caisse État (actif +)
-                compteCredit: 702,  // Produits Frais (produit +)
-                montantEuro: facture.ht,
-                contexte: 'etat'
-            });
-            if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
+            // Écriture 4: État - Recette TVA (partie payée)
+            if (paye > 0) {
+                e = enregistrerEcriture({
+                    joueurId: 'ETAT', 
+                    libelle: `Recette TVA ${libelle || 'Frais'}`,
+                    compteDebit: 500, compteCredit: 704, montantEuro: facturePayee.tva,
+                    contexte: 'etat'
+                });
+                if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
+                
+                // Écriture 5: État - Recette Frais HT (partie payée)
+                e = enregistrerEcriture({
+                    joueurId: 'ETAT', 
+                    libelle: `Recette ${libelle || 'Frais'} HT`,
+                    compteDebit: 500, compteCredit: 702, montantEuro: facturePayee.ht,
+                    contexte: 'etat'
+                });
+                if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
+            }
             
-            return { facture, ledgerEntryIds };
+            // Créance État si impayé
+            if (impaye > 0) {
+                e = enregistrerEcriture({
+                    joueurId: 'ETAT', 
+                    libelle: `Créance frais impayés ${playersData[joueurId]?.name || joueurId}`,
+                    compteDebit: 411, compteCredit: 702, montantEuro: impaye,
+                    contexte: 'etat'
+                });
+                if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
+            }
+            
+            return { facture, ledgerEntryIds, paye, impaye };
         }
         
         // Chance/Malchance (D:500 C:771 ou D:671 C:500)
@@ -6217,6 +6434,12 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             // État
             gameRef.child('state').on('value', (snap) => {
                 gameState = snap.val();
+                
+                // Restaurer le système adaptatif à la reprise
+                if (gameState?.started && !sessionStartTimestamp && gameConfig.adaptative !== false) {
+                    initialiserAdaptatif(gameState?.adaptatif || null);
+                }
+                
                 // Initialiser l'écoute overlay phase (une seule fois)
                 if (!window._phaseOverlayListenerInit) {
                     window._phaseOverlayListenerInit = true;
@@ -6420,6 +6643,9 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             if (!container) return;
             const cleanText = text.replace(/<[^>]*>/g, '').trim();
             if (!cleanText) return;
+            // Filtrer les messages de déplacement (sauf si toastPosition activé)
+            const isPosition = /fait \d+\s|passe par la case Départ/.test(cleanText);
+            if (isPosition && !(gameConfig.toastPosition ?? CONFIG.toastPosition)) return;
             const delai = gameConfig.toastDelay ?? CONFIG.toastDelay ?? 800;
             if (delai === 0) {
                 // Mode rapide : affichage direct sans file
@@ -6474,6 +6700,7 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                     const euroActuel = caisse.euro !== undefined ? caisse.euro : (p.euro !== undefined ? p.euro : CONFIG.capitalInitial);
                     const espoyrActuel = caisse.espoyr || p.espoyr || 0;
                     const empruntActuel = caisse.emprunt || p.emprunt || 0;
+                    const arrieresActuel = totalArrieres(p.id);
                     const isMembre = COMPTABILITE?.potAAA?.membres?.includes(p.id) || p.membreAAA;
                     
                     return `
@@ -6487,6 +6714,7 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                                 💰${fmt(euroActuel)}€ 
                                 ${LOGO_AAA}${fmt(espoyrActuel)}# 
                                 ${empruntActuel > 0 ? `<span style="color:#ef4444">📋${fmt(empruntActuel)}€</span>` : ''}
+                                ${arrieresActuel > 0 ? `<span style="color:#b45309">⚠️${fmt(arrieresActuel)}</span>` : ''}
                             </div>
                         </div>
                         ${idx === currentIdx ? '<span class="player-badge badge-ready">🎯</span>' : ''}
@@ -6594,6 +6822,9 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             // Sauvegarder la comptabilité mise à jour
             await syncComptabiliteToFirebase();
             
+            // Initialiser le système adaptatif
+            initialiserAdaptatif(null); // Nouvelle partie
+            
             // Démarrer la partie
             await gameRef.child('state/started').set(true);
             await gameRef.child('status').set('playing');
@@ -6700,6 +6931,31 @@ Conserve ce fichier pour rejoindre la partie en cas de déconnexion.`;
                 const params = Object.entries(PARAM_DEFS).filter(([k, d]) => d.cat === cat.id);
                 paramsHtml += `<div class="cfg-panel" id="cfgPanel_${cat.id}" style="display:${cat.id === 'economie' ? 'block' : 'none'};">`;
                 for (const [key, def] of params) {
+                    if (def.bool) {
+                        // ═══ Paramètre booléen → toggle switch ═══
+                        const val = !!(gameConfig[key] ?? CONFIG[key] ?? false);
+                        const defVal = !!(CONFIG[key] ?? false);
+                        const isChanged = val !== defVal;
+                        paramsHtml += `
+                        <div style="padding:8px 10px; background:${isChanged ? '#fffbeb' : '#fafafa'}; border:1.5px solid ${isChanged ? '#fbbf24' : '#e5e7eb'}; border-radius:8px; margin-bottom:6px;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                                <div style="flex:1;">
+                                    <label style="font-size:0.82rem; font-weight:bold; color:#1f2937;">${def.label}</label>
+                                    ${isChanged ? '<span style="font-size:0.6rem; background:#fbbf24; color:#78350f; padding:1px 4px; border-radius:3px; margin-left:4px; font-weight:700;">MODIFIÉ</span>' : ''}
+                                </div>
+                                <label style="position:relative; display:inline-block; width:44px; height:24px; cursor:pointer;">
+                                    <input type="checkbox" id="cfg_${key}" ${val ? 'checked' : ''} data-bool="1"
+                                        style="opacity:0; width:0; height:0; position:absolute;">
+                                    <span style="position:absolute; inset:0; background:${val ? '#059669' : '#d1d5db'}; border-radius:24px; transition:0.3s;"
+                                        onclick="this.previousElementSibling.checked=!this.previousElementSibling.checked; this.style.background=this.previousElementSibling.checked?'#059669':'#d1d5db'; this.querySelector('span').style.transform=this.previousElementSibling.checked?'translateX(20px)':'translateX(0)';">
+                                        <span style="position:absolute; top:2px; left:2px; width:20px; height:20px; background:white; border-radius:50%; transition:0.3s; box-shadow:0 1px 3px rgba(0,0,0,0.2); transform:${val ? 'translateX(20px)' : 'translateX(0)'};"></span>
+                                    </span>
+                                </label>
+                            </div>
+                            <p style="font-size:0.72rem; color:#6b7280; margin:3px 0 0 0; line-height:1.3;">${def.desc} <em style="color:#9ca3af;">(défaut: ${defVal ? 'ON' : 'OFF'})</em></p>
+                        </div>`;
+                    } else {
+                        // ═══ Paramètre numérique (existant) ═══
                     const val = def.pct ? Math.round((gameConfig[key] ?? CONFIG[key] ?? 0) * 100) : (gameConfig[key] ?? CONFIG[key] ?? 0);
                     const defVal = def.pct ? Math.round((CONFIG[key] ?? 0) * 100) : (CONFIG[key] ?? 0);
                     const isChanged = val !== defVal;
@@ -6719,6 +6975,7 @@ Conserve ce fichier pour rejoindre la partie en cas de déconnexion.`;
                             </div>
                             <p style="font-size:0.72rem; color:#6b7280; margin:3px 0 0 0; line-height:1.3;">${def.desc} <em style="color:#9ca3af;">(défaut: ${defVal}${def.unit})</em></p>
                         </div>`;
+                    }
                 }
                 paramsHtml += '</div>';
             }
@@ -6794,6 +7051,10 @@ Conserve ce fichier pour rejoindre la partie en cas de déconnexion.`;
             for (const [key, def] of Object.entries(PARAM_DEFS)) {
                 const el = document.getElementById('cfg_' + key);
                 if (!el) continue;
+                if (def.bool) {
+                    gameConfig[key] = el.checked;
+                    continue;
+                }
                 const raw = parseFloat(el.value);
                 if (isNaN(raw)) continue;
                 gameConfig[key] = def.pct ? raw / 100 : raw;
@@ -7377,29 +7638,15 @@ async function rollDice() {
         const skipSnap = await gameRef.child(`skipTurns/${joueurActuel.id}`).once('value');
         const skipCount = skipSnap.val() || 0;
         if (skipCount > 0) {
-            // Intérêts découvert même quand on passe
-            const caisseSk = COMPTABILITE.caisseJoueurs[joueurActuel.id] || {};
-            if ((caisseSk.euro || 0) < 0) {
-                const decouvert = Math.abs(caisseSk.euro);
-                const interetsDec = arrondir2(decouvert * 0.03);
-                caisseSk.euro -= interetsDec;
-
-                // Écriture comptable banque
-                enregistrerEcritureBanque({
-                    event_type: 'OVERDRAFT_INTEREST',
-                    debit_account: 1010,
-                    credit_account: 4000,
-                    amount: interetsDec,
-                    playerId: joueurActuel.id,
-                    description: `Intérêts découvert 3% (tour passé) sur ${decouvert.toFixed(2)}€`
-                });
-
-                await db.ref(`parties/${currentGameCode}/players/${joueurActuel.id}/euro`).set(caisseSk.euro);
-                await syncComptabiliteToFirebase();
-                sendSystemMessage(`📉 ${joueurActuel.name} : intérêts découvert 3% = -${fmt(interetsDec)}€ (solde: ${fmt(caisseSk.euro)}€)`);
-
-                // Modal bloquant pour le joueur local
-                if (joueurActuel.id === myPlayerId) {
+            // Intérêts découvert même quand on passe (centralisé)
+            if ((COMPTABILITE.caisseJoueurs[joueurActuel.id]?.euro || 0) < 0) {
+                const decSkip = await traiterDecouvert(joueurActuel.id, '(tour passé)');
+                if (joueurActuel.id === myPlayerId && decSkip.traite) {
+                    const caisseSkInfo = COMPTABILITE.caisseJoueurs[myPlayerId] || {};
+                    const arrieresSkInfo = caisseSkInfo.impaye || 0;
+                    const empruntSkInfo = caisseSkInfo.emprunt || 0;
+                    const statusSkInfo = checkFaillite(myPlayerId);
+                    
                     await new Promise(resolve => {
                         window.__resolveDecouvert = resolve;
                         showModal(`
@@ -7407,16 +7654,33 @@ async function rollDice() {
                             <div style="background:#fee2e2;padding:12px;border-radius:8px;margin:10px 0;">
                                 <p style="margin:0;font-weight:bold;color:#dc2626;">⚠️ Ton compte est en négatif</p>
                                 <p style="margin:8px 0 0 0;font-size:0.9rem;">
-                                    Découvert : <strong>${fmt(decouvert)}€</strong><br>
-                                    Intérêts 3% prélevés : <strong style="color:#dc2626;">-${fmt(interetsDec)}€</strong><br>
-                                    Nouveau solde : <strong style="color:#dc2626;">${fmt(caisseSk.euro)}€</strong>
+                                    Intérêts 3% : <strong style="color:#dc2626;">-${fmt(decSkip.interets)}€</strong>
+                                    ${decSkip.autoConversion > 0 ? `<br><span style="color:#b45309;">🔄 Converti en emprunt : ${fmt(decSkip.autoConversion)}€</span>` : ''}
+                                    <br>Solde : <strong style="color:#dc2626;">${fmt(decSkip.nouveauSolde)}€</strong>
                                 </p>
                             </div>
-                            <div style="background:#fef3c7;padding:10px;border-radius:8px;font-size:0.85rem;">
-                                💡 Tu peux convertir ce découvert en prêt bancaire via le bouton <strong>Emprunter</strong>.
+                            <div style="background:#f3f4f6;padding:10px;border-radius:8px;margin:8px 0;font-size:0.85rem;">
+                                <p style="margin:0;font-weight:bold;">📊 Ta situation :</p>
+                                <p style="margin:4px 0 0 0;">
+                                    🏦 Dette banque : <strong>${fmt(empruntSkInfo)}€</strong> / ${fmt(statusSkInfo.limiteEmprunt)}€
+                                    ${arrieresSkInfo > 0 ? `<br>📋 Arriérés : <strong style="color:#dc2626;">${fmt(arrieresSkInfo)}€</strong>` : ''}
+                                    <br>💰 Capacité d'emprunt : <strong>${fmt(statusSkInfo.capaciteEmprunt)}€</strong>
+                                </p>
                             </div>
                         `, `<button class="btn btn-primary" style="width:100%;" onclick="closeModal(); if(window.__resolveDecouvert){window.__resolveDecouvert(); window.__resolveDecouvert=null;}">✓ Compris</button>`);
                     });
+                }
+                
+                // ═══ FAILLITE après découvert ═══
+                if (decSkip.faillite) {
+                    await gameRef.child(`skipTurns/${joueurActuel.id}`).set(skipCount - 1);
+                    if (joueurActuel.id === myPlayerId) {
+                        showFailliteModal();
+                    } else {
+                        await handleFailliteAuto(joueurActuel.id);
+                        await nextTurn();
+                    }
+                    return;
                 }
             }
             // Décrémenter et passer
@@ -7426,61 +7690,185 @@ async function rollDice() {
                 <h3>⏭️ Tour passé</h3>
                 <p><strong>${joueurActuel.avatar} ${joueurActuel.name}</strong> passe ce tour.</p>
                 <p style="font-size:0.9rem;color:#6b7280;">Conséquence de l'action contributive effectuée précédemment.</p>
-                ${(caisseSk.euro || 0) < 0 ? `<p style="color:#dc2626;font-size:0.9rem;">📉 Intérêts découvert 3% appliqués</p>` : ''}
+                ${(COMPTABILITE.caisseJoueurs[joueurActuel.id]?.euro || 0) < 0 ? `<p style="color:#dc2626;font-size:0.9rem;">📉 Intérêts découvert 3% appliqués</p>` : ''}
             `, `<button class="btn btn-primary" onclick="closeModal(); nextTurn();">OK</button>`);
             if (btnLancer) btnLancer.disabled = false;
             // turnActionInProgress reste true → sera reset par nextTurn()
             return;
         }
 
-        // ── INTÉRÊTS DÉCOUVERT 3% avant le lancé ──
+        // ═══ GESTION DÉCOUVERT CENTRALISÉE ═══
+        // Plafond: -500€ max. Au-delà → auto-conversion en emprunt bancaire
+        const DECOUVERT_PLAFOND = 500; // Plafond absolu du découvert
+        const DECOUVERT_TAUX = 0.03;   // 3% par tour
+        
+        async function traiterDecouvert(joueurId, contexte) {
+            const caisse = COMPTABILITE.caisseJoueurs[joueurId];
+            if (!caisse || (caisse.euro || 0) >= 0) return { traite: false };
+            
+            const decouvert = Math.abs(caisse.euro);
+            const interets = arrondir2(decouvert * DECOUVERT_TAUX);
+            caisse.euro -= interets;
+            
+            // ═══ INTÉRÊTS DÉCOUVERT — PARTIE DOUBLE COMPLÈTE ═══
+            // 1. MAJ soldes joueur (manquait avant)
+            caisse.interetsPayes = (caisse.interetsPayes || 0) + interets;
+            
+            // 2. MAJ soldes banque (manquait avant)
+            COMPTABILITE.banque.interetsRecus += interets;
+            
+            // 3. Comptabilité bancaire formalisée (cumInterets + écriture banque D:1010 C:4000)
+            banqueEncaisserInterets(joueurId, interets);
+            
+            // 4. Écriture joueur : charge intérêts découvert (manquait avant)
+            enregistrerEcriture({
+                joueurId,
+                libelle: `Intérêts découvert 3% ${contexte || ''} (${fmt(interets)}€)`,
+                compteDebit: 661,   // Charges d'intérêts
+                compteCredit: 500,  // Caisse (actif -)
+                montantEuro: interets,
+                contexte: 'decouvert'
+            });
+            
+            // 5. Écriture banque : produit financier reçu (manquait avant)
+            enregistrerEcriture({
+                joueurId: 'BANQUE',
+                libelle: `Intérêts découvert reçus de ${playersData[joueurId]?.name || joueurId} (${fmt(interets)}€)`,
+                compteDebit: 500,   // Caisse banque (actif +)
+                compteCredit: 762,  // Produits financiers (produit +)
+                montantEuro: interets,
+                contexte: 'decouvert'
+            });
+            
+            // ═══ AUTO-CONVERSION DÉCOUVERT → EMPRUNT (avec contrôle limite) ═══
+            // NOTE : Pas de création monétaire — l'argent est déjà en circulation.
+            // On formalise la dette existante, sans toucher masseMonetaire ni capital.
+            let autoConversion = 0;
+            let faillite = false;
+            if (Math.abs(caisse.euro) > DECOUVERT_PLAFOND) {
+                const montantAConvertir = Math.abs(caisse.euro);
+                const status = checkFaillite(joueurId);
+                
+                if (status.capaciteEmprunt >= montantAConvertir) {
+                    // Conversion totale
+                    autoConversion = montantAConvertir;
+                } else if (status.capaciteEmprunt > 0) {
+                    // Conversion partielle : ce qui tient dans la limite
+                    autoConversion = status.capaciteEmprunt;
+                }
+                
+                if (autoConversion > 0) {
+                    // MAJ soldes joueur
+                    caisse.emprunt = (caisse.emprunt || 0) + autoConversion;
+                    caisse.euro += autoConversion; // -510 + 510 = 0, ou partiel
+                    
+                    // Écriture joueur : D:500 C:164 (formalisation dette)
+                    enregistrerEcriture({
+                        joueurId,
+                        libelle: `Conversion découvert ${fmt(autoConversion)}€ → emprunt bancaire`,
+                        compteDebit: 500,   // Caisse (actif +)
+                        compteCredit: 164,  // Emprunt bancaire (passif +)
+                        montantEuro: autoConversion,
+                        contexte: 'decouvert'
+                    });
+                    
+                    // Écriture banque : créance formalisée
+                    enregistrerEcriture({
+                        joueurId: 'BANQUE',
+                        libelle: `Formalisation découvert ${playersData[joueurId]?.name || joueurId} ${fmt(autoConversion)}€`,
+                        compteDebit: 280,   // Créances sur joueurs (actif +)
+                        compteCredit: 500,  // Caisse banque (actif -)
+                        montantEuro: autoConversion,
+                        contexte: 'decouvert'
+                    });
+                    
+                    // MAJ banque (créance, PAS de création monétaire)
+                    COMPTABILITE.banque.creancesJoueurs += autoConversion;
+                    
+                    // Suivi formel du prêt (contraintes prudentielles, provisions)
+                    banqueCreerPret(joueurId, autoConversion);
+                    
+                    await db.ref(`parties/${currentGameCode}/players/${joueurId}/emprunt`).set(caisse.emprunt);
+                }
+                
+                // Faillite si encore au-delà du plafond après conversion
+                if (Math.abs(caisse.euro) > DECOUVERT_PLAFOND) {
+                    faillite = true;
+                }
+            }
+            
+            await db.ref(`parties/${currentGameCode}/players/${joueurId}/euro`).set(caisse.euro);
+            await syncComptabiliteToFirebase();
+            
+            const nom = playersData[joueurId]?.name || joueurId;
+            sendSystemMessage(`📉 ${nom} : intérêts découvert 3% = -${fmt(interets)}€ (solde: ${fmt(caisse.euro)}€)${autoConversion > 0 ? ` → converti en emprunt ${fmt(autoConversion)}€` : ''}${faillite ? ' ⚠️ FAILLITE' : ''}`);
+            
+            return { traite: true, interets, decouvert, autoConversion, nouveauSolde: caisse.euro, faillite };
+        }
+
         const caisseAvantLancer = COMPTABILITE.caisseJoueurs[joueurActuel.id] || {};
         if ((caisseAvantLancer.euro || 0) < 0) {
-            const decouvertAvant = Math.abs(caisseAvantLancer.euro);
-            const interetsDecouvert = arrondir2(decouvertAvant * 0.03);
-            caisseAvantLancer.euro -= interetsDecouvert;
-            
-            // Écriture comptable banque : D:1010 Réserves / C:4000 Produits intérêts
-            enregistrerEcritureBanque({
-                event_type: 'OVERDRAFT_INTEREST',
-                debit_account: 1010,
-                credit_account: 4000,
-                amount: interetsDecouvert,
-                playerId: joueurActuel.id,
-                description: `Intérêts découvert 3% sur ${decouvertAvant.toFixed(2)}€`
-            });
+            const decResult = await traiterDecouvert(joueurActuel.id, '(avant lancé)');
 
             // Compteur de difficultés consécutives (déclencheur social Phase 2)
             const diffSnap = await gameRef.child(`difficulteConsecutive/${joueurActuel.id}`).once('value');
             const diffCount = (diffSnap.val() || 0) + 1;
             await gameRef.child(`difficulteConsecutive/${joueurActuel.id}`).set(diffCount);
-            
-            await db.ref(`parties/${currentGameCode}/players/${joueurActuel.id}/euro`).set(caisseAvantLancer.euro);
-            await syncComptabiliteToFirebase();
-            
-            sendSystemMessage(`📉 ${joueurActuel.name} : intérêts découvert 3% = -${fmt(interetsDecouvert)}€ (solde: ${fmt(caisseAvantLancer.euro)}€)`);
 
             // Modal bloquant — le joueur doit valider avant de lancer
             if (joueurActuel.id === myPlayerId) {
-                await new Promise(resolve => {
-                    window.__resolveDecouvert = resolve;
-                    showModal(`
+                const caisseInfo = COMPTABILITE.caisseJoueurs[myPlayerId] || {};
+                const arrieresInfo = caisseInfo.impaye || 0;
+                const empruntInfo = caisseInfo.emprunt || 0;
+                const statusInfo = checkFaillite(myPlayerId);
+                
+                let decModalHTML = `
                         <h3>📉 Découvert bancaire</h3>
                         <div style="background:#fee2e2;padding:12px;border-radius:8px;margin:10px 0;">
                             <p style="margin:0;font-weight:bold;color:#dc2626;">
                                 ⚠️ Ton compte est en négatif
                             </p>
                             <p style="margin:8px 0 0 0;font-size:0.9rem;">
-                                Découvert : <strong>${fmt(decouvertAvant)}€</strong><br>
-                                Intérêts 3% prélevés : <strong style="color:#dc2626;">-${fmt(interetsDecouvert)}€</strong><br>
-                                Nouveau solde : <strong style="color:#dc2626;">${fmt(caisseAvantLancer.euro)}€</strong>
+                                Découvert : <strong>${fmt(decResult.decouvert)}€</strong><br>
+                                Intérêts 3% prélevés : <strong style="color:#dc2626;">-${fmt(decResult.interets)}€</strong><br>
+                                ${decResult.autoConversion > 0 ? `<span style="color:#b45309;">🔄 Auto-converti en emprunt : ${fmt(decResult.autoConversion)}€</span><br>` : ''}
+                                Nouveau solde : <strong style="color:${decResult.nouveauSolde >= 0 ? '#059669' : '#dc2626'};">${fmt(decResult.nouveauSolde)}€</strong>
                             </p>
-                        </div>
+                        </div>`;
+                
+                // Situation complète
+                decModalHTML += `
+                        <div style="background:#f3f4f6;padding:10px;border-radius:8px;margin:8px 0;font-size:0.85rem;">
+                            <p style="margin:0;font-weight:bold;">📊 Ta situation :</p>
+                            <p style="margin:4px 0 0 0;">
+                                🏦 Dette banque : <strong>${fmt(empruntInfo)}€</strong> / ${fmt(statusInfo.limiteEmprunt)}€
+                                ${arrieresInfo > 0 ? `<br>📋 Arriérés : <strong style="color:#dc2626;">${fmt(arrieresInfo)}€</strong>` : ''}
+                                <br>💰 Capacité d'emprunt : <strong>${fmt(statusInfo.capaciteEmprunt)}€</strong>
+                            </p>
+                        </div>`;
+                
+                decModalHTML += `
                         <div style="background:#fef3c7;padding:10px;border-radius:8px;font-size:0.85rem;">
-                            💡 Tu peux convertir ce découvert en prêt bancaire (10%/passage Ligne 1) via le bouton <strong>Emprunter</strong>.
-                        </div>
-                    `, `<button class="btn btn-primary" style="width:100%;" onclick="closeModal(); if(window.__resolveDecouvert){window.__resolveDecouvert(); window.__resolveDecouvert=null;}">✓ Compris — Lancer le dé</button>`);
+                            ${decResult.autoConversion > 0 
+                                ? '🔄 Ton découvert a été automatiquement converti en prêt bancaire (10%/passage Ligne 1).'
+                                : `💡 Tu peux convertir ce découvert en prêt bancaire (10%/passage Ligne 1) via le bouton <strong>Emprunter</strong>.<br>⚠️ Plafond découvert : ${DECOUVERT_PLAFOND}€ — au-delà, conversion automatique.`}
+                        </div>`;
+                
+                await new Promise(resolve => {
+                    window.__resolveDecouvert = resolve;
+                    showModal(decModalHTML, `<button class="btn btn-primary" style="width:100%;" onclick="closeModal(); if(window.__resolveDecouvert){window.__resolveDecouvert(); window.__resolveDecouvert=null;}">✓ Compris — Lancer le dé</button>`);
                 });
+            }
+            
+            // ═══ FAILLITE après découvert ═══
+            if (decResult.faillite) {
+                if (joueurActuel.id === myPlayerId) {
+                    showFailliteModal();
+                } else {
+                    await handleFailliteAuto(joueurActuel.id);
+                    await nextTurn();
+                }
+                return;
             }
             
             // Déclencheur social : 2x de suite en difficulté → Phase 2
@@ -8161,6 +8549,11 @@ function initSystemeDe() {
             const totalPassages = (gameState.passagesLigne1Total || 0) + 1;
             await gameRef.child('state/passagesLigne1Total').set(totalPassages);
             
+            // Enregistrer dans le système adaptatif
+            if (gameConfig.adaptative !== false) {
+                await enregistrerPassageAdaptatif();
+            }
+            
             // ========== INTÉRÊTS + REMBOURSEMENT AU PASSAGE LIGNE 1 ==========
             // Variables pour le récapitulatif modale
             let interetPaye = 0, interetCapitalise = 0, interetTotal = 0;
@@ -8271,8 +8664,9 @@ function initSystemeDe() {
             }
             
             // ========== 8. ARRIÉRÉS ==========
-            let arrieresResult = { avant: 0, paye: 0, apres: 0 };
-            if ((caisse.impaye || 0) > 0) {
+            let arrieresResult = { avant: 0, paye: 0, apres: 0, details: [] };
+            const hasArrieres = (caisse.impaye || 0) > 0 || (caisse.arrieres && caisse.arrieres.length > 0);
+            if (hasArrieres) {
                 arrieresResult = await payerArrieres(myPlayerId);
             }
             
@@ -8450,11 +8844,27 @@ function initSystemeDe() {
                         <div style="display: flex; justify-content: space-between;">
                             <span style="font-weight: bold; color: #dc2626;">⚠️ Arriérés</span>
                             <span style="font-weight: 600;">
-                                ${arrieresResult.paye > 0 ? '-'+fmt(arrieresResult.paye)+'€ payé' : ''}
-                                ${arrieresResult.apres > 0 ? ' (reste: '+fmt(arrieresResult.apres)+'€)' : ' ✅ soldé'}
+                                ${arrieresResult.paye > 0 ? '-'+fmt(arrieresResult.paye)+' payé' : ''}
+                                ${arrieresResult.apres > 0 ? ' (reste: '+fmt(arrieresResult.apres)+')' : ' ✅ soldé'}
                             </span>
-                        </div>
-                    </div>`;
+                        </div>`;
+                // Détail par créancier si disponible
+                if (arrieresResult.details && arrieresResult.details.length > 0) {
+                    for (const d of arrieresResult.details) {
+                        const nomCr = d.creancierType === 'ETAT' ? '🏛️ État' :
+                            d.creancierType === 'JOUEUR' ? '👤 ' + (playersData[d.creancierId]?.name || d.creancierId) :
+                            '🛰️ Hors circuit';
+                        const devS = d.devise === 'espoyr' ? '#' : '€';
+                        modalHtml += `
+                            <div style="display:flex;justify-content:space-between;margin-top:3px;font-size:0.85rem;">
+                                <span>${d.paye > 0 ? '✅' : '⏳'} ${d.origine || 'legacy'} → ${nomCr}</span>
+                                <span style="color:${d.paye > 0 ? '#059669' : '#b45309'};font-weight:600;">
+                                    ${d.paye > 0 ? '-'+fmt(d.paye)+devS : ''}${d.restant > 0 ? ' (reste '+fmt(d.restant)+devS+')' : ''}
+                                </span>
+                            </div>`;
+                    }
+                }
+                modalHtml += `</div>`;
             }
             
             // --- Solde final ---
@@ -8557,6 +8967,7 @@ function initSystemeDe() {
             const players = getOrderedPlayers();
             const phase = gameState.phase || 1;
             const passagesTotal = gameState.passagesLigne1Total || 0;
+            const tempsJeuMin = getTempsJeuEffectif() / 60000;
             
             const activitesSnap = await gameRef.child('activites').once('value');
             const activites = activitesSnap.val() || {};
@@ -8565,36 +8976,78 @@ function initSystemeDe() {
             
             const detteTotale = Object.values(COMPTABILITE.caisseJoueurs).reduce((s, c) => s + (c.emprunt || 0), 0);
             
-            // Seuils configurables (basés sur les passages Ligne 1)
-            const seuilPhase2 = gameConfig?.phase2_passagesMin ?? CONFIG.phase2_passagesMin;
-            const seuilPhase3Passages = gameConfig?.phase3_passagesMin ?? CONFIG.phase3_passagesMin;
-            const seuilPhase3Emploi = gameConfig?.phase3_tauxEmploiMin ?? CONFIG.phase3_tauxEmploiMin;
-            const seuilPhase3Dette = gameConfig?.phase3_detteMax ?? CONFIG.phase3_detteMax;
+            const isAdaptatif = gameConfig.adaptative !== false;
             
-            if (phase === 1 && passagesTotal >= seuilPhase2) {
-                await gameRef.child('state/phase').set(2);
-                sendSystemMessage(`📊 PHASE 2 ! L'érosion commence... (${passagesTotal} passages Ligne 1)`);
-                // Overlay visible par tous
-                await gameRef.child('state/phaseAnnonce').set({
-                    phase: 2,
-                    cause: `${passagesTotal} passages Ligne 1 — l'économie se dégrade`,
-                    timestamp: Date.now()
-                });
-            } else if (phase === 2 && (tauxEmploi < seuilPhase3Emploi || detteTotale > seuilPhase3Dette || passagesTotal >= seuilPhase3Passages)) {
-                await gameRef.child('state/phase').set(3);
-                await gameRef.child('state/tauxTaxePhase3').set(gameConfig.tauxTaxeLigne3 || 0.10);
-                // Déterminer la cause
-                let cause3 = '';
-                if (detteTotale > seuilPhase3Dette) cause3 = `Dette totale ${detteTotale}€ > ${seuilPhase3Dette}€ — l'économie est sous perfusion bancaire`;
-                else if (tauxEmploi < seuilPhase3Emploi) cause3 = `Taux d'emploi ${tauxEmploi}% < ${seuilPhase3Emploi}% — le chômage s'installe`;
-                else cause3 = `${passagesTotal} passages Ligne 1 — les ressources s'épuisent`;
-                sendSystemMessage(`🌍 PHASE 3 ! Effondrement... (${cause3})`);
-                // Overlay visible par tous
-                await gameRef.child('state/phaseAnnonce').set({
-                    phase: 3,
-                    cause: cause3,
-                    timestamp: Date.now()
-                });
+            if (isAdaptatif) {
+                // ═══ MODE ADAPTATIF: seuils basés sur le temps de jeu effectif ═══
+                const cibleP2 = gameConfig.phase2_cible_minutes || 45;
+                const cibleP3 = gameConfig.phase3_cible_minutes || 75;
+                const seuilP2 = getSeuilAdaptatif(cibleP2);
+                const seuilP3 = getSeuilAdaptatif(cibleP3);
+                const seuilEmploi = gameConfig?.phase3_tauxEmploiMin ?? 20;
+                const seuilDette = gameConfig?.phase3_detteMax ?? 2000;
+                
+                // Sécurité temporelle: +10 min au-delà de la cible = forcer
+                const p2Timeout = tempsJeuMin > cibleP2 + 10;
+                const p3Timeout = tempsJeuMin > cibleP3 + 10;
+                
+                console.log(`📊 Adaptatif: ${tempsJeuMin.toFixed(1)}min | P${phase} | `
+                    + `passages: ${passagesTotal} | seuil P2: ${Math.round(seuilP2)} | seuil P3: ${Math.round(seuilP3)} | `
+                    + `vitesse: ${getVitessePassages().toFixed(2)}/min`);
+                
+                if (phase === 1 && (passagesTotal >= seuilP2 || p2Timeout)) {
+                    const cause = p2Timeout 
+                        ? `${tempsJeuMin.toFixed(0)} minutes de jeu — l'économie se dégrade`
+                        : `${passagesTotal} passages en ${tempsJeuMin.toFixed(0)} min — l'économie se dégrade`;
+                    await gameRef.child('state/phase').set(2);
+                    sendSystemMessage(`📊 PHASE 2 ! L'érosion commence... (${cause})`);
+                    await gameRef.child('state/phaseAnnonce').set({ phase: 2, cause, timestamp: Date.now() });
+                }
+                else if (phase === 2) {
+                    let cause3 = '';
+                    let trigger = false;
+                    
+                    if (detteTotale > seuilDette) {
+                        cause3 = `Dette totale ${fmt(detteTotale)}€ > ${fmt(seuilDette)}€ — l'économie est sous perfusion bancaire`;
+                        trigger = true;
+                    } else if (tauxEmploi < seuilEmploi) {
+                        cause3 = `Taux d'emploi ${tauxEmploi}% < ${seuilEmploi}% — le chômage s'installe`;
+                        trigger = true;
+                    } else if (passagesTotal >= seuilP3 || p3Timeout) {
+                        cause3 = p3Timeout 
+                            ? `${tempsJeuMin.toFixed(0)} minutes de jeu — les ressources s'épuisent`
+                            : `${passagesTotal} passages en ${tempsJeuMin.toFixed(0)} min — les ressources s'épuisent`;
+                        trigger = true;
+                    }
+                    
+                    if (trigger) {
+                        await gameRef.child('state/phase').set(3);
+                        await gameRef.child('state/tauxTaxePhase3').set(gameConfig.tauxTaxeLigne3 || 0.10);
+                        sendSystemMessage(`🌍 PHASE 3 ! Effondrement... (${cause3})`);
+                        await gameRef.child('state/phaseAnnonce').set({ phase: 3, cause: cause3, timestamp: Date.now() });
+                    }
+                }
+            } else {
+                // ═══ MODE STATIQUE (fallback): seuils fixes comme avant ═══
+                const seuilPhase2 = gameConfig?.phase2_passagesMin ?? CONFIG.phase2_passagesMin;
+                const seuilPhase3Passages = gameConfig?.phase3_passagesMin ?? CONFIG.phase3_passagesMin;
+                const seuilPhase3Emploi = gameConfig?.phase3_tauxEmploiMin ?? CONFIG.phase3_tauxEmploiMin;
+                const seuilPhase3Dette = gameConfig?.phase3_detteMax ?? CONFIG.phase3_detteMax;
+                
+                if (phase === 1 && passagesTotal >= seuilPhase2) {
+                    await gameRef.child('state/phase').set(2);
+                    sendSystemMessage(`📊 PHASE 2 ! L'érosion commence... (${passagesTotal} passages Ligne 1)`);
+                    await gameRef.child('state/phaseAnnonce').set({ phase: 2, cause: `${passagesTotal} passages Ligne 1 — l'économie se dégrade`, timestamp: Date.now() });
+                } else if (phase === 2 && (tauxEmploi < seuilPhase3Emploi || detteTotale > seuilPhase3Dette || passagesTotal >= seuilPhase3Passages)) {
+                    await gameRef.child('state/phase').set(3);
+                    await gameRef.child('state/tauxTaxePhase3').set(gameConfig.tauxTaxeLigne3 || 0.10);
+                    let cause3 = '';
+                    if (detteTotale > seuilPhase3Dette) cause3 = `Dette totale ${detteTotale}€ > ${seuilPhase3Dette}€ — l'économie est sous perfusion bancaire`;
+                    else if (tauxEmploi < seuilPhase3Emploi) cause3 = `Taux d'emploi ${tauxEmploi}% < ${seuilPhase3Emploi}% — le chômage s'installe`;
+                    else cause3 = `${passagesTotal} passages Ligne 1 — les ressources s'épuisent`;
+                    sendSystemMessage(`🌍 PHASE 3 ! Effondrement... (${cause3})`);
+                    await gameRef.child('state/phaseAnnonce').set({ phase: 3, cause: cause3, timestamp: Date.now() });
+                }
             }
         }
         
@@ -9762,6 +10215,62 @@ function initSystemeDe() {
             `, `<button class="btn btn-primary" onclick="closeModal(); nextTurn();">Recommencer 💪</button>`);
         }
         
+        // ═══ FAILLITE AUTOMATIQUE (bots ou forçage) ═══
+        // Même logique que declarerFailliteAAA/declarerFailliteTotale mais pour n'importe quel joueurId
+        async function handleFailliteAuto(joueurId) {
+            const status = checkFaillite(joueurId);
+            if (!status.enFaillite) return { handled: false };
+            
+            const nom = playersData[joueurId]?.name || joueurId;
+            
+            if (status.isMembre) {
+                // Intervention AAA (double écriture déjà complète dans interventionAAA)
+                const result = await interventionAAA(joueurId);
+                if (result.success) {
+                    const caisse = COMPTABILITE.caisseJoueurs[joueurId];
+                    await db.ref(`parties/${currentGameCode}/players/${joueurId}`).update({
+                        euro: caisse.euro, espoyr: caisse.espoyr, emprunt: 0
+                    });
+                    await syncComptabiliteToFirebase();
+                    sendSystemMessage(`${LOGO_AAA} ${nom} a été sauvé par le Pot AAA ! Dette annulée: ${fmt(result.detteAnnulee)}€, Prêt: +${fmt(result.pretRelance)}#`);
+                    return { handled: true, type: 'aaa', result };
+                }
+            }
+            
+            // Faillite totale (double écriture via comptaReductionValeur + comptaDefautEffectif)
+            const caisse = COMPTABILITE.caisseJoueurs[joueurId] || {};
+            const emprunt = caisse.emprunt || 0;
+            
+            await comptaReductionValeur(joueurId, emprunt);
+            await comptaDefautEffectif(joueurId, emprunt);
+            
+            COMPTABILITE.caisseJoueurs[joueurId].euro = 0;
+            COMPTABILITE.caisseJoueurs[joueurId].espoyr = 0;
+            COMPTABILITE.caisseJoueurs[joueurId].emprunt = 0;
+            COMPTABILITE.caisseJoueurs[joueurId].apportsActivites = 0;
+            
+            const activitesALiberer = [];
+            for (const [actId, act] of Object.entries(COMPTABILITE.caisseActivites)) {
+                if (act.proprietaireId === joueurId) {
+                    activitesALiberer.push(actId);
+                    COMPTABILITE.caisseActivites[actId].proprietaireId = null;
+                }
+            }
+            
+            await db.ref(`parties/${currentGameCode}/players/${joueurId}`).update({
+                euro: 0, espoyr: 0, emprunt: 0
+            });
+            
+            for (const actId of activitesALiberer) {
+                await gameRef.child(`activites/${actId}`).remove();
+                await gameRef.child(`equipements/${actId}`).remove();
+            }
+            
+            await syncComptabiliteToFirebase();
+            sendSystemMessage(`💀 ${nom} a fait faillite totale ! ${activitesALiberer.length} activités libérées.`);
+            return { handled: true, type: 'faillite_totale', activitesLiberees: activitesALiberer.length };
+        }
+        
         // Vérifier automatiquement la faillite quand on ne peut pas payer
         async function checkAndHandleFaillite(montantAPayer) {
             const caisse = COMPTABILITE.caisseJoueurs[myPlayerId] || {};
@@ -10221,8 +10730,22 @@ function initSystemeDe() {
                     
                     details.push({ nom: dette.nom, icon: dette.icon, montant: mensualite, paye: true, restant: dette.capitalRestant });
                 } else {
-                    // Pas assez → arriéré
-                    caisse.impaye = (caisse.impaye || 0) + mensualite;
+                    // Pas assez → arriéré structuré + écriture comptable
+                    creerArriere(joueurId, {
+                        origine: 'mensualite',
+                        creancierType: 'HORS_CIRCUIT',
+                        creancierId: 'HORS_CIRCUIT',
+                        montant: mensualite,
+                        devise: 'euro',
+                        libelle: `Mensualité impayée ${dette.icon || ''} ${dette.nom || 'bien perso'}`,
+                        details: { nom: dette.nom, icon: dette.icon }
+                    });
+                    // Écriture: charge constatée → dette fournisseur
+                    enregistrerEcriture({
+                        joueurId, libelle: `Mensualité impayée → arriérés (${fmt(mensualite)}€ ${dette.nom || 'bien perso'})`,
+                        compteDebit: 400, compteCredit: 401, montantEuro: mensualite,
+                        contexte: 'arrieresMensualite'
+                    });
                     totalImpaye += mensualite;
                     details.push({ nom: dette.nom, icon: dette.icon, montant: mensualite, paye: false, restant: dette.capitalRestant });
                 }
@@ -10261,42 +10784,195 @@ function initSystemeDe() {
         async function payerArrieres(joueurId) {
             initCaisseJoueur(joueurId);
             const caisse = COMPTABILITE.caisseJoueurs[joueurId];
-            const impayeAvant = caisse.impaye || 0;
-            if (impayeAvant <= 0) return { avant: 0, paye: 0, apres: 0 };
             
-            // Garder minimum 50€
-            const disponible = Math.max(0, (caisse.euro || 0) - 50);
-            const aPayer = Math.min(disponible, impayeAvant);
-            
-            if (aPayer > 0) {
-                caisse.euro -= aPayer;
-                caisse.impaye -= aPayer;
-                
-                // Écriture joueur: paie ses arriérés
-                enregistrerEcriture({
-                    joueurId, libelle: `Paiement arriérés (${fmt(aPayer)}€)`,
-                    compteDebit: 401, compteCredit: 500, montantEuro: aPayer,
-                    contexte: 'arrieres'
+            // Dual system: utiliser arrieres[] si disponible, sinon fallback impaye
+            if (!caisse.arrieres || caisse.arrieres.length === 0) {
+                // Aucun arriéré structuré
+                if ((caisse.impaye || 0) <= 0) return { avant: 0, paye: 0, apres: 0, details: [] };
+                // Fallback migration: impaye > 0 sans arrieres → pousser directement dans le tableau
+                caisse.arrieres = caisse.arrieres || [];
+                caisse.arrieres.push({
+                    id: 'ARR_LEGACY_' + Date.now().toString(36),
+                    origine: 'legacy', creancierType: 'HORS_CIRCUIT', creancierId: 'HORS_CIRCUIT',
+                    montant: caisse.impaye, devise: 'euro', libelle: 'Arriérés legacy',
+                    tour: (typeof gameState !== 'undefined' ? gameState?.turn : 1) || 1
                 });
-                
-                // Contrepartie: l'argent des arriérés va hors circuit (créanciers divers non tracés)
-                COMPTABILITE.horsCircuit = COMPTABILITE.horsCircuit || { solde: 0, recettes: 0 };
-                COMPTABILITE.horsCircuit.solde += aPayer;
-                COMPTABILITE.horsCircuit.recettes += aPayer;
-                
-                enregistrerEcriture({
-                    joueurId: 'HORS_CIRCUIT', libelle: `Arriérés reçus de ${playersData[joueurId]?.name || joueurId}`,
-                    compteDebit: 550, compteCredit: 758, montantEuro: aPayer,
-                    contexte: 'arrieres'
-                });
-                
-                await db.ref(`parties/${currentGameCode}/players/${joueurId}/euro`).set(caisse.euro);
-                await syncComptabiliteToFirebase();
-                
-                sendSystemMessage(`💸 ${playersData[joueurId]?.name || joueurId} paie ${fmt(aPayer)}€ d'arriérés`);
+                // NB: pas de creerArriere ici, on push direct → pas de double incrémentation impaye
             }
             
-            return { avant: impayeAvant, paye: aPayer, apres: caisse.impaye || 0 };
+            const totalAvant = caisse.arrieres.reduce((s, a) => s + a.montant, 0);
+            if (totalAvant <= 0) return { avant: 0, paye: 0, apres: 0, details: [] };
+            
+            let totalPayeEuro = 0;
+            let totalPayeHash = 0;
+            const detailsPaiement = [];
+            const arrieresRestants = [];
+            
+            // Trier: d'abord les € (plus ancien en premier), puis les #
+            const arrieresEuro = caisse.arrieres.filter(a => a.devise !== 'espoyr');
+            const arrieresHash = caisse.arrieres.filter(a => a.devise === 'espoyr');
+            
+            // ── Payer les arriérés en € ──
+            for (const arr of arrieresEuro) {
+                // Garder minimum 50€
+                const disponible = Math.max(0, (caisse.euro || 0) - 50);
+                if (disponible <= 0 || arr.montant <= 0) {
+                    arrieresRestants.push(arr);
+                    continue;
+                }
+                
+                const aPayer = Math.min(disponible, arr.montant);
+                caisse.euro -= aPayer;
+                
+                // Router vers le bon créancier avec double écriture
+                await routerPaiementArriere(joueurId, arr, aPayer);
+                
+                totalPayeEuro += aPayer;
+                arr.montant -= aPayer;
+                
+                if (arr.montant > 0) {
+                    arrieresRestants.push(arr);  // Partiellement payé
+                    detailsPaiement.push({ ...arr, paye: aPayer, restant: arr.montant });
+                } else {
+                    detailsPaiement.push({ ...arr, paye: aPayer, restant: 0 });
+                }
+            }
+            
+            // ── Payer les arriérés en # ──
+            for (const arr of arrieresHash) {
+                const disponible = caisse.espoyr || 0;
+                if (disponible <= 0 || arr.montant <= 0) {
+                    arrieresRestants.push(arr);
+                    continue;
+                }
+                
+                const aPayer = Math.min(disponible, arr.montant);
+                caisse.espoyr -= aPayer;
+                
+                // Router vers le bon créancier avec double écriture
+                await routerPaiementArriere(joueurId, arr, aPayer);
+                
+                totalPayeHash += aPayer;
+                arr.montant -= aPayer;
+                
+                if (arr.montant > 0) {
+                    arrieresRestants.push(arr);
+                    detailsPaiement.push({ ...arr, paye: aPayer, restant: arr.montant });
+                } else {
+                    detailsPaiement.push({ ...arr, paye: aPayer, restant: 0 });
+                }
+            }
+            
+            // Mettre à jour le tableau arriérés
+            caisse.arrieres = arrieresRestants;
+            
+            // Dual system: synchroniser caisse.impaye avec les arriérés € restants
+            caisse.impaye = caisse.arrieres.filter(a => a.devise !== 'espoyr').reduce((s, a) => s + a.montant, 0);
+            
+            // Firebase + messages
+            await db.ref(`parties/${currentGameCode}/players/${joueurId}/euro`).set(caisse.euro);
+            if (totalPayeHash > 0) {
+                await db.ref(`parties/${currentGameCode}/players/${joueurId}/espoyr`).set(caisse.espoyr);
+            }
+            await syncComptabiliteToFirebase();
+            
+            if (totalPayeEuro > 0) {
+                sendSystemMessage(`💸 ${playersData[joueurId]?.name || joueurId} paie ${fmt(totalPayeEuro)}€ d'arriérés`);
+            }
+            if (totalPayeHash > 0) {
+                sendSystemMessage(`💸 ${playersData[joueurId]?.name || joueurId} paie ${fmt(totalPayeHash)}# d'arriérés`);
+            }
+            
+            const totalApres = caisse.arrieres.reduce((s, a) => s + a.montant, 0);
+            return { avant: totalAvant, paye: totalPayeEuro + totalPayeHash, apres: totalApres, details: detailsPaiement };
+        }
+        
+        // Router le paiement d'un arriéré vers le bon créancier avec double écriture correcte
+        async function routerPaiementArriere(joueurId, arriere, montant) {
+            const devise = arriere.devise || 'euro';
+            const isEuro = devise !== 'espoyr';
+            const compteCredit = isEuro ? 500 : 501;
+            const nomJoueur = playersData[joueurId]?.name || joueurId;
+            
+            // Écriture côté débiteur (joueur qui paie)
+            enregistrerEcriture({
+                joueurId,
+                libelle: `Paiement arriéré ${arriere.libelle || arriere.origine} (${fmt(montant)}${isEuro ? '€' : '#'})`,
+                compteDebit: 401,
+                compteCredit: compteCredit,
+                ...(isEuro ? { montantEuro: montant } : { montantEspoyr: montant }),
+                contexte: 'arrieres',
+                details: { origine: arriere.origine, creancierId: arriere.creancierId }
+            });
+            
+            // Écriture côté créancier — routage selon le type
+            switch (arriere.creancierType) {
+                case 'ETAT':
+                    // L'État reçoit l'arriéré (taxe/frais impayés)
+                    COMPTABILITE.etat.tresor += montant;
+                    COMPTABILITE.etat.taxesRecues = (COMPTABILITE.etat.taxesRecues || 0) + montant;
+                    if (!COMPTABILITE.etat.recettes) COMPTABILITE.etat.recettes = { total: 0 };
+                    COMPTABILITE.etat.recettes.total = (COMPTABILITE.etat.recettes.total || 0) + montant;
+                    
+                    enregistrerEcriture({
+                        joueurId: 'ETAT',
+                        libelle: `Arriéré reçu de ${nomJoueur} (${arriere.origine})`,
+                        compteDebit: 541,   // Trésor État (+)
+                        compteCredit: 411,  // Créance sur joueur (-)
+                        montantEuro: montant,
+                        contexte: 'arrieres'
+                    });
+                    break;
+                    
+                case 'JOUEUR':
+                    // Le créancier joueur reçoit son dû
+                    const creancierId = arriere.creancierId;
+                    if (creancierId && creancierId !== joueurId) {
+                        initCaisseJoueur(creancierId);
+                        const creancierCaisse = COMPTABILITE.caisseJoueurs[creancierId];
+                        if (isEuro) {
+                            creancierCaisse.euro += montant;
+                        } else {
+                            creancierCaisse.espoyr = (creancierCaisse.espoyr || 0) + montant;
+                        }
+                        
+                        enregistrerEcriture({
+                            joueurId: creancierId,
+                            libelle: `Arriéré reçu de ${nomJoueur} (${fmt(montant)}${isEuro ? '€' : '#'})`,
+                            compteDebit: isEuro ? 500 : 501,  // Caisse (+)
+                            compteCredit: 411,                 // Créance (-)
+                            ...(isEuro ? { montantEuro: montant } : { montantEspoyr: montant }),
+                            contexte: 'arrieres',
+                            details: { debiteurId: joueurId }
+                        });
+                        
+                        // MAJ Firebase créancier
+                        await db.ref(`parties/${currentGameCode}/players/${creancierId}`).update({
+                            euro: creancierCaisse.euro,
+                            espoyr: creancierCaisse.espoyr || 0
+                        });
+                        
+                        sendSystemMessage(`✅ ${playersData[creancierId]?.name || creancierId} reçoit ${fmt(montant)}${isEuro ? '€' : '#'} d'arriérés de ${nomJoueur}`);
+                    }
+                    break;
+                    
+                case 'HORS_CIRCUIT':
+                default:
+                    // Arriéré vers hors circuit (mensualités, legacy)
+                    COMPTABILITE.horsCircuit = COMPTABILITE.horsCircuit || { solde: 0, recettes: 0 };
+                    COMPTABILITE.horsCircuit.solde += montant;
+                    COMPTABILITE.horsCircuit.recettes += montant;
+                    
+                    enregistrerEcriture({
+                        joueurId: 'HORS_CIRCUIT',
+                        libelle: `Arriérés reçus de ${nomJoueur} (${arriere.origine})`,
+                        compteDebit: 550,
+                        compteCredit: 758,
+                        ...(isEuro ? { montantEuro: montant } : { montantEspoyr: montant }),
+                        contexte: 'arrieres'
+                    });
+                    break;
+            }
         }
         
         // ========== SMART CONTRACTS (Prêts entre joueurs — Phase 3 uniquement) ==========
@@ -10510,9 +11186,25 @@ function initSystemeDe() {
                         caisse.euro -= sc.montantEuro;
                         creancierCaisse.euro += sc.montantEuro;
                         payeEuro = sc.montantEuro;
+                        sc.montantEuro = 0;  // Marquer € comme payé
                     } else {
                         impayeEuro = sc.montantEuro;
-                        caisse.impaye = (caisse.impaye || 0) + sc.montantEuro;
+                        // FIX BUG 2+4: Écriture arriéré structuré (€ séparé)
+                        creerArriere(joueurId, {
+                            origine: 'smartContract',
+                            creancierType: 'JOUEUR',
+                            creancierId: sc.createurId,
+                            montant: sc.montantEuro,
+                            devise: 'euro',
+                            libelle: `SC impayé € → ${creancier?.name || sc.createurId}`,
+                            details: { scId: sc.id || null, createurId: sc.createurId }
+                        });
+                        // Écriture comptable: dette SC impayée → arriérés
+                        enregistrerEcriture({
+                            joueurId, libelle: `SC impayé € → arriérés (${fmt(sc.montantEuro)}€ dû à ${creancier?.name || sc.createurId})`,
+                            compteDebit: 410, compteCredit: 401, montantEuro: sc.montantEuro,
+                            contexte: 'arrieresSC', details: { createurId: sc.createurId }
+                        });
                     }
                 }
                 
@@ -10522,13 +11214,30 @@ function initSystemeDe() {
                         caisse.espoyr -= sc.montantHash;
                         creancierCaisse.espoyr = (creancierCaisse.espoyr || 0) + sc.montantHash;
                         payeHash = sc.montantHash;
+                        sc.montantHash = 0;  // Marquer # comme payé
                     } else {
                         impayeHash = sc.montantHash;
-                        caisse.impaye = (caisse.impaye || 0) + sc.montantHash;
+                        // FIX BUG 4: Arriéré en # (devise correcte, pas mélangé avec €)
+                        creerArriere(joueurId, {
+                            origine: 'smartContract',
+                            creancierType: 'JOUEUR',
+                            creancierId: sc.createurId,
+                            montant: sc.montantHash,
+                            devise: 'espoyr',
+                            libelle: `SC impayé # → ${creancier?.name || sc.createurId}`,
+                            details: { scId: sc.id || null, createurId: sc.createurId }
+                        });
+                        // Écriture comptable: dette SC # impayée → arriérés
+                        enregistrerEcriture({
+                            joueurId, libelle: `SC impayé # → arriérés (${fmt(sc.montantHash)}# dû à ${creancier?.name || sc.createurId})`,
+                            compteDebit: 410, compteCredit: 401, montantEspoyr: sc.montantHash,
+                            contexte: 'arrieresSC', details: { createurId: sc.createurId }
+                        });
                     }
                 }
                 
-                sc.rembourse = true;
+                // FIX BUG 3: sc.rembourse = true SEULEMENT si tout est payé
+                sc.rembourse = (impayeEuro === 0 && impayeHash === 0);
                 
                 if (payeEuro > 0 || payeHash > 0) {
                     // Écritures débiteur: rembourse sa dette SC
@@ -10994,23 +11703,88 @@ function initSystemeDe() {
             closeModal();
             const c = CASES[caseId];
             const ownerPlayer = Object.values(playersData).find(p => p.id === ownerId);
+            const caisse = COMPTABILITE.caisseJoueurs[myPlayerId] || {};
+            const soldeActuel = caisse.euro || 0;
+            const soldeApres = soldeActuel - facture;
+            const arrieresExistants = caisse.impaye || 0;
+            const empruntActuel = caisse.emprunt || 0;
+            const status = checkFaillite(myPlayerId);
             
-            showModal(`
+            // Calculs d'impact
+            const decouvertApres = Math.abs(soldeApres);
+            const depassePlafond = decouvertApres > DECOUVERT_PLAFOND;
+            const conversionImminente = depassePlafond ? decouvertApres : 0;
+            const empruntApresConversion = empruntActuel + conversionImminente;
+            const failliteImminente = depassePlafond && status.capaciteEmprunt < conversionImminente;
+            const interetsEstimes = arrondir2(decouvertApres * DECOUVERT_TAUX);
+            
+            let infoHTML = `
                 <h3>⚠️ Accepter le découvert</h3>
                 <p>Facture : <strong>${fmt(facture)}€</strong> → ${ownerPlayer?.avatar} ${ownerPlayer?.name}</p>
+                
                 <div style="background:#fee2e2;padding:12px;border-radius:8px;margin:10px 0;">
                     <p style="margin:0;font-weight:bold;color:#991b1b;">📉 Ton solde passera en négatif</p>
-                    <p style="margin:6px 0 0 0;font-size:0.9rem;">Solde actuel : <strong>${fmt(COMPTABILITE.caisseJoueurs[myPlayerId]?.euro || 0)}€</strong></p>
-                    <p style="margin:4px 0 0 0;font-size:0.9rem;">Après paiement : <strong style="color:#dc2626;">${fmt((COMPTABILITE.caisseJoueurs[myPlayerId]?.euro || 0) - facture)}€</strong></p>
-                    <hr style="margin:8px 0;border-color:#fca5a5;">
-                    <p style="margin:0;font-size:0.85rem;color:#991b1b;">
-                        ⚠️ <strong>Intérêts 3%</strong> sur le découvert à <strong>chaque lancé de dé</strong>
+                    <p style="margin:6px 0 0 0;font-size:0.9rem;">
+                        Solde actuel : <strong>${fmt(soldeActuel)}€</strong><br>
+                        Après paiement : <strong style="color:#dc2626;">${fmt(soldeApres)}€</strong>
                     </p>
-                    <p style="margin:4px 0 0 0;font-size:0.85rem;color:#6b7280;">
-                        💡 Tu peux transformer ton découvert en prêt bancaire (10%/passage Ligne 1) à tout moment.
+                </div>`;
+            
+            // Arriérés existants
+            if (arrieresExistants > 0) {
+                infoHTML += `
+                <div style="background:#fef3c7;padding:10px;border-radius:8px;margin:8px 0;">
+                    <p style="margin:0;font-size:0.85rem;color:#92400e;">
+                        📋 <strong>Arriérés existants : ${fmt(arrieresExistants)}€</strong>
+                        (prélevés automatiquement au passage Ligne 1)
                     </p>
-                </div>
-            `, `
+                </div>`;
+            }
+            
+            // Intérêts estimés
+            infoHTML += `
+                <div style="background:#f3f4f6;padding:10px;border-radius:8px;margin:8px 0;font-size:0.85rem;">
+                    <p style="margin:0;">⚠️ <strong>Intérêts 3%</strong> sur le découvert à <strong>chaque lancé de dé</strong></p>
+                    <p style="margin:4px 0 0 0;color:#6b7280;">
+                        → Prochain prélèvement estimé : <strong>${fmt(interetsEstimes)}€</strong>
+                    </p>
+                    <p style="margin:4px 0 0 0;color:#6b7280;">
+                        💡 Tu peux convertir en prêt bancaire (10%/passage Ligne 1) à tout moment.
+                    </p>
+                </div>`;
+            
+            // Plafond et conversion automatique
+            if (depassePlafond) {
+                infoHTML += `
+                <div style="background:#fecaca;padding:10px;border-radius:8px;margin:8px 0;font-size:0.85rem;">
+                    <p style="margin:0;font-weight:bold;color:#991b1b;">
+                        🔄 Plafond découvert dépassé (${DECOUVERT_PLAFOND}€)
+                    </p>
+                    <p style="margin:4px 0 0 0;color:#991b1b;">
+                        → Conversion automatique en emprunt : <strong>${fmt(conversionImminente)}€</strong><br>
+                        → Dette totale après : <strong>${fmt(empruntApresConversion)}€</strong> (limite : ${fmt(status.limiteEmprunt)}€)
+                    </p>
+                </div>`;
+            } else {
+                infoHTML += `
+                <div style="background:#f3f4f6;padding:8px;border-radius:8px;margin:8px 0;font-size:0.8rem;color:#6b7280;">
+                    <p style="margin:0;">⚠️ Plafond découvert : <strong>${DECOUVERT_PLAFOND}€</strong> — au-delà, conversion automatique en emprunt.</p>
+                </div>`;
+            }
+            
+            // Alerte faillite
+            if (failliteImminente) {
+                infoHTML += `
+                <div style="background:#dc2626;color:white;padding:12px;border-radius:8px;margin:8px 0;">
+                    <p style="margin:0;font-weight:bold;font-size:1rem;">💀 RISQUE DE FAILLITE</p>
+                    <p style="margin:4px 0 0 0;font-size:0.9rem;">
+                        Ta capacité d'emprunt (${fmt(status.capaciteEmprunt)}€) est insuffisante
+                        pour absorber la conversion de ${fmt(conversionImminente)}€.
+                    </p>
+                </div>`;
+            }
+            
+            showModal(infoHTML, `
                 <button class="btn" style="background:#dc2626;color:white;" onclick="confirmerDecouvert(${caseId}, '${ownerId}', ${facture})">📉 Confirmer le découvert</button>
                 <button class="btn btn-secondary" onclick="showPayOrNegotiateModal(CASES[${caseId}], '${ownerId}', COMPTABILITE.caisseJoueurs['${myPlayerId}']?.euro || 0)">⬅️ Retour</button>
             `);
@@ -11511,21 +12285,198 @@ function initSystemeDe() {
         }
         
         async function handleFrais(c) {
-            const soldeBefore = COMPTABILITE.caisseJoueurs[myPlayerId]?.euro || 0;
+            initCaisseJoueur(myPlayerId);
+            const caisse = COMPTABILITE.caisseJoueurs[myPlayerId];
+            const soldeActuel = caisse.euro || 0;
+            const arrieresExistants = caisse.impaye || 0;
             
-            // ========== ÉTAPE 3 : Affichage facture avant paiement ==========
             // Calculer la facture pour affichage
             const facturePreview = calculerFacture('frais', c.cout);
             const factureHTML = genererHTMLFacture(facturePreview, `${c.icon} ${c.name}`);
             
-            // Afficher le modal avec facture (obligatoire, pas d'annulation)
+            if (soldeActuel >= c.cout) {
+                // ═══ ASSEZ DE CASH — affichage simple ═══
+                showModal(`
+                    <h3>${c.icon} ${c.name}</h3>
+                    <p style="font-size: 0.9rem; color: #6b7280; font-style: italic; margin: 6px 0 10px 0;">
+                        ${c.description || ''}
+                    </p>
+                    ${factureHTML}
+                `, `<button class="btn btn-primary" onclick="confirmerPaiementFrais('${c.id}', ${c.cout}, '${c.name}', '${c.icon}')">Payer ${c.cout}€</button>`);
+            } else {
+                // ═══ PAS ASSEZ — afficher la situation et les choix ═══
+                const manque = c.cout - soldeActuel;
+                const status = checkFaillite(myPlayerId);
+                const mesActivites = Object.entries(COMPTABILITE.caisseActivites || {})
+                    .filter(([id, a]) => a.proprietaireId === myPlayerId);
+                const soldeApresDecouvert = soldeActuel - c.cout;
+                const depassePlafond = Math.abs(soldeApresDecouvert) > DECOUVERT_PLAFOND;
+                
+                let infoHTML = `
+                    <h3>${c.icon} ${c.name}</h3>
+                    <p style="font-size: 0.9rem; color: #6b7280; font-style: italic; margin: 6px 0 10px 0;">
+                        ${c.description || ''}
+                    </p>
+                    ${factureHTML}
+                    
+                    <div style="background:#fee2e2;padding:12px;border-radius:8px;margin:10px 0;">
+                        <p style="margin:0;font-weight:bold;color:#991b1b;">⚠️ Fonds insuffisants</p>
+                        <p style="margin:6px 0 0 0;font-size:0.9rem;">
+                            Solde : <strong>${fmt(soldeActuel)}€</strong> — Il manque : <strong style="color:#dc2626;">${fmt(manque)}€</strong>
+                            ${arrieresExistants > 0 ? `<br>📋 Arriérés existants : <strong>${fmt(arrieresExistants)}€</strong>` : ''}
+                        </p>
+                    </div>`;
+                
+                let buttons = '';
+                
+                // Option A : Arriérés (toujours disponible)
+                buttons += `<button class="btn btn-primary" onclick="confirmerPaiementFrais('${c.id}', ${c.cout}, '${c.name}', '${c.icon}')">📋 Accepter les arriérés (${fmt(manque)}€)</button>`;
+                
+                // Option B : Emprunter (si capacité)
+                if (status.capaciteEmprunt >= manque) {
+                    buttons += `<button class="btn" style="background:#fef3c7;color:#b45309;" onclick="emprunterPuisPayerFrais('${c.id}', ${c.cout}, '${c.name}', '${c.icon}', ${manque})">💰 Emprunter ${fmt(manque)}€ puis payer</button>`;
+                } else if (status.capaciteEmprunt > 0) {
+                    buttons += `<button class="btn" style="background:#fef3c7;color:#b45309;" onclick="emprunterPuisPayerFrais('${c.id}', ${c.cout}, '${c.name}', '${c.icon}', ${status.capaciteEmprunt})">💰 Emprunter ${fmt(status.capaciteEmprunt)}€ (reste ${fmt(manque - status.capaciteEmprunt)}€ en arriérés)</button>`;
+                }
+                
+                // Option C : Vendre aux enchères (si 2+ activités)
+                if (mesActivites.length > 1) {
+                    buttons += `<button class="btn" style="background:#fce7f3;color:#9d174d;" onclick="vendrePuisPayerFrais('${c.id}', ${c.cout}, '${c.name}', '${c.icon}')">🔨 Vendre une activité</button>`;
+                }
+                
+                // Option D : Découvert (filet ultime)
+                buttons += `<button class="btn" style="background:#fee2e2;color:#991b1b;font-size:0.85rem;" onclick="payerFraisEnDecouvert('${c.id}', ${c.cout}, '${c.name}', '${c.icon}')">⚠️ Accepter le découvert (${fmt(soldeApresDecouvert)}€)</button>`;
+                
+                showModal(infoHTML, buttons);
+            }
+        }
+        
+        // ═══ Emprunter puis payer les frais ═══
+        async function emprunterPuisPayerFrais(caseId, cout, caseName, caseIcon, montantEmprunt) {
+            closeModal();
+            
+            // Vérification BCE 10%
+            const verif = banquePeutPreter(montantEmprunt);
+            if (!verif.peutPreter) {
+                const gl = COMPTABILITE.banque.grandLivre;
+                const resultat = (gl[4000] || 0) - (gl[5000] || 0);
+                if (resultat > 0) await affecterResultatEnReserves();
+            }
+            
+            // 1. Emprunter (double écriture complète via comptaEmprunt)
+            await comptaEmprunt(myPlayerId, montantEmprunt);
+            const caisse = COMPTABILITE.caisseJoueurs[myPlayerId];
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}`).update({
+                euro: caisse.euro, emprunt: caisse.emprunt
+            });
+            
+            logEvent('BANK_LOAN', myPlayerId, {
+                amount: montantEmprunt, newDebt: caisse.emprunt, reason: 'frais'
+            });
+            
+            sendSystemMessage(`💰 ${myName} emprunte ${fmt(montantEmprunt)}€ pour payer ${caseName}`);
+            
+            // 2. Payer les frais (double écriture complète via comptaFrais)
+            await confirmerPaiementFrais(caseId, cout, caseName, caseIcon);
+        }
+        
+        // ═══ Vendre puis payer les frais (callback vers enchères) ═══
+        function vendrePuisPayerFrais(caseId, cout, caseName, caseIcon) {
+            closeModal();
+            const mesActs = Object.entries(COMPTABILITE.caisseActivites || {})
+                .filter(([id, a]) => a.proprietaireId === myPlayerId);
+            
+            let listeHtml = '';
+            for (const [actId, act] of mesActs) {
+                const ca = CASES[actId];
+                if (!ca) continue;
+                const check = canSellActivity(myPlayerId, parseInt(actId));
+                const prixDepart = Math.floor((act.capital || ca.prix) * 0.5);
+                listeHtml += `
+                    <button class="btn" style="width:100%;margin:3px 0;text-align:left;padding:8px 12px;
+                        background:${check.canSell ? '#fdf2f8' : '#f3f4f6'};color:${check.canSell ? '#9d174d' : '#9ca3af'};
+                        border:1px solid ${check.canSell ? '#f9a8d4' : '#e5e7eb'};font-size:0.85rem;"
+                        ${check.canSell ? `onclick="showVenteActiviteModal(${actId})"` : 'disabled'}
+                    >
+                        ${ca.icon} ${ca.name} — départ ${fmt(prixDepart)}€
+                        ${!check.canSell ? `<br><span style="font-size:0.75rem;">${check.reason}</span>` : ''}
+                    </button>`;
+            }
+            
             showModal(`
-                <h3>${c.icon} ${c.name}</h3>
-                <p style="font-size: 0.9rem; color: #6b7280; font-style: italic; margin: 6px 0 10px 0;">
-                    ${c.description || ''}
-                </p>
-                ${factureHTML}
-            `, `<button class="btn btn-primary" onclick="confirmerPaiementFrais('${c.id}', ${c.cout}, '${c.name}', '${c.icon}')">Payer ${c.cout}€</button>`);
+                <h3>🔨 Vendre pour payer ${caseName}</h3>
+                <p style="font-size:0.9rem;color:#6b7280;">Facture : ${fmt(cout)}€ — Vends une activité pour lever des fonds.</p>
+                <hr style="margin:10px 0;">
+                ${listeHtml}
+            `, `
+                <button class="btn btn-secondary" onclick="handleFrais(CASES[${caseId}])">⬅️ Retour</button>
+            `);
+        }
+        
+        // ═══ Payer frais en découvert (solde passe en négatif) ═══
+        async function payerFraisEnDecouvert(caseId, cout, caseName, caseIcon) {
+            closeModal();
+            initCaisseJoueur(myPlayerId);
+            const caisse = COMPTABILITE.caisseJoueurs[myPlayerId];
+            const soldeBefore = caisse.euro || 0;
+            const facture = calculerFacture('frais', cout);
+            
+            // Débit total du joueur (passe en négatif)
+            caisse.euro -= cout;
+            caisse.taxesPayees = (caisse.taxesPayees || 0) + cout;
+            
+            // Écritures joueur — partie double complète
+            enregistrerEcriture({
+                joueurId: myPlayerId,
+                libelle: `${caseName} HT (découvert)`,
+                compteDebit: 613, compteCredit: 500, montantEuro: facture.ht
+            });
+            enregistrerEcriture({
+                joueurId: myPlayerId,
+                libelle: `TVA ${caseName} (découvert)`,
+                compteDebit: 635, compteCredit: 500, montantEuro: facture.tva
+            });
+            
+            // État reçoit le paiement complet
+            COMPTABILITE.etat.tresor += cout;
+            COMPTABILITE.etat.recettes.tva += facture.tva;
+            COMPTABILITE.etat.recettes.frais += facture.ht;
+            COMPTABILITE.etat.recettes.total += cout;
+            COMPTABILITE.etat.grandLivre[500] += cout;
+            COMPTABILITE.etat.grandLivre[704] += facture.tva;
+            COMPTABILITE.etat.grandLivre[702] += facture.ht;
+            
+            enregistrerEcriture({
+                joueurId: 'ETAT', libelle: `Recette TVA ${caseName}`,
+                compteDebit: 500, compteCredit: 704, montantEuro: facture.tva, contexte: 'etat'
+            });
+            enregistrerEcriture({
+                joueurId: 'ETAT', libelle: `Recette ${caseName} HT`,
+                compteDebit: 500, compteCredit: 702, montantEuro: facture.ht, contexte: 'etat'
+            });
+            
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/euro`).set(caisse.euro);
+            await syncComptabiliteToFirebase();
+            
+            logEvent('PAY_FEE_OVERDRAFT', myPlayerId, {
+                caseId: parseInt(caseId), caseName, amount: cout,
+                soldeBefore, soldeAfter: caisse.euro
+            });
+            
+            sendSystemMessage(`${caseIcon} ${myName} paie ${fmt(cout)}€ de ${caseName} (découvert: ${fmt(caisse.euro)}€)`);
+            
+            // Compteur difficultés (déclencheur Phase 2)
+            const diffSnap = await gameRef.child(`difficulteConsecutive/${myPlayerId}`).once('value');
+            await gameRef.child(`difficulteConsecutive/${myPlayerId}`).set((diffSnap.val() || 0) + 1);
+            
+            showModal(`
+                <h3>📉 Paiement en découvert</h3>
+                <p><strong>${fmt(cout)}€</strong> de ${caseName} payés</p>
+                <div style="background:#fee2e2;padding:10px;border-radius:8px;margin:8px 0;">
+                    <p style="margin:0;font-size:0.9rem;">Solde : <strong style="color:#dc2626;">${fmt(caisse.euro)}€</strong></p>
+                    <p style="margin:4px 0 0 0;font-size:0.85rem;color:#991b1b;">⚠️ Intérêts 3% à chaque lancé de dé</p>
+                </div>
+            `, `<button class="btn btn-primary" onclick="safeNextTurn();">OK</button>`);
         }
         
         // Fonction de confirmation du paiement des frais
@@ -11546,19 +12497,33 @@ function initSystemeDe() {
                 factureHT: result.facture.ht,
                 factureTVA: result.facture.tva,
                 destinationEtat: result.facture.destinationEtat,
+                paye: result.paye,
+                impaye: result.impaye,
                 soldeBefore,
                 soldeAfter: caisse.euro
             }, result.ledgerEntryIds || []);
             
-            sendSystemMessage(`${caseIcon} ${myName} paie ${fmt(cout)}€ de ${caseName}`);
+            // Message système corrigé (montant réel payé)
+            if (result.impaye > 0) {
+                sendSystemMessage(`${caseIcon} ${myName} paie ${fmt(result.paye)}€ de ${caseName} (${fmt(result.impaye)}€ en arriérés)`);
+            } else {
+                sendSystemMessage(`${caseIcon} ${myName} paie ${fmt(cout)}€ de ${caseName}`);
+            }
             
-            // Confirmation rapide
+            // Confirmation avec montants réels
             showModal(`
-                <h3>✅ Paiement effectué</h3>
-                <p><strong>${fmt(cout)}€</strong> de ${caseName} payés</p>
-                <p style="font-size: 0.85rem; color: #6b7280;">
-                    HT: ${result.facture.ht.toFixed(2)}€ | TVA: ${result.facture.tva.toFixed(2)}€
-                </p>
+                <h3>${result.impaye > 0 ? '⚠️ Paiement partiel' : '✅ Paiement effectué'}</h3>
+                <p><strong>${fmt(cout)}€</strong> de ${caseName}</p>
+                <div style="background:#f3f4f6;padding:10px;border-radius:8px;margin:8px 0;">
+                    <p style="margin:0;font-size:0.9rem;">
+                        💶 Payé : <strong>${fmt(result.paye)}€</strong>
+                        ${result.impaye > 0 ? `<br>📋 Arriérés : <strong style="color:#dc2626;">${fmt(result.impaye)}€</strong>` : ''}
+                    </p>
+                    <p style="margin:4px 0 0 0;font-size:0.85rem;color:#6b7280;">
+                        HT: ${result.facture.ht.toFixed(2)}€ | TVA: ${result.facture.tva.toFixed(2)}€
+                    </p>
+                </div>
+                ${result.impaye > 0 ? '<p style="font-size:0.85rem;color:#b45309;">📋 Les arriérés seront prélevés au passage Ligne 1</p>' : ''}
             `, `<button class="btn btn-primary" onclick="safeNextTurn();">OK</button>`);
         }
         
@@ -11857,6 +12822,7 @@ function initSystemeDe() {
             
             const ledgerEntryIds = [];
             const playerEffects = [];
+            let humainAChoisi = false;
             
             for (const p of players) {
                 // S'assurer que la caisse du joueur existe avec le bon solde
@@ -11867,11 +12833,82 @@ function initSystemeDe() {
                 }
                 
                 const soldeBefore = COMPTABILITE.caisseJoueurs[p.id].euro;
+                
+                // ═══ Joueur humain sans assez de cash → choix ═══
+                if (p.id === myPlayerId && soldeBefore < c.cout) {
+                    humainAChoisi = true;
+                    const manque = c.cout - soldeBefore;
+                    const status = checkFaillite(myPlayerId);
+                    const arrieresExistants = COMPTABILITE.caisseJoueurs[myPlayerId].impaye || 0;
+                    const mesActivites = Object.entries(COMPTABILITE.caisseActivites || {})
+                        .filter(([id, a]) => a.proprietaireId === myPlayerId);
+                    const soldeApresDecouvert = soldeBefore - c.cout;
+                    
+                    // Traiter d'abord les autres joueurs
+                    for (const pOther of players) {
+                        if (pOther.id === myPlayerId) continue;
+                        if (playerEffects.find(e => e.playerId === pOther.id)) continue;
+                        
+                        if (!COMPTABILITE.caisseJoueurs[pOther.id]) {
+                            initCaisseJoueur(pOther.id);
+                            COMPTABILITE.caisseJoueurs[pOther.id].euro = pOther.euro || CONFIG.capitalInitial;
+                        }
+                        const sbOther = COMPTABILITE.caisseJoueurs[pOther.id].euro;
+                        const rOther = await comptaFrais(pOther.id, c.cout, c.name);
+                        if (rOther?.ledgerEntryIds) ledgerEntryIds.push(...rOther.ledgerEntryIds);
+                        const saOther = COMPTABILITE.caisseJoueurs[pOther.id].euro;
+                        playerEffects.push({ playerId: pOther.id, name: pOther.name, before: sbOther, after: saOther, paid: rOther.paye || c.cout, impaye: rOther.impaye || 0 });
+                        await db.ref(`parties/${currentGameCode}/players/${pOther.id}/euro`).set(saOther);
+                    }
+                    
+                    // Modal de choix pour le joueur humain
+                    await new Promise(resolve => {
+                        window.__resolveLigne2 = resolve;
+                        
+                        let buttons = '';
+                        buttons += `<button class="btn btn-primary" onclick="ligne2Arrieres(${c.id}, ${c.cout}, '${c.name}', '${c.icon}')">📋 Arriérés (${fmt(manque)}€)</button>`;
+                        
+                        if (status.capaciteEmprunt >= manque) {
+                            buttons += `<button class="btn" style="background:#fef3c7;color:#b45309;" onclick="ligne2Emprunter(${c.id}, ${c.cout}, '${c.name}', '${c.icon}', ${manque})">💰 Emprunter ${fmt(manque)}€</button>`;
+                        } else if (status.capaciteEmprunt > 0) {
+                            buttons += `<button class="btn" style="background:#fef3c7;color:#b45309;" onclick="ligne2Emprunter(${c.id}, ${c.cout}, '${c.name}', '${c.icon}', ${status.capaciteEmprunt})">💰 Emprunter ${fmt(status.capaciteEmprunt)}€</button>`;
+                        }
+                        
+                        if (mesActivites.length > 1) {
+                            buttons += `<button class="btn" style="background:#fce7f3;color:#9d174d;" onclick="vendrePuisPayerFrais('${c.id}', ${c.cout}, '${c.name}', '${c.icon}')">🔨 Vendre une activité</button>`;
+                        }
+                        
+                        buttons += `<button class="btn" style="background:#fee2e2;color:#991b1b;font-size:0.85rem;" onclick="ligne2Decouvert(${c.id}, ${c.cout}, '${c.name}', '${c.icon}')">⚠️ Découvert (${fmt(soldeApresDecouvert)}€)</button>`;
+                        
+                        showModal(`
+                            <h3>${c.icon} ${c.name} — Tout le monde paie</h3>
+                            <div style="background:#fee2e2;padding:12px;border-radius:8px;margin:10px 0;">
+                                <p style="margin:0;font-weight:bold;color:#991b1b;">⚠️ Fonds insuffisants</p>
+                                <p style="margin:6px 0 0 0;font-size:0.9rem;">
+                                    Montant : <strong>${fmt(c.cout)}€</strong> — Solde : <strong>${fmt(soldeBefore)}€</strong> — Manque : <strong style="color:#dc2626;">${fmt(manque)}€</strong>
+                                    ${arrieresExistants > 0 ? `<br>📋 Arriérés existants : <strong>${fmt(arrieresExistants)}€</strong>` : ''}
+                                </p>
+                            </div>
+                        `, buttons);
+                    });
+                    
+                    // Le joueur a choisi — récupérer son résultat
+                    const caisseMy = COMPTABILITE.caisseJoueurs[myPlayerId];
+                    playerEffects.push({
+                        playerId: myPlayerId, name: playersData[myPlayerId]?.name || myPlayerId,
+                        before: soldeBefore, after: caisseMy.euro,
+                        paid: Math.min(soldeBefore, c.cout), impaye: Math.max(0, c.cout - Math.max(0, soldeBefore))
+                    });
+                    
+                    break; // Sortir de la boucle — tous les joueurs ont été traités
+                }
+                
+                // ═══ Joueur normal (assez de cash, ou bot) ═══
                 const result = await comptaFrais(p.id, c.cout, c.name);
                 if (result?.ledgerEntryIds) ledgerEntryIds.push(...result.ledgerEntryIds);
                 
                 const soldeAfter = COMPTABILITE.caisseJoueurs[p.id].euro;
-                playerEffects.push({ playerId: p.id, name: p.name, before: soldeBefore, after: soldeAfter, paid: c.cout });
+                playerEffects.push({ playerId: p.id, name: p.name, before: soldeBefore, after: soldeAfter, paid: result.paye || c.cout, impaye: result.impaye || 0 });
                 
                 await db.ref(`parties/${currentGameCode}/players/${p.id}/euro`).set(soldeAfter);
             }
@@ -11888,8 +12925,8 @@ function initSystemeDe() {
             
             sendSystemMessage(`${c.icon} ${c.name} ! Tout le monde paie ${fmt(c.cout)}€`);
             
-            // Afficher le modal avec un timer qui passe au tour suivant automatiquement
-            let countdown = 3;
+            // Afficher le récapitulatif
+            let countdown = humainAChoisi ? 5 : 3;
             let _ligne2Interval = null;
             
             showModal(`
@@ -11899,7 +12936,7 @@ function initSystemeDe() {
                 </p>
                 <p>Tous les joueurs paient <strong>${fmt(c.cout)}€</strong></p>
                 <div style="background: #fef3c7; padding: 10px; border-radius: 8px; margin: 10px 0;">
-                    ${playerEffects.map(e => `<p style="margin: 3px 0;">${playersData[e.playerId]?.avatar || '👤'} ${e.name}: ${fmt(e.before)}€ → ${fmt(e.after)}€</p>`).join('')}
+                    ${playerEffects.map(e => `<p style="margin: 3px 0;">${playersData[e.playerId]?.avatar || '👤'} ${e.name}: ${fmt(e.before)}€ → ${fmt(e.after)}€${e.impaye > 0 ? ` <span style="color:#dc2626;">(${fmt(e.impaye)}€ impayés)</span>` : ''}</p>`).join('')}
                 </div>
                 <p id="ligne2Countdown" style="text-align: center; color: #6b7280; font-size: 0.9rem;">Tour suivant dans ${countdown}s...</p>
             `, `
@@ -11918,6 +12955,50 @@ function initSystemeDe() {
                     nextTurn();
                 }
             }, 1000);
+        }
+        
+        // ═══ LIGNE 2 — Callbacks choix joueur humain ═══
+        async function ligne2Arrieres(caseId, cout, caseName, caseIcon) {
+            closeModal();
+            const result = await comptaFrais(myPlayerId, cout, caseName);
+            const caisse = COMPTABILITE.caisseJoueurs[myPlayerId];
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/euro`).set(Math.max(0, caisse.euro));
+            await syncComptabiliteToFirebase();
+            if (result.impaye > 0) {
+                sendSystemMessage(`${caseIcon} ${myName} : ${fmt(result.paye)}€ payés, ${fmt(result.impaye)}€ en arriérés`);
+            }
+            if (window.__resolveLigne2) { window.__resolveLigne2(); window.__resolveLigne2 = null; }
+        }
+        
+        async function ligne2Emprunter(caseId, cout, caseName, caseIcon, montantEmprunt) {
+            closeModal();
+            const verif = banquePeutPreter(montantEmprunt);
+            if (!verif.peutPreter) {
+                const gl = COMPTABILITE.banque.grandLivre;
+                const resultat = (gl[4000] || 0) - (gl[5000] || 0);
+                if (resultat > 0) await affecterResultatEnReserves();
+            }
+            await comptaEmprunt(myPlayerId, montantEmprunt);
+            const caisseE = COMPTABILITE.caisseJoueurs[myPlayerId];
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}`).update({
+                euro: caisseE.euro, emprunt: caisseE.emprunt
+            });
+            sendSystemMessage(`💰 ${myName} emprunte ${fmt(montantEmprunt)}€`);
+            
+            // Puis payer les frais
+            const result = await comptaFrais(myPlayerId, cout, caseName);
+            await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/euro`).set(Math.max(0, caisseE.euro));
+            await syncComptabiliteToFirebase();
+            if (window.__resolveLigne2) { window.__resolveLigne2(); window.__resolveLigne2 = null; }
+        }
+        
+        async function ligne2Decouvert(caseId, cout, caseName, caseIcon) {
+            closeModal();
+            await payerFraisEnDecouvert(caseId, cout, caseName, caseIcon);
+            // payerFraisEnDecouvert montre un modal de confirmation — on doit attendre
+            // On override le safeNextTurn du modal pour résoudre la Promise Ligne 2
+            // Note: safeNextTurn sera appelé par le bouton OK du modal de payerFraisEnDecouvert
+            if (window.__resolveLigne2) { window.__resolveLigne2(); window.__resolveLigne2 = null; }
         }
         
         // ========== TOUR SUIVANT ==========
@@ -12396,23 +13477,15 @@ function initSystemeDe() {
             const skipSnap = await gameRef.child(`skipTurns/${bot.id}`).once('value');
             const skipCount = skipSnap.val() || 0;
             if (skipCount > 0) {
-                // Intérêts découvert même quand on passe
-                const caisseSk = COMPTABILITE.caisseJoueurs[bot.id] || {};
-                if ((caisseSk.euro || 0) < 0) {
-                    const decouvertSk = Math.abs(caisseSk.euro);
-                    const interetsDec = arrondir2(decouvertSk * 0.03);
-                    caisseSk.euro -= interetsDec;
-                    // Écriture comptable banque
-                    enregistrerEcritureBanque({
-                        event_type: 'OVERDRAFT_INTEREST',
-                        debit_account: 1010,
-                        credit_account: 4000,
-                        amount: interetsDec,
-                        playerId: bot.id,
-                        description: `Intérêts découvert 3% bot (tour passé) sur ${decouvertSk.toFixed(2)}€`
-                    });
-                    await db.ref(`parties/${currentGameCode}/players/${bot.id}/euro`).set(caisseSk.euro);
-                    sendSystemMessage(`📉 ${bot.name} : intérêts découvert 3% = -${fmt(interetsDec)}€`);
+                // Intérêts découvert bot skip (centralisé)
+                if ((COMPTABILITE.caisseJoueurs[bot.id]?.euro || 0) < 0) {
+                    const decBotSkip = await traiterDecouvert(bot.id, 'bot tour passé');
+                    if (decBotSkip.faillite) {
+                        await gameRef.child(`skipTurns/${bot.id}`).set(skipCount - 1);
+                        await handleFailliteAuto(bot.id);
+                        await nextTurn();
+                        return;
+                    }
                 }
                 await gameRef.child(`skipTurns/${bot.id}`).set(skipCount - 1);
                 sendSystemMessage(`⏭️ ${bot.name} passe son tour (action contributive)`);
@@ -12421,24 +13494,14 @@ function initSystemeDe() {
                 return;
             }
             
-            // ── INTÉRÊTS DÉCOUVERT 3% BOT ──
-            const caisseBot = COMPTABILITE.caisseJoueurs[bot.id] || {};
-            if ((caisseBot.euro || 0) < 0) {
-                const decouvertBot = Math.abs(caisseBot.euro);
-                const interetsDecBot = arrondir2(decouvertBot * 0.03);
-                caisseBot.euro -= interetsDecBot;
-                // Écriture comptable banque
-                enregistrerEcritureBanque({
-                    event_type: 'OVERDRAFT_INTEREST',
-                    debit_account: 1010,
-                    credit_account: 4000,
-                    amount: interetsDecBot,
-                    playerId: bot.id,
-                    description: `Intérêts découvert 3% bot sur ${decouvertBot.toFixed(2)}€`
-                });
-                await db.ref(`parties/${currentGameCode}/players/${bot.id}/euro`).set(caisseBot.euro);
-                await syncComptabiliteToFirebase();
-                sendSystemMessage(`📉 ${bot.name} : intérêts découvert 3% = -${fmt(interetsDecBot)}€ (solde: ${fmt(caisseBot.euro)}€)`);
+            // ── INTÉRÊTS DÉCOUVERT BOT (centralisé) ──
+            if ((COMPTABILITE.caisseJoueurs[bot.id]?.euro || 0) < 0) {
+                const decBot = await traiterDecouvert(bot.id, 'bot');
+                if (decBot.faillite) {
+                    await handleFailliteAuto(bot.id);
+                    await nextTurn();
+                    return;
+                }
             }
             const profil = PROFILS_IA[bot.botProfil] || PROFILS_IA.EQUILIBRE;
             
@@ -12700,11 +13763,10 @@ function initSystemeDe() {
                 }
                 
                 // ========== ARRIÉRÉS (BOT) ==========
-                if ((caisse.impaye || 0) > 0) {
+                const botHasArrieres = (caisse.impaye || 0) > 0 || (caisse.arrieres && caisse.arrieres.length > 0);
+                if (botHasArrieres) {
                     const botArrResult = await payerArrieres(bot.id);
-                    if (botArrResult.paye > 0) {
-                        sendSystemMessage(`💸 ${bot.name} paie ${fmt(botArrResult.paye)}€ d'arriérés`);
-                    }
+                    // Messages déjà envoyés par payerArrieres/routerPaiementArriere
                 }
                 
                 await syncComptabiliteToFirebase();
@@ -13455,6 +14517,7 @@ function initSystemeDe() {
                 const espoyr = Math.round((bj.actif?.espoyr || 0) * 100) / 100;
                 const activites = Math.round((bj.actif?.activites || 0) * 100) / 100;
                 const dette = Math.round((bj.passif?.emprunt || 0) * 100) / 100;
+                const arrieres = Math.round((bj.passif?.arrieres || 0) * 100) / 100;
                 const net = Math.round((bj.net || 0) * 100) / 100;
                 
                 return `
@@ -13464,6 +14527,7 @@ function initSystemeDe() {
                         <td>${fmt(espoyr)}#</td>
                         <td>${fmt(activites)}€</td>
                         <td>${fmt(dette)}€</td>
+                        <td>${arrieres > 0 ? '<span style="color:#b45309">' + fmt(arrieres) + '€</span>' : '-'}</td>
                         <td>${fmt(net)}€</td>
                     </tr>
                 `;
@@ -13607,6 +14671,7 @@ function initSystemeDe() {
                             <th>Caisse #</th>
                             <th>Activités</th>
                             <th>Dette</th>
+                            <th>Arriérés</th>
                             <th>Net</th>
                         </tr>
                     </thead>
@@ -13618,7 +14683,8 @@ function initSystemeDe() {
                             <td>${fmt(bilan.actif.caisseEspoyr)}#</td>
                             <td>${fmt(bilan.actif.activites)}€</td>
                             <td>${fmt(bilan.passif.emprunts)}€</td>
-                            <td>${fmt(bilan.actif.total - bilan.passif.emprunts)}€</td>
+                            <td>${bilan.passif.arrieres > 0 ? '<span style="color:#b45309">' + fmt(bilan.passif.arrieres) + '</span>' : '-'}</td>
+                            <td>${fmt(bilan.actif.total - bilan.passif.emprunts - bilan.passif.arrieres)}€</td>
                         </tr>
                         ${bilanBanque}
                         ${bilanAAA}
@@ -13956,14 +15022,20 @@ function initSystemeDe() {
             // PASSIF € (sans 109)
             const passifEuro_101 = capitalInitial;      // 101 - Capital initial
             const passifEuro_165 = empruntBanque;       // 165 - Emprunt banque
+            const passifEuro_401 = totalArrieres(joueurId, 'euro');  // 401 - Arriérés €
             
             // 109 € = Poste d'équilibrage pour que Actif € = Passif €
-            const resultatEuro_109 = totalActifEuro - passifEuro_101 - passifEuro_165;
-            const totalPassifEuro = passifEuro_101 + passifEuro_165 + resultatEuro_109;
+            const resultatEuro_109 = totalActifEuro - passifEuro_101 - passifEuro_165 - passifEuro_401;
+            const totalPassifEuro = passifEuro_101 + passifEuro_165 + passifEuro_401 + resultatEuro_109;
             const bilanEuroEquilibre = Math.abs(totalActifEuro - totalPassifEuro) < 0.01;
             
             // Patrimoine net € (indicateur hors bilan)
-            const patrimoineNetEuro = totalActifEuro - empruntBanque;
+            const patrimoineNetEuro = totalActifEuro - empruntBanque - passifEuro_401;
+            
+            // Arriérés # (pour bilan # et détail)
+            const arrieresHashTotal = totalArrieres(joueurId, 'espoyr');
+            // Liste détaillée des arriérés pour affichage hors bilan
+            const arrieresDetail = (caisse.arrieres || []).filter(a => a.montant > 0);
             
             // ═══════════════════════════════════════════════════════════════
             // BILAN # (Espoyr) — Calculs
@@ -13976,14 +15048,15 @@ function initSystemeDe() {
             
             // PASSIF # (sans 109)
             const passifEspoyr_166 = creanceAAA;        // 166 - Créance AAA
+            const passifEspoyr_401 = arrieresHashTotal;  // 401 - Arriérés #
             
             // 109 # = Poste d'équilibrage pour que Actif # = Passif #
-            const resultatEspoyr_109 = totalActifEspoyr - passifEspoyr_166;
-            const totalPassifEspoyr = passifEspoyr_166 + resultatEspoyr_109;
+            const resultatEspoyr_109 = totalActifEspoyr - passifEspoyr_166 - passifEspoyr_401;
+            const totalPassifEspoyr = passifEspoyr_166 + passifEspoyr_401 + resultatEspoyr_109;
             const bilanEspoyrEquilibre = Math.abs(totalActifEspoyr - totalPassifEspoyr) < 0.01;
             
             // Patrimoine net # (indicateur hors bilan)
-            const patrimoineNetEspoyr = totalActifEspoyr - passifEspoyr_166;
+            const patrimoineNetEspoyr = totalActifEspoyr - passifEspoyr_166 - passifEspoyr_401;
             
             // ═══════════════════════════════════════════════════════════════
             // Limite d'emprunt
@@ -14097,6 +15170,7 @@ function initSystemeDe() {
                                     </td>
                                 </tr>
                                 <tr><td>165 - Emprunt banque</td><td style="text-align:right;">${fmt(passifEuro_165)}€</td></tr>
+                                ${passifEuro_401 > 0 ? `<tr><td style="color:#dc2626;">401 - Arriérés</td><td style="text-align:right; color:#dc2626; font-weight:600;">${fmt(passifEuro_401)}€</td></tr>` : ''}
                                 <tr style="border-top:2px solid #dc2626;">
                                     <td><strong>TOTAL PASSIF</strong></td>
                                     <td style="text-align:right;"><strong>${fmt(totalPassifEuro)}€</strong></td>
@@ -14141,6 +15215,7 @@ function initSystemeDe() {
                             <p style="margin:0 0 8px 0; font-weight:bold; color:#dc2626; text-align:center;">PASSIF #</p>
                             <table style="width:100%; font-size:0.85rem;">
                                 ${passifEspoyr_166 > 0 ? `<tr><td>166 - Créance AAA</td><td style="text-align:right;">${fmt(passifEspoyr_166)}#</td></tr>` : ''}
+                                ${passifEspoyr_401 > 0 ? `<tr><td style="color:#dc2626;">401 - Arriérés</td><td style="text-align:right; color:#dc2626; font-weight:600;">${fmt(passifEspoyr_401)}#</td></tr>` : ''}
                                 <tr>
                                     <td>109 - Résultat</td>
                                     <td style="text-align:right; color:${resultatEspoyr_109 >= 0 ? '#059669' : '#dc2626'};">
@@ -14164,6 +15239,42 @@ function initSystemeDe() {
                         </div>
                     </div>
                 </div>
+                
+                ${arrieresDetail.length > 0 ? `
+                <!-- ══════════════════════════════════════════════════════ -->
+                <!-- DÉTAIL ARRIÉRÉS (hors bilan)                          -->
+                <!-- ══════════════════════════════════════════════════════ -->
+                <div style="background:linear-gradient(135deg, #fef2f2, #fee2e2); padding:12px; border-radius:10px; margin-bottom:12px; border:2px solid #f87171;">
+                    <p style="margin:0 0 10px 0; font-weight:bold; font-size:1rem; color:#dc2626;">
+                        📋 ARRIÉRÉS <span style="font-weight:normal; font-size:0.8rem;">(${arrieresDetail.length} poste${arrieresDetail.length > 1 ? 's' : ''} — ${fmt(passifEuro_401)}€ / ${fmt(arrieresHashTotal)}#)</span>
+                    </p>
+                    <table style="width:100%; font-size:0.85rem; border-collapse:collapse;">
+                        <tr style="border-bottom:1px solid #fca5a5;">
+                            <th style="text-align:left; padding:4px;">Origine</th>
+                            <th style="text-align:left; padding:4px;">Créancier</th>
+                            <th style="text-align:right; padding:4px;">Montant</th>
+                            <th style="text-align:center; padding:4px;">Tour</th>
+                        </tr>
+                        ${arrieresDetail.map(a => {
+                            const nomCreancier = a.creancierType === 'ETAT' ? '🏛️ État' :
+                                a.creancierType === 'JOUEUR' ? (playersData[a.creancierId]?.avatar || '👤') + ' ' + (playersData[a.creancierId]?.name || a.creancierId) :
+                                '🛰️ Hors circuit';
+                            const origineIcon = a.origine === 'taxeLigne3' ? '🏛️' : a.origine === 'frais' ? '📋' :
+                                a.origine === 'mensualite' ? '🏠' : a.origine === 'smartContract' ? '📜' : '📋';
+                            const deviseSymbol = a.devise === 'espoyr' ? '#' : '€';
+                            return '<tr style="border-bottom:1px solid #fecaca;">' +
+                                '<td style="padding:4px;">' + origineIcon + ' ' + (a.origine || 'legacy') + '</td>' +
+                                '<td style="padding:4px;">' + nomCreancier + '</td>' +
+                                '<td style="padding:4px; text-align:right; font-weight:600; color:#dc2626;">' + fmt(a.montant) + deviseSymbol + '</td>' +
+                                '<td style="padding:4px; text-align:center; color:#6b7280;">T' + (a.tour || '?') + '</td>' +
+                            '</tr>';
+                        }).join('')}
+                    </table>
+                    <p style="margin:6px 0 0 0; font-size:0.8rem; color:#6b7280;">
+                        💡 Remboursement auto au passage Ligne 1 (plancher 50€). Chaque arriéré va au bon créancier.
+                    </p>
+                </div>
+                ` : ''}
             `, `
                 <button class="btn" style="background:#dbeafe; color:#2563eb;" onclick="exportCompteJoueurCSV('${joueurId}')">📥 Export CSV</button>
                 <button class="btn btn-secondary" onclick="closeModal()">Fermer</button>
