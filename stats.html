@@ -11,10 +11,11 @@
             background: #f8fafc;
             color: #1e293b;
             padding: 20px;
-            max-width: 900px;
+            max-width: 960px;
             margin: 0 auto;
         }
         h1 { font-size: 1.5rem; margin-bottom: 4px; }
+        h2 { font-size: 1.2rem; margin: 24px 0 12px 0; color: #475569; }
         .subtitle { color: #64748b; font-size: 0.9rem; margin-bottom: 24px; }
         .loading { text-align: center; padding: 40px; color: #94a3b8; }
         .loading::after { content: ''; display: inline-block; width: 20px; height: 20px; border: 2px solid #94a3b8; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-left: 8px; vertical-align: middle; }
@@ -37,7 +38,6 @@
         .card .value.green { color: #059669; }
         .card .value.blue { color: #2563eb; }
         .card .value.orange { color: #d97706; }
-        .card .value.red { color: #dc2626; }
 
         table {
             width: 100%;
@@ -46,15 +46,21 @@
             border-radius: 12px;
             overflow: hidden;
             box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-            font-size: 0.85rem;
+            font-size: 0.82rem;
         }
-        th { background: #f1f5f9; text-align: left; padding: 10px 12px; font-weight: 500; color: #475569; }
-        td { padding: 8px 12px; border-top: 1px solid #f1f5f9; }
+        th { background: #f1f5f9; text-align: left; padding: 10px 10px; font-weight: 500; color: #475569; }
+        td { padding: 8px 10px; border-top: 1px solid #f1f5f9; }
         tr:hover { background: #f8fafc; }
         .status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; font-weight: 500; }
         .status.waiting { background: #fef3c7; color: #92400e; }
         .status.playing { background: #dcfce7; color: #166534; }
         .status.unknown { background: #f1f5f9; color: #64748b; }
+
+        .btn-delete {
+            background: #fee2e2; color: #991b1b; border: none; padding: 4px 10px;
+            border-radius: 6px; cursor: pointer; font-size: 0.78rem;
+        }
+        .btn-delete:hover { background: #fecaca; }
 
         .refresh-btn {
             background: #e2e8f0; border: none; padding: 6px 14px; border-radius: 8px;
@@ -66,6 +72,34 @@
         a { color: #2563eb; text-decoration: none; }
         a:hover { text-decoration: underline; }
         .back { margin-bottom: 16px; font-size: 0.85rem; }
+
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.4); z-index: 1000; justify-content: center; align-items: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-box {
+            background: white; border-radius: 12px; padding: 24px; max-width: 420px; width: 90%;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+        }
+        .modal-box h3 { margin-bottom: 12px; }
+        .modal-box p { font-size: 0.9rem; color: #475569; margin-bottom: 8px; }
+        .modal-box input {
+            width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px;
+            font-family: monospace; font-size: 1.1rem; text-align: center; margin: 8px 0;
+        }
+        .modal-btns { display: flex; gap: 8px; margin-top: 16px; }
+        .modal-btns button {
+            flex: 1; padding: 8px 16px; border: none; border-radius: 8px; cursor: pointer; font-size: 0.9rem;
+        }
+        .btn-confirm-delete { background: #dc2626; color: white; }
+        .btn-confirm-delete:hover { background: #b91c1c; }
+        .btn-confirm-delete:disabled { background: #d1d5db; color: #9ca3af; cursor: not-allowed; }
+        .btn-cancel { background: #e2e8f0; color: #475569; }
+        .btn-cancel:hover { background: #cbd5e1; }
+
+        .archive-table th { background: #fef3c7; }
+        .empty-msg { text-align: center; color: #94a3b8; padding: 20px; font-size: 0.9rem; }
     </style>
 </head>
 <body>
@@ -80,6 +114,16 @@
 
     <div id="content">
         <div class="loading">Chargement des données...</div>
+    </div>
+
+    <div id="archivesSection" style="display:none;">
+        <h2>📦 Archives — Parties terminées</h2>
+        <p style="font-size:0.82rem; color:#64748b; margin-bottom:12px;">Résumés des parties ayant atteint au moins la Phase 2</p>
+        <div id="archivesContent"></div>
+    </div>
+
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal-box" id="modalBox"></div>
     </div>
 
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
@@ -98,15 +142,160 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
+        let partiesData = {};
+
+        // ══════════ MODAL ══════════
+        function showModal(html) {
+            document.getElementById('modalBox').innerHTML = html;
+            document.getElementById('modalOverlay').classList.add('active');
+        }
+        function closeModal() {
+            document.getElementById('modalOverlay').classList.remove('active');
+        }
+        document.getElementById('modalOverlay').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closeModal();
+        });
+
+        // ══════════ SUPPRESSION ══════════
+        function demanderSuppression(code) {
+            const p = partiesData[code];
+            if (!p) return;
+
+            const phase = p.state?.phase || 1;
+            const tours = p.state?.toursComplets || 0;
+            const nbJoueurs = p.players ? Object.keys(p.players).length : 0;
+            const needArchive = phase >= 2;
+
+            if (needArchive) {
+                showModal(`
+                    <h3>📦 Archiver et supprimer</h3>
+                    <p><strong>${code}</strong> — Phase ${phase}, ${tours} tours, ${nbJoueurs} joueurs</p>
+                    <p>Cette partie a atteint la Phase ${phase}. Un <strong>résumé sera archivé</strong> avant la suppression.</p>
+                    <div style="background:#fef3c7;padding:10px;border-radius:8px;margin:8px 0;">
+                        <p style="margin:0;font-size:0.85rem;">⚠️ Les données détaillées (chat, écritures comptables, replay) seront <strong>perdues définitivement</strong>.</p>
+                    </div>
+                    <p style="font-size:0.85rem;">Tape le code <strong>${code}</strong> pour confirmer :</p>
+                    <input type="text" id="confirmCode" placeholder="${code}" oninput="verifierCode('${code}')">
+                    <div class="modal-btns">
+                        <button class="btn-confirm-delete" id="btnConfirm" disabled onclick="executerSuppression('${code}', true)">📦 Archiver et supprimer</button>
+                        <button class="btn-cancel" onclick="closeModal()">Annuler</button>
+                    </div>
+                `);
+            } else {
+                showModal(`
+                    <h3>🗑️ Supprimer la partie ?</h3>
+                    <p><strong>${code}</strong> — Phase ${phase}, ${tours} tours, ${nbJoueurs} joueurs</p>
+                    <p>Partie de test sans données intéressantes (Phase 1).</p>
+                    <p style="font-size:0.85rem;color:#dc2626;">Suppression définitive, pas d'archivage.</p>
+                    <div class="modal-btns">
+                        <button class="btn-confirm-delete" onclick="executerSuppression('${code}', false)">🗑️ Supprimer</button>
+                        <button class="btn-cancel" onclick="closeModal()">Annuler</button>
+                    </div>
+                `);
+            }
+        }
+
+        function verifierCode(codeAttendu) {
+            const input = document.getElementById('confirmCode');
+            const btn = document.getElementById('btnConfirm');
+            if (input && btn) {
+                btn.disabled = input.value.trim().toUpperCase() !== codeAttendu.toUpperCase();
+            }
+        }
+
+        async function executerSuppression(code, archiver) {
+            closeModal();
+            showModal(`<h3>⏳ ${archiver ? 'Archivage et suppression' : 'Suppression'} en cours...</h3><div class="loading"></div>`);
+
+            try {
+                if (archiver) {
+                    const p = partiesData[code];
+                    const players = p.players || {};
+                    const nbHumains = Object.values(players).filter(j => !j.isBot).length;
+                    const nbBots = Object.values(players).filter(j => j.isBot).length;
+                    const nomsJoueurs = Object.values(players).filter(j => !j.isBot).map(j => j.name || '?');
+
+                    const archive = {
+                        code: code,
+                        createdAt: p.createdAt || null,
+                        archivedAt: firebase.database.ServerValue.TIMESTAMP,
+                        status: p.status || 'unknown',
+                        phase: p.state?.phase || 1,
+                        tours: p.state?.toursComplets || 0,
+                        passagesLigne1: p.state?.passagesLigne1Total || 0,
+                        nbHumains: nbHumains,
+                        nbBots: nbBots,
+                        nomsJoueurs: nomsJoueurs,
+                        config: {
+                            salaireBase: p.config?.salaireBase || null,
+                            capitalInitial: p.config?.capitalInitial || null,
+                            tauxInteret: p.config?.tauxInteret || null
+                        }
+                    };
+
+                    if (p.comptabilite?.caisseJoueurs) {
+                        archive.soldesFinaux = {};
+                        for (const [pid, caisse] of Object.entries(p.comptabilite.caisseJoueurs)) {
+                            const nom = players[pid]?.name || pid;
+                            archive.soldesFinaux[nom] = {
+                                euro: caisse.euro || 0,
+                                espoyr: caisse.espoyr || 0,
+                                emprunt: caisse.emprunt || 0,
+                                impaye: caisse.impaye || 0
+                            };
+                        }
+                    }
+
+                    if (p.comptabilite?.banque) {
+                        archive.banque = {
+                            masseMonetaire: p.comptabilite.banque.masseMonetaire || 0,
+                            creancesJoueurs: p.comptabilite.banque.creancesJoueurs || 0,
+                            interetsRecus: p.comptabilite.banque.interetsRecus || 0
+                        };
+                    }
+
+                    if (p.comptabilite?.potAAA) {
+                        archive.potAAA = {
+                            solde: p.comptabilite.potAAA.solde || 0,
+                            membres: (p.comptabilite.potAAA.membres || []).length
+                        };
+                    }
+
+                    await db.ref(`archives/${code}`).set(archive);
+                }
+
+                await db.ref(`parties/${code}`).remove();
+
+                closeModal();
+                showModal(`
+                    <h3>✅ ${archiver ? 'Archivée et supprimée' : 'Supprimée'}</h3>
+                    <p>La partie <strong>${code}</strong> a été ${archiver ? 'archivée puis ' : ''}supprimée.</p>
+                    <div class="modal-btns">
+                        <button class="btn-cancel" onclick="closeModal(); chargerStats();">OK</button>
+                    </div>
+                `);
+
+            } catch (e) {
+                closeModal();
+                showModal(`
+                    <h3>❌ Erreur</h3>
+                    <p>${e.message}</p>
+                    <div class="modal-btns">
+                        <button class="btn-cancel" onclick="closeModal()">Fermer</button>
+                    </div>
+                `);
+            }
+        }
+
+        // ══════════ CHARGEMENT STATS ══════════
         async function chargerStats() {
             document.getElementById('content').innerHTML = '<div class="loading">Connexion à Firebase...</div>';
 
             try {
-                // Connexion anonyme (même méthode que le jeu)
                 await firebase.auth().signInAnonymously();
                 document.getElementById('content').innerHTML = '<div class="loading">Chargement des parties...</div>';
             } catch (e) {
-                document.getElementById('content').innerHTML = `<p style="color:#dc2626;text-align:center;padding:20px;">❌ Erreur de connexion Firebase : ${e.code || ''} ${e.message}</p>`;
+                document.getElementById('content').innerHTML = `<p style="color:#dc2626;text-align:center;padding:20px;">❌ Erreur de connexion : ${e.code || ''} ${e.message}</p>`;
                 return;
             }
 
@@ -115,18 +304,17 @@
                 const parties = snap.val();
 
                 if (!parties) {
-                    document.getElementById('content').innerHTML = '<p style="text-align:center;color:#94a3b8;padding:40px;">Aucune partie trouvée.</p>';
+                    document.getElementById('content').innerHTML = '<p class="empty-msg">Aucune partie trouvée.</p>';
+                    chargerArchives();
                     return;
                 }
 
+                partiesData = parties;
                 const liste = Object.values(parties);
                 const total = liste.length;
                 const enCours = liste.filter(p => p.status === 'playing').length;
                 const enAttente = liste.filter(p => p.status === 'waiting').length;
-                const terminees = liste.filter(p => p.status === 'finished').length;
-                const autres = total - enCours - enAttente - terminees;
 
-                // Joueurs uniques (par nom, hors bots)
                 const joueurs = new Set();
                 liste.forEach(p => {
                     if (p.players) {
@@ -136,19 +324,10 @@
                     }
                 });
 
-                // Dernière partie créée
-                let derniereDate = 0;
-                liste.forEach(p => {
-                    const d = p.createdAt || 0;
-                    if (d > derniereDate) derniereDate = d;
-                });
-
-                // Trier par date (plus récentes en premier)
                 liste.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
                 let html = '';
 
-                // Cartes résumé
                 html += '<div class="cards">';
                 html += `<div class="card"><div class="label">Total parties</div><div class="value blue">${total}</div></div>`;
                 html += `<div class="card"><div class="label">En cours</div><div class="value green">${enCours}</div></div>`;
@@ -156,16 +335,15 @@
                 html += `<div class="card"><div class="label">Joueurs uniques</div><div class="value">${joueurs.size}</div></div>`;
                 html += '</div>';
 
-                // Tableau des parties
                 html += '<table>';
-                html += '<thead><tr><th>Code</th><th>Date</th><th>Status</th><th>Joueurs</th><th>Phase</th><th>Tours</th></tr></thead>';
+                html += '<thead><tr><th>Code</th><th>Date</th><th>Status</th><th>Joueurs</th><th>Phase</th><th>Tours</th><th></th></tr></thead>';
                 html += '<tbody>';
 
                 liste.forEach(p => {
                     const code = p.code || '?';
                     const date = p.createdAt ? new Date(p.createdAt).toLocaleDateString('fr-BE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '?';
                     const status = p.status || 'unknown';
-                    const statusLabel = status === 'playing' ? 'En cours' : status === 'waiting' ? 'En attente' : status === 'finished' ? 'Terminée' : status;
+                    const statusLabel = status === 'playing' ? 'En cours' : status === 'waiting' ? 'En attente' : status;
                     const nbJoueurs = p.players ? Object.keys(p.players).length : 0;
                     const nbHumains = p.players ? Object.values(p.players).filter(j => !j.isBot).length : 0;
                     const nbBots = nbJoueurs - nbHumains;
@@ -176,9 +354,10 @@
                     html += `<td><strong>${code}</strong></td>`;
                     html += `<td>${date}</td>`;
                     html += `<td><span class="status ${status}">${statusLabel}</span></td>`;
-                    html += `<td>${nbHumains}👤 ${nbBots > 0 ? '+ ' + nbBots + '🤖' : ''}</td>`;
+                    html += `<td>${nbHumains}👤${nbBots > 0 ? ' + ' + nbBots + '🤖' : ''}</td>`;
                     html += `<td>Phase ${phase}</td>`;
                     html += `<td>${tours}</td>`;
+                    html += `<td><button class="btn-delete" onclick="demanderSuppression('${code}')">🗑️</button></td>`;
                     html += '</tr>';
                 });
 
@@ -187,12 +366,60 @@
                 document.getElementById('content').innerHTML = html;
                 document.getElementById('lastUpdate').textContent = 'Mis à jour : ' + new Date().toLocaleTimeString('fr-BE');
 
+                chargerArchives();
+
             } catch (e) {
                 document.getElementById('content').innerHTML = `<p style="color:#dc2626;text-align:center;padding:20px;">Erreur : ${e.message}</p>`;
             }
         }
 
-        // Charger au démarrage
+        // ══════════ ARCHIVES ══════════
+        async function chargerArchives() {
+            try {
+                const snap = await db.ref('archives').once('value');
+                const archives = snap.val();
+
+                const section = document.getElementById('archivesSection');
+
+                if (!archives) {
+                    section.style.display = 'block';
+                    document.getElementById('archivesContent').innerHTML = '<p class="empty-msg">Aucune archive pour le moment.</p>';
+                    return;
+                }
+
+                const liste = Object.values(archives);
+                liste.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+                let html = '<table class="archive-table">';
+                html += '<thead><tr><th>Code</th><th>Date partie</th><th>Archivé le</th><th>Phase</th><th>Tours</th><th>Joueurs</th><th>Humains</th></tr></thead>';
+                html += '<tbody>';
+
+                liste.forEach(a => {
+                    const date = a.createdAt ? new Date(a.createdAt).toLocaleDateString('fr-BE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '?';
+                    const archDate = a.archivedAt ? new Date(a.archivedAt).toLocaleDateString('fr-BE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '?';
+                    const noms = (a.nomsJoueurs || []).join(', ') || '-';
+
+                    html += '<tr>';
+                    html += `<td><strong>${a.code || '?'}</strong></td>`;
+                    html += `<td>${date}</td>`;
+                    html += `<td>${archDate}</td>`;
+                    html += `<td>Phase ${a.phase || '?'}</td>`;
+                    html += `<td>${a.tours || '-'}</td>`;
+                    html += `<td>${a.nbHumains || 0}👤 + ${a.nbBots || 0}🤖</td>`;
+                    html += `<td>${noms}</td>`;
+                    html += '</tr>';
+                });
+
+                html += '</tbody></table>';
+
+                section.style.display = 'block';
+                document.getElementById('archivesContent').innerHTML = html;
+
+            } catch (e) {
+                console.error('Erreur chargement archives:', e);
+            }
+        }
+
         chargerStats();
     </script>
 </body>
