@@ -771,10 +771,6 @@
             // ═══ 🌱 TRAVAUX COOPÉRATIFS ═══
             travauxCoopGain: 200,                // Gain # par travail coopératif
 
-            // ═══ 🎯 CIBLES TEMPORELLES ADAPTATIVES ═══
-            phase2_cible_minutes: 45,            // Phase 2 à 45 minutes de jeu effectif
-            phase3_cible_minutes: 75,            // Phase 3 à 75 minutes de jeu effectif
-            adaptative: true,                    // Activer le système adaptatif (sinon seuils statiques)
 
             // ═══ ⏱️ TIMINGS ═══
             timingDecision: 60,
@@ -831,10 +827,6 @@
 
             // ═══ 🌱 Travaux ═══
             travauxCoopGain:             { cat: 'travaux', label: '🌱 Gain travaux coop', unit: '#', min: 50, max: 500, step: 10, desc: 'Gain en # par travail coopératif.' },
-
-            // ═══ 🎯 Adaptatif ═══
-            phase2_cible_minutes:        { cat: 'phases', label: '🎯 Cible Phase 2', unit: ' min', min: 15, max: 90, step: 5, desc: 'Temps de jeu effectif (en minutes) avant Phase 2. Le système ajuste les passages dynamiquement.' },
-            phase3_cible_minutes:        { cat: 'phases', label: '🎯 Cible Phase 3', unit: ' min', min: 30, max: 120, step: 5, desc: 'Temps de jeu effectif avant Phase 3. Exclut automatiquement les pauses entre sessions.' },
 
             // ═══ ⏱️ Timings ═══
             timingDecision:              { cat: 'timers', label: '⏱️ Temps décision', unit: 's', min: 10, max: 180, step: 5, desc: 'Temps pour décider (acheter/passer).' },
@@ -1288,105 +1280,6 @@
             setTimeout(() => { bar.classList.remove('flash-green', 'flash-red'); }, 1300);
         }
         
-        // ========== SYSTÈME ADAPTATIF DE PHASES ==========
-        // Gère le temps de jeu effectif (survit aux interruptions)
-        let sessionStartTimestamp = null;          // Quand cette session a démarré
-        let tempsJeuEffectifAvantSession = 0;      // Temps accumulé des sessions précédentes (ms)
-        let passageHistoryLocal = [];              // Historique local [{tempsJeu_ms, passages}]
-        
-        // Retourne le temps de jeu effectif en ms (exclut les pauses entre sessions)
-        function getTempsJeuEffectif() {
-            if (!sessionStartTimestamp) return tempsJeuEffectifAvantSession;
-            return tempsJeuEffectifAvantSession + (Date.now() - sessionStartTimestamp);
-        }
-        
-        // Calcule la vitesse de passages Ligne 1 (passages/minute)
-        function getVitessePassages() {
-            if (passageHistoryLocal.length < 2) {
-                // Estimation par défaut: ~1 passage L1 par joueur toutes les ~2.7 min
-                const nj = Object.keys(playersData).length || 4;
-                return nj * 0.37;
-            }
-            const first = passageHistoryLocal[Math.max(0, passageHistoryLocal.length - 12)];
-            const last = passageHistoryLocal[passageHistoryLocal.length - 1];
-            const deltaMin = (last.tempsJeu_ms - first.tempsJeu_ms) / 60000;
-            const deltaPass = last.passages - first.passages;
-            if (deltaMin <= 0.5) return passageHistoryLocal.length > 2 ? 1.5 : (Object.keys(playersData).length || 4) * 0.37;
-            return deltaPass / deltaMin;
-        }
-        
-        // Calcule le seuil dynamique pour une cible temporelle
-        function getSeuilAdaptatif(cibleMinutes) {
-            const tempsJeuMin = getTempsJeuEffectif() / 60000;
-            const tempsRestant = Math.max(0, cibleMinutes - tempsJeuMin);
-            const vitesse = getVitessePassages();
-            const passagesActuels = gameState?.passagesLigne1Total || 0;
-            
-            if (tempsRestant <= 0) return passagesActuels; // Cible dépassée → déclencher
-            
-            const passagesRestants = Math.round(tempsRestant * vitesse);
-            return Math.max(passagesActuels + 2, passagesActuels + passagesRestants);
-        }
-        
-        // Enregistre un passage Ligne 1 dans le système adaptatif
-        async function enregistrerPassageAdaptatif() {
-            const tempsJeu = getTempsJeuEffectif();
-            const passages = gameState?.passagesLigne1Total || 0;
-            
-            passageHistoryLocal.push({ tempsJeu_ms: tempsJeu, passages });
-            if (passageHistoryLocal.length > 20) passageHistoryLocal.shift();
-            
-            // Sauvegarder dans Firebase (survit aux interruptions)
-            const adaptState = {
-                tempsJeuEffectif_ms: tempsJeu,
-                dernierPassageTimestamp: Date.now(),
-                vitessePassages: getVitessePassages(),
-                passageHistory: passageHistoryLocal.slice(-10) // Garder les 10 derniers
-            };
-            await gameRef.child('state/adaptatif').set(adaptState);
-            
-            console.log(`📊 Adaptatif: ${(tempsJeu/60000).toFixed(1)}min jeu effectif | `
-                + `${passages} passages | vitesse: ${getVitessePassages().toFixed(2)} pass/min`);
-        }
-        
-        // Initialise le système adaptatif (au démarrage ou à la reprise)
-        function initialiserAdaptatif(fromFirebase) {
-            sessionStartTimestamp = Date.now();
-            
-            if (fromFirebase && fromFirebase.tempsJeuEffectif_ms) {
-                // REPRISE de partie: charger le temps effectif sauvegardé
-                tempsJeuEffectifAvantSession = fromFirebase.tempsJeuEffectif_ms;
-                passageHistoryLocal = fromFirebase.passageHistory || [];
-                console.log(`🔄 Adaptatif repris: ${(tempsJeuEffectifAvantSession/60000).toFixed(1)}min accumulées, `
-                    + `${passageHistoryLocal.length} passages en historique`);
-            } else {
-                // NOUVELLE partie
-                tempsJeuEffectifAvantSession = 0;
-                passageHistoryLocal = [];
-                console.log('🆕 Adaptatif initialisé (nouvelle partie)');
-            }
-        }
-        
-        // Jauge de progression pour l'UI (optionnel, pour le status bar)
-        function getPhaseProgression() {
-            const tempsMin = getTempsJeuEffectif() / 60000;
-            const phase = gameState?.phase || 1;
-            const cibleP2 = gameConfig.phase2_cible_minutes || 45;
-            const cibleP3 = gameConfig.phase3_cible_minutes || 75;
-            
-            if (phase === 1) {
-                const pct = Math.min(100, Math.round(tempsMin / cibleP2 * 100));
-                const eta = Math.max(0, Math.round(cibleP2 - tempsMin));
-                return { phase: 1, pct, eta, label: `Phase 1 — ${pct}% (~${eta}min)` };
-            }
-            if (phase === 2) {
-                const pct = Math.min(100, Math.round((tempsMin - cibleP2) / (cibleP3 - cibleP2) * 100));
-                const eta = Math.max(0, Math.round(cibleP3 - tempsMin));
-                return { phase: 2, pct: Math.max(0, pct), eta, label: `Phase 2 — ${Math.max(0, pct)}% (~${eta}min)` };
-            }
-            return { phase: 3, pct: 100, eta: 0, label: 'Phase 3 — Austérité' };
-        }
-
         // ========== ÉTAT LOCAL ==========
         let myPlayerId = null;
         let myName = '';
@@ -6435,11 +6328,6 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             gameRef.child('state').on('value', (snap) => {
                 gameState = snap.val();
                 
-                // Restaurer le système adaptatif à la reprise
-                if (gameState?.started && !sessionStartTimestamp && gameConfig.adaptative !== false) {
-                    initialiserAdaptatif(gameState?.adaptatif || null);
-                }
-                
                 // Initialiser l'écoute overlay phase (une seule fois)
                 if (!window._phaseOverlayListenerInit) {
                     window._phaseOverlayListenerInit = true;
@@ -6821,9 +6709,6 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             
             // Sauvegarder la comptabilité mise à jour
             await syncComptabiliteToFirebase();
-            
-            // Initialiser le système adaptatif
-            initialiserAdaptatif(null); // Nouvelle partie
             
             // Démarrer la partie
             await gameRef.child('state/started').set(true);
@@ -8549,11 +8434,6 @@ function initSystemeDe() {
             const totalPassages = (gameState.passagesLigne1Total || 0) + 1;
             await gameRef.child('state/passagesLigne1Total').set(totalPassages);
             
-            // Enregistrer dans le système adaptatif
-            if (gameConfig.adaptative !== false) {
-                await enregistrerPassageAdaptatif();
-            }
-            
             // ========== INTÉRÊTS + REMBOURSEMENT AU PASSAGE LIGNE 1 ==========
             // Variables pour le récapitulatif modale
             let interetPaye = 0, interetCapitalise = 0, interetTotal = 0;
@@ -8967,7 +8847,6 @@ function initSystemeDe() {
             const players = getOrderedPlayers();
             const phase = gameState.phase || 1;
             const passagesTotal = gameState.passagesLigne1Total || 0;
-            const tempsJeuMin = getTempsJeuEffectif() / 60000;
             
             const activitesSnap = await gameRef.child('activites').once('value');
             const activites = activitesSnap.val() || {};
@@ -8976,78 +8855,25 @@ function initSystemeDe() {
             
             const detteTotale = Object.values(COMPTABILITE.caisseJoueurs).reduce((s, c) => s + (c.emprunt || 0), 0);
             
-            const isAdaptatif = gameConfig.adaptative !== false;
+            // Seuils configurables (basés sur les passages Ligne 1)
+            const seuilPhase2 = gameConfig?.phase2_passagesMin ?? CONFIG.phase2_passagesMin;
+            const seuilPhase3Passages = gameConfig?.phase3_passagesMin ?? CONFIG.phase3_passagesMin;
+            const seuilPhase3Emploi = gameConfig?.phase3_tauxEmploiMin ?? CONFIG.phase3_tauxEmploiMin;
+            const seuilPhase3Dette = gameConfig?.phase3_detteMax ?? CONFIG.phase3_detteMax;
             
-            if (isAdaptatif) {
-                // ═══ MODE ADAPTATIF: seuils basés sur le temps de jeu effectif ═══
-                const cibleP2 = gameConfig.phase2_cible_minutes || 45;
-                const cibleP3 = gameConfig.phase3_cible_minutes || 75;
-                const seuilP2 = getSeuilAdaptatif(cibleP2);
-                const seuilP3 = getSeuilAdaptatif(cibleP3);
-                const seuilEmploi = gameConfig?.phase3_tauxEmploiMin ?? 20;
-                const seuilDette = gameConfig?.phase3_detteMax ?? 2000;
-                
-                // Sécurité temporelle: +10 min au-delà de la cible = forcer
-                const p2Timeout = tempsJeuMin > cibleP2 + 10;
-                const p3Timeout = tempsJeuMin > cibleP3 + 10;
-                
-                console.log(`📊 Adaptatif: ${tempsJeuMin.toFixed(1)}min | P${phase} | `
-                    + `passages: ${passagesTotal} | seuil P2: ${Math.round(seuilP2)} | seuil P3: ${Math.round(seuilP3)} | `
-                    + `vitesse: ${getVitessePassages().toFixed(2)}/min`);
-                
-                if (phase === 1 && (passagesTotal >= seuilP2 || p2Timeout)) {
-                    const cause = p2Timeout 
-                        ? `${tempsJeuMin.toFixed(0)} minutes de jeu — l'économie se dégrade`
-                        : `${passagesTotal} passages en ${tempsJeuMin.toFixed(0)} min — l'économie se dégrade`;
-                    await gameRef.child('state/phase').set(2);
-                    sendSystemMessage(`📊 PHASE 2 ! L'érosion commence... (${cause})`);
-                    await gameRef.child('state/phaseAnnonce').set({ phase: 2, cause, timestamp: Date.now() });
-                }
-                else if (phase === 2) {
-                    let cause3 = '';
-                    let trigger = false;
-                    
-                    if (detteTotale > seuilDette) {
-                        cause3 = `Dette totale ${fmt(detteTotale)}€ > ${fmt(seuilDette)}€ — l'économie est sous perfusion bancaire`;
-                        trigger = true;
-                    } else if (tauxEmploi < seuilEmploi) {
-                        cause3 = `Taux d'emploi ${tauxEmploi}% < ${seuilEmploi}% — le chômage s'installe`;
-                        trigger = true;
-                    } else if (passagesTotal >= seuilP3 || p3Timeout) {
-                        cause3 = p3Timeout 
-                            ? `${tempsJeuMin.toFixed(0)} minutes de jeu — les ressources s'épuisent`
-                            : `${passagesTotal} passages en ${tempsJeuMin.toFixed(0)} min — les ressources s'épuisent`;
-                        trigger = true;
-                    }
-                    
-                    if (trigger) {
-                        await gameRef.child('state/phase').set(3);
-                        await gameRef.child('state/tauxTaxePhase3').set(gameConfig.tauxTaxeLigne3 || 0.10);
-                        sendSystemMessage(`🌍 PHASE 3 ! Effondrement... (${cause3})`);
-                        await gameRef.child('state/phaseAnnonce').set({ phase: 3, cause: cause3, timestamp: Date.now() });
-                    }
-                }
-            } else {
-                // ═══ MODE STATIQUE (fallback): seuils fixes comme avant ═══
-                const seuilPhase2 = gameConfig?.phase2_passagesMin ?? CONFIG.phase2_passagesMin;
-                const seuilPhase3Passages = gameConfig?.phase3_passagesMin ?? CONFIG.phase3_passagesMin;
-                const seuilPhase3Emploi = gameConfig?.phase3_tauxEmploiMin ?? CONFIG.phase3_tauxEmploiMin;
-                const seuilPhase3Dette = gameConfig?.phase3_detteMax ?? CONFIG.phase3_detteMax;
-                
-                if (phase === 1 && passagesTotal >= seuilPhase2) {
-                    await gameRef.child('state/phase').set(2);
-                    sendSystemMessage(`📊 PHASE 2 ! L'érosion commence... (${passagesTotal} passages Ligne 1)`);
-                    await gameRef.child('state/phaseAnnonce').set({ phase: 2, cause: `${passagesTotal} passages Ligne 1 — l'économie se dégrade`, timestamp: Date.now() });
-                } else if (phase === 2 && (tauxEmploi < seuilPhase3Emploi || detteTotale > seuilPhase3Dette || passagesTotal >= seuilPhase3Passages)) {
-                    await gameRef.child('state/phase').set(3);
-                    await gameRef.child('state/tauxTaxePhase3').set(gameConfig.tauxTaxeLigne3 || 0.10);
-                    let cause3 = '';
-                    if (detteTotale > seuilPhase3Dette) cause3 = `Dette totale ${detteTotale}€ > ${seuilPhase3Dette}€ — l'économie est sous perfusion bancaire`;
-                    else if (tauxEmploi < seuilPhase3Emploi) cause3 = `Taux d'emploi ${tauxEmploi}% < ${seuilPhase3Emploi}% — le chômage s'installe`;
-                    else cause3 = `${passagesTotal} passages Ligne 1 — les ressources s'épuisent`;
-                    sendSystemMessage(`🌍 PHASE 3 ! Effondrement... (${cause3})`);
-                    await gameRef.child('state/phaseAnnonce').set({ phase: 3, cause: cause3, timestamp: Date.now() });
-                }
+            if (phase === 1 && passagesTotal >= seuilPhase2) {
+                await gameRef.child('state/phase').set(2);
+                sendSystemMessage(`📊 PHASE 2 ! L'érosion commence... (${passagesTotal} passages Ligne 1)`);
+                await gameRef.child('state/phaseAnnonce').set({ phase: 2, cause: `${passagesTotal} passages Ligne 1 — l'économie se dégrade`, timestamp: Date.now() });
+            } else if (phase === 2 && (tauxEmploi < seuilPhase3Emploi || detteTotale > seuilPhase3Dette || passagesTotal >= seuilPhase3Passages)) {
+                await gameRef.child('state/phase').set(3);
+                await gameRef.child('state/tauxTaxePhase3').set(gameConfig.tauxTaxeLigne3 || 0.10);
+                let cause3 = '';
+                if (detteTotale > seuilPhase3Dette) cause3 = `Dette totale ${detteTotale}€ > ${seuilPhase3Dette}€ — l'économie est sous perfusion bancaire`;
+                else if (tauxEmploi < seuilPhase3Emploi) cause3 = `Taux d'emploi ${tauxEmploi}% < ${seuilPhase3Emploi}% — le chômage s'installe`;
+                else cause3 = `${passagesTotal} passages Ligne 1 — les ressources s'épuisent`;
+                sendSystemMessage(`🌍 PHASE 3 ! Effondrement... (${cause3})`);
+                await gameRef.child('state/phaseAnnonce').set({ phase: 3, cause: cause3, timestamp: Date.now() });
             }
         }
         
