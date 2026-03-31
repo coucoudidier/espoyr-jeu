@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESPOYR — Statistiques</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8fafc;
+            color: #1e293b;
+            padding: 20px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h1 { font-size: 1.5rem; margin-bottom: 4px; }
+        .subtitle { color: #64748b; font-size: 0.9rem; margin-bottom: 24px; }
+        .loading { text-align: center; padding: 40px; color: #94a3b8; }
+        .loading::after { content: ''; display: inline-block; width: 20px; height: 20px; border: 2px solid #94a3b8; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-left: 8px; vertical-align: middle; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .card .label { font-size: 0.78rem; color: #64748b; margin-bottom: 4px; }
+        .card .value { font-size: 1.8rem; font-weight: 600; }
+        .card .value.green { color: #059669; }
+        .card .value.blue { color: #2563eb; }
+        .card .value.orange { color: #d97706; }
+        .card .value.red { color: #dc2626; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            font-size: 0.85rem;
+        }
+        th { background: #f1f5f9; text-align: left; padding: 10px 12px; font-weight: 500; color: #475569; }
+        td { padding: 8px 12px; border-top: 1px solid #f1f5f9; }
+        tr:hover { background: #f8fafc; }
+        .status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; font-weight: 500; }
+        .status.waiting { background: #fef3c7; color: #92400e; }
+        .status.playing { background: #dcfce7; color: #166534; }
+        .status.unknown { background: #f1f5f9; color: #64748b; }
+
+        .refresh-btn {
+            background: #e2e8f0; border: none; padding: 6px 14px; border-radius: 8px;
+            cursor: pointer; font-size: 0.85rem; color: #475569;
+        }
+        .refresh-btn:hover { background: #cbd5e1; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .updated { font-size: 0.75rem; color: #94a3b8; margin-bottom: 20px; }
+        a { color: #2563eb; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .back { margin-bottom: 16px; font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+    <div class="back"><a href="/">← Retour au jeu</a></div>
+
+    <div class="header">
+        <h1>📊 ESPOYR — Statistiques</h1>
+        <button class="refresh-btn" onclick="chargerStats()">🔄 Actualiser</button>
+    </div>
+    <p class="subtitle">Données en temps réel depuis la base de données</p>
+    <p class="updated" id="lastUpdate"></p>
+
+    <div id="content">
+        <div class="loading">Chargement des données...</div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyC5hPhmhgQNY1qrFQ63XOIFNXhdy5EsDMM",
+            authDomain: "espoyr--game.firebaseapp.com",
+            databaseURL: "https://espoyr--game-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "espoyr--game",
+            storageBucket: "espoyr--game.firebasestorage.app",
+            messagingSenderId: "689112154741",
+            appId: "1:689112154741:web:a471dadae9becbaf3ca3eb"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        async function chargerStats() {
+            document.getElementById('content').innerHTML = '<div class="loading">Connexion à Firebase...</div>';
+
+            try {
+                // Connexion anonyme (même méthode que le jeu)
+                await firebase.auth().signInAnonymously();
+                document.getElementById('content').innerHTML = '<div class="loading">Chargement des parties...</div>';
+            } catch (e) {
+                document.getElementById('content').innerHTML = `<p style="color:#dc2626;text-align:center;padding:20px;">❌ Erreur de connexion Firebase : ${e.code || ''} ${e.message}</p>`;
+                return;
+            }
+
+            try {
+                const snap = await db.ref('parties').once('value');
+                const parties = snap.val();
+
+                if (!parties) {
+                    document.getElementById('content').innerHTML = '<p style="text-align:center;color:#94a3b8;padding:40px;">Aucune partie trouvée.</p>';
+                    return;
+                }
+
+                const liste = Object.values(parties);
+                const total = liste.length;
+                const enCours = liste.filter(p => p.status === 'playing').length;
+                const enAttente = liste.filter(p => p.status === 'waiting').length;
+                const terminees = liste.filter(p => p.status === 'finished').length;
+                const autres = total - enCours - enAttente - terminees;
+
+                // Joueurs uniques (par nom, hors bots)
+                const joueurs = new Set();
+                liste.forEach(p => {
+                    if (p.players) {
+                        Object.values(p.players).forEach(j => {
+                            if (!j.isBot && j.name) joueurs.add(j.name.toLowerCase().trim());
+                        });
+                    }
+                });
+
+                // Dernière partie créée
+                let derniereDate = 0;
+                liste.forEach(p => {
+                    const d = p.createdAt || 0;
+                    if (d > derniereDate) derniereDate = d;
+                });
+
+                // Trier par date (plus récentes en premier)
+                liste.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+                let html = '';
+
+                // Cartes résumé
+                html += '<div class="cards">';
+                html += `<div class="card"><div class="label">Total parties</div><div class="value blue">${total}</div></div>`;
+                html += `<div class="card"><div class="label">En cours</div><div class="value green">${enCours}</div></div>`;
+                html += `<div class="card"><div class="label">En attente</div><div class="value orange">${enAttente}</div></div>`;
+                html += `<div class="card"><div class="label">Joueurs uniques</div><div class="value">${joueurs.size}</div></div>`;
+                html += '</div>';
+
+                // Tableau des parties
+                html += '<table>';
+                html += '<thead><tr><th>Code</th><th>Date</th><th>Status</th><th>Joueurs</th><th>Phase</th><th>Tours</th></tr></thead>';
+                html += '<tbody>';
+
+                liste.forEach(p => {
+                    const code = p.code || '?';
+                    const date = p.createdAt ? new Date(p.createdAt).toLocaleDateString('fr-BE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '?';
+                    const status = p.status || 'unknown';
+                    const statusLabel = status === 'playing' ? 'En cours' : status === 'waiting' ? 'En attente' : status === 'finished' ? 'Terminée' : status;
+                    const nbJoueurs = p.players ? Object.keys(p.players).length : 0;
+                    const nbHumains = p.players ? Object.values(p.players).filter(j => !j.isBot).length : 0;
+                    const nbBots = nbJoueurs - nbHumains;
+                    const phase = p.state?.phase || '-';
+                    const tours = p.state?.toursComplets || '-';
+
+                    html += '<tr>';
+                    html += `<td><strong>${code}</strong></td>`;
+                    html += `<td>${date}</td>`;
+                    html += `<td><span class="status ${status}">${statusLabel}</span></td>`;
+                    html += `<td>${nbHumains}👤 ${nbBots > 0 ? '+ ' + nbBots + '🤖' : ''}</td>`;
+                    html += `<td>Phase ${phase}</td>`;
+                    html += `<td>${tours}</td>`;
+                    html += '</tr>';
+                });
+
+                html += '</tbody></table>';
+
+                document.getElementById('content').innerHTML = html;
+                document.getElementById('lastUpdate').textContent = 'Mis à jour : ' + new Date().toLocaleTimeString('fr-BE');
+
+            } catch (e) {
+                document.getElementById('content').innerHTML = `<p style="color:#dc2626;text-align:center;padding:20px;">Erreur : ${e.message}</p>`;
+            }
+        }
+
+        // Charger au démarrage
+        chargerStats();
+    </script>
+</body>
+</html>
