@@ -1,10 +1,10 @@
- <!-- ESPOYR V3 build 162 TEST -->
+ <!-- ESPOYR V3 build 166 TEST -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title># ESPOYR Multijoueur V3(2) TEST - Comptabilité Bancaire BCE</title>
+    <title># ESPOYR Multijoueur V3(6) TEST - Comptabilité Bancaire BCE</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -427,7 +427,7 @@
         <!-- ÉCRAN ACCUEIL -->
         <div id="homeScreen" class="card">
             <h1><img src="logo__g1_jaune_rond.png" alt="Logo ESPOYR" style="height: 1.5em; vertical-align: middle; margin-right: 8px;">ESPOYR</h1>
-            <p class="subtitle">Jeu collaboratif d'économie - V3(2) TEST - Comptabilité complète</p>
+            <p class="subtitle">Jeu collaboratif d'économie - V3(6) TEST - Comptabilité complète</p>
             <div class="error-message" id="errorMessage"></div>
             
             <div style="margin-bottom: 15px; text-align: center; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
@@ -695,6 +695,13 @@
             remboursementAutoCapitalPct: 0.10,   // % capital remboursé auto/cycle
             limiteEmpruntMin: 750,               // Plancher emprunt = max(ceci, masse/nbJoueurs)
 
+            // ═══ 📈 INFLATION DYNAMIQUE ═══
+            inflationActive: true,               // Activer l'inflation dynamique (basée sur la dette)
+            inflationFacteur: 0.15,              // Sensibilité de l'inflation à la dette
+            inflationPoidsHash: 0.70,            // Combien 1# compense de dette (0.7 = 70 centimes)
+            inflationPlancher: 0.80,             // Déflation max = -20% (prix min = 80% du base)
+            inflationPlafond: 2.00,              // Inflation max = +100% (prix max = 200% du base)
+
             // ═══ 🏛️ FISCALITÉ & TAXES ═══
             tvaTaux: 0.21,                       // TVA (21%)
             droitsActivite: 0.26,                // Droits d'enregistrement activités (26%)
@@ -796,6 +803,11 @@
             tauxInteret:                 { cat: 'economie', label: '📈 Taux d\'intérêt', unit: '%', pct: true, min: 0, max: 50, step: 1, desc: 'Intérêt bancaire par passage Ligne 1.' },
             remboursementAutoCapitalPct: { cat: 'economie', label: '🔄 Remboursement auto', unit: '%', pct: true, min: 0, max: 50, step: 1, desc: '% du capital remboursé automatiquement.' },
             limiteEmpruntMin:            { cat: 'economie', label: '📊 Plancher emprunt', unit: '€', min: 300, max: 3000, step: 50, desc: 'Limite emprunt = max(ceci, masse÷joueurs).' },
+            inflationActive:             { cat: 'economie', label: '📈 Inflation dynamique', unit: '', min: 0, max: 1, step: 1, desc: 'Activer l\'inflation basée sur la dette collective. 1=oui, 0=non.' },
+            inflationFacteur:            { cat: 'economie', label: '📈 Sensibilité inflation', unit: '', min: 0.05, max: 0.50, step: 0.05, desc: 'Plus c\'est haut, plus la dette impacte les prix. Recommandé: 0.15.' },
+            inflationPoidsHash:          { cat: 'economie', label: '🌱 Poids des # vs dette', unit: '', min: 0, max: 1.5, step: 0.1, desc: 'Combien 1# compense de dette. 0.7 = 70 centimes par #.' },
+            inflationPlancher:           { cat: 'economie', label: '📉 Déflation max', unit: '×', min: 0.50, max: 1.00, step: 0.05, desc: 'Prix minimum en déflation. 0.80 = -20% max.' },
+            inflationPlafond:            { cat: 'economie', label: '📈 Inflation max', unit: '×', min: 1.50, max: 3.00, step: 0.10, desc: 'Prix maximum en inflation. 2.00 = +100% max.' },
 
             // ═══ 🏛️ Fiscalité ═══
             tvaTaux:                     { cat: 'fiscalite', label: '🏛️ TVA', unit: '%', pct: true, min: 0, max: 40, step: 1, desc: 'TVA appliquée sur achats et services.' },
@@ -1049,6 +1061,24 @@
             if (type === 'A_ADDITIONAL') return getPrixB(caseId);          // 100% du coût (=prixB)
             if (type === 'B_TO_A') return Math.floor(getDifferenceAB(caseId) * (gameConfig.bonusHash_BversA_pct || 0.50));
             return 0;
+        }
+        
+        // ═══ INFLATION DYNAMIQUE ═══
+        // Lecture seule — ne modifie rien, retourne un facteur multiplicateur
+        // inflation = max(plancher, min(plafond, 1 + (dette_€ - circ_# × poids) / masse_init × facteur))
+        function getInflation() {
+            if (!(gameConfig?.inflationActive ?? CONFIG.inflationActive)) return 1.0;
+            const facteur = gameConfig?.inflationFacteur ?? CONFIG.inflationFacteur;
+            const poidsHash = gameConfig?.inflationPoidsHash ?? CONFIG.inflationPoidsHash;
+            const plancher = gameConfig?.inflationPlancher ?? CONFIG.inflationPlancher;
+            const plafond = gameConfig?.inflationPlafond ?? CONFIG.inflationPlafond;
+            const detteTotale = Object.values(COMPTABILITE?.caisseJoueurs || {}).reduce((s, c) => s + (c.emprunt || 0), 0);
+            const circHash = COMPTABILITE?.potAAA?.circulationHash || 0;
+            const nbJoueurs = Object.keys(playersData || {}).length || 1;
+            const masseInitiale = (gameConfig?.capitalInitial ?? CONFIG.capitalInitial) * nbJoueurs;
+            if (masseInitiale <= 0) return 1.0;
+            const raw = 1 + (detteTotale - circHash * poidsHash) / masseInitiale * facteur;
+            return Math.max(plancher, Math.min(plafond, raw));
         }
         
         // Calcul facture = 5% du total investi (activité + tous équipements)
@@ -10136,8 +10166,8 @@ function initSystemeDe() {
             const prixPersoSnap = await gameRef.child(`prixPersonnalises/${c.id}`).once('value');
             const prixPerso = prixPersoSnap.val();
             
-            // Calcul facture = 5% du total investi (activité + tous équipements)
-            const factureBase = calculerFactureActivite(c.id, equipTypes);
+            // Calcul facture = 5% du total investi × inflation dynamique
+            const factureBase = Math.floor(calculerFactureActivite(c.id, equipTypes) * getInflation());
             const facture = prixPerso !== null ? prixPerso : factureBase;
             
             const myEspoyr = COMPTABILITE.caisseJoueurs[myPlayerId]?.espoyr || 0;
@@ -13804,7 +13834,7 @@ function initSystemeDe() {
                 } else if (owner && owner !== botId) {
                     const equipTypesSnap = await gameRef.child(`equipementTypes/${position}`).once('value');
                     const equipTypesList = equipTypesSnap.val() || [];
-                    const facture = calculerFactureActivite(position, equipTypesList);
+                    const facture = Math.floor(calculerFactureActivite(position, equipTypesList) * getInflation());
                     const phase = gameState?.phase || 1;
                     const botEuro = caisse.euro || 0;
                     const botHash = caisse.espoyr || 0;
