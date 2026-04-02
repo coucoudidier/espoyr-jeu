@@ -116,6 +116,18 @@
         <div class="loading">Chargement des données...</div>
     </div>
 
+    <div id="bulkDeleteSection" style="display:none;">
+        <div style="background:white; border-radius:12px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:20px;">
+            <h2 style="margin:0 0 12px 0; font-size:1rem; color:#991b1b;">🗑️ Nettoyage — Supprimer les parties Phase 1</h2>
+            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                <label style="font-size:0.85rem; color:#475569;">Créées avant le :</label>
+                <input type="date" id="dateLimite" style="padding:6px 10px; border:1px solid #d1d5db; border-radius:8px; font-size:0.9rem;">
+                <button class="refresh-btn" onclick="previsualiserSuppression()" style="background:#fef3c7; color:#92400e;">🔍 Prévisualiser</button>
+            </div>
+            <div id="bulkPreview" style="margin-top:12px; font-size:0.85rem; color:#64748b;"></div>
+        </div>
+    </div>
+
     <div id="archivesSection" style="display:none;">
         <h2>📦 Archives — Parties terminées</h2>
         <p style="font-size:0.82rem; color:#64748b; margin-bottom:12px;">Résumés des parties ayant atteint au moins la Phase 2</p>
@@ -287,6 +299,112 @@
             }
         }
 
+        // ══════════ SUPPRESSION EN MASSE Phase 1 ══════════
+        function getPartiesPhase1AvantDate() {
+            const dateInput = document.getElementById('dateLimite');
+            if (!dateInput || !dateInput.value) return [];
+            
+            const dateLimite = new Date(dateInput.value + 'T23:59:59').getTime();
+            
+            return Object.values(partiesData).filter(p => {
+                const phase = p.state?.phase || 1;
+                const created = p.createdAt || 0;
+                return phase <= 1 && created > 0 && created <= dateLimite;
+            });
+        }
+
+        function previsualiserSuppression() {
+            const parties = getPartiesPhase1AvantDate();
+            const preview = document.getElementById('bulkPreview');
+            
+            if (!document.getElementById('dateLimite').value) {
+                preview.innerHTML = '<p style="color:#dc2626;">Choisis une date d\'abord.</p>';
+                return;
+            }
+            
+            if (parties.length === 0) {
+                preview.innerHTML = '<p>Aucune partie Phase 1 trouvée avant cette date.</p>';
+                return;
+            }
+            
+            const dateStr = new Date(document.getElementById('dateLimite').value).toLocaleDateString('fr-BE');
+            let html = `<p><strong>${parties.length} partie(s) Phase 1</strong> créées avant le ${dateStr} :</p>`;
+            html += '<div style="display:flex; flex-wrap:wrap; gap:6px; margin:8px 0;">';
+            parties.forEach(p => {
+                const code = p.code || '?';
+                const nbJ = p.players ? Object.keys(p.players).length : 0;
+                html += `<span style="background:#fee2e2; padding:2px 8px; border-radius:6px; font-size:0.8rem; font-family:monospace;">${code} (${nbJ}j)</span>`;
+            });
+            html += '</div>';
+            html += `<button class="btn-delete" style="margin-top:8px; padding:6px 16px;" onclick="confirmerSuppressionBulk()">🗑️ Supprimer ces ${parties.length} parties</button>`;
+            
+            preview.innerHTML = html;
+        }
+
+        function confirmerSuppressionBulk() {
+            const parties = getPartiesPhase1AvantDate();
+            if (parties.length === 0) return;
+            
+            const dateStr = new Date(document.getElementById('dateLimite').value).toLocaleDateString('fr-BE');
+            
+            showModal(`
+                <h3>🗑️ Supprimer ${parties.length} parties Phase 1 ?</h3>
+                <p>Toutes les parties Phase 1 créées avant le <strong>${dateStr}</strong> seront supprimées définitivement.</p>
+                <p style="font-size:0.85rem; color:#64748b;">Pas d'archivage (Phase 1 = aucune donnée intéressante).</p>
+                <div style="background:#fee2e2; padding:10px; border-radius:8px; margin:8px 0;">
+                    <p style="margin:0; font-size:0.85rem; color:#991b1b;">Codes : <strong>${parties.map(p => p.code || '?').join(', ')}</strong></p>
+                </div>
+                <p style="font-size:0.85rem;">Tape <strong>CONFIRMER</strong> pour valider :</p>
+                <input type="text" id="confirmBulk" placeholder="CONFIRMER" oninput="document.getElementById('btnBulkConfirm').disabled = this.value.trim() !== 'CONFIRMER'">
+                <div class="modal-btns">
+                    <button class="btn-confirm-delete" id="btnBulkConfirm" disabled onclick="executerSuppressionBulk()">🗑️ Supprimer ${parties.length} parties</button>
+                    <button class="btn-cancel" onclick="closeModal()">Annuler</button>
+                </div>
+            `);
+        }
+
+        async function executerSuppressionBulk() {
+            const parties = getPartiesPhase1AvantDate();
+            if (parties.length === 0) return;
+            
+            closeModal();
+            showModal(`<h3>⏳ Suppression de ${parties.length} parties...</h3><div class="loading"></div>`);
+            
+            let supprimees = 0;
+            let erreurs = 0;
+            
+            try {
+                for (const p of parties) {
+                    try {
+                        await db.ref('parties/' + (p.code || '')).remove();
+                        supprimees++;
+                    } catch (e) {
+                        console.error('Erreur suppression ' + p.code + ':', e);
+                        erreurs++;
+                    }
+                }
+                
+                closeModal();
+                showModal(`
+                    <h3>✅ Nettoyage terminé</h3>
+                    <p><strong>${supprimees}</strong> partie(s) supprimée(s)${erreurs > 0 ? `, <span style="color:#dc2626;">${erreurs} erreur(s)</span>` : ''}.</p>
+                    <div class="modal-btns">
+                        <button class="btn-cancel" onclick="closeModal(); chargerStats();">OK</button>
+                    </div>
+                `);
+            } catch (e) {
+                closeModal();
+                showModal(`
+                    <h3>❌ Erreur</h3>
+                    <p>${e.message}</p>
+                    <p>${supprimees} supprimée(s) avant l'erreur.</p>
+                    <div class="modal-btns">
+                        <button class="btn-cancel" onclick="closeModal(); chargerStats();">Fermer</button>
+                    </div>
+                `);
+            }
+        }
+
         // ══════════ CHARGEMENT STATS ══════════
         async function chargerStats() {
             document.getElementById('content').innerHTML = '<div class="loading">Connexion à Firebase...</div>';
@@ -365,6 +483,12 @@
 
                 document.getElementById('content').innerHTML = html;
                 document.getElementById('lastUpdate').textContent = 'Mis à jour : ' + new Date().toLocaleTimeString('fr-BE');
+
+                // Afficher la section nettoyage avec date par défaut (il y a 7 jours)
+                const bulkSection = document.getElementById('bulkDeleteSection');
+                bulkSection.style.display = 'block';
+                const dateDefaut = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+                document.getElementById('dateLimite').value = dateDefaut.toISOString().split('T')[0];
 
                 chargerArchives();
 
