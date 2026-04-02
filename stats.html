@@ -100,6 +100,37 @@
 
         .archive-table th { background: #fef3c7; }
         .empty-msg { text-align: center; color: #94a3b8; padding: 20px; font-size: 0.9rem; }
+
+        .btn-analyse {
+            background: #dbeafe; color: #1d4ed8; border: none; padding: 4px 10px;
+            border-radius: 6px; cursor: pointer; font-size: 0.78rem;
+        }
+        .btn-analyse:hover { background: #bfdbfe; }
+
+        #analysePanel {
+            display: none; background: white; border-radius: 12px; padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 20px;
+        }
+        #analysePanel h2 { margin: 0 0 4px 0; }
+        #analysePanel .close-btn {
+            float: right; background: #e2e8f0; border: none; padding: 4px 10px;
+            border-radius: 6px; cursor: pointer; font-size: 0.85rem;
+        }
+        .charts-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;
+        }
+        @media (max-width: 700px) { .charts-grid { grid-template-columns: 1fr; } }
+        .chart-box {
+            background: #f8fafc; border-radius: 8px; padding: 12px;
+        }
+        .chart-box h3 { font-size: 0.85rem; color: #475569; margin: 0 0 8px 0; }
+        .kpi-row {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px; margin: 12px 0;
+        }
+        .kpi { background: #f1f5f9; border-radius: 8px; padding: 10px; text-align: center; }
+        .kpi .kpi-val { font-size: 1.4rem; font-weight: 600; }
+        .kpi .kpi-label { font-size: 0.72rem; color: #64748b; }
     </style>
 </head>
 <body>
@@ -114,6 +145,19 @@
 
     <div id="content">
         <div class="loading">Chargement des données...</div>
+    </div>
+
+    <div id="analysePanel">
+        <button class="close-btn" onclick="fermerAnalyse()">✕ Fermer</button>
+        <h2 id="analyseTitre">📈 Analyse d'impact #</h2>
+        <p id="analyseSubtitle" style="font-size:0.85rem; color:#64748b;"></p>
+        <div class="kpi-row" id="analyseKPIs"></div>
+        <div class="charts-grid">
+            <div class="chart-box"><h3>💶 € vs 🌱 # — Liquidités par tour</h3><canvas id="chartEuroHash"></canvas></div>
+            <div class="chart-box"><h3>📉 Dette totale (emprunts €)</h3><canvas id="chartDette"></canvas></div>
+            <div class="chart-box"><h3>📊 Score économique</h3><canvas id="chartScore"></canvas></div>
+            <div class="chart-box"><h3>🌱 Pot AAA — Création # et membres</h3><canvas id="chartAAA"></canvas></div>
+        </div>
     </div>
 
     <div id="bulkDeleteSection" style="display:none;">
@@ -141,6 +185,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyC5hPhmhgQNY1qrFQ63XOIFNXhdy5EsDMM",
@@ -296,6 +341,176 @@
                         <button class="btn-cancel" onclick="closeModal()">Fermer</button>
                     </div>
                 `);
+            }
+        }
+
+        // ══════════ ANALYSE IMPACT # ══════════
+        let analyseCharts = [];
+
+        function fermerAnalyse() {
+            document.getElementById('analysePanel').style.display = 'none';
+            analyseCharts.forEach(c => c.destroy());
+            analyseCharts = [];
+        }
+
+        async function afficherAnalyse(code) {
+            fermerAnalyse();
+            const panel = document.getElementById('analysePanel');
+            panel.style.display = 'block';
+            panel.scrollIntoView({ behavior: 'smooth' });
+
+            document.getElementById('analyseTitre').textContent = '📈 Analyse d\'impact # — Partie ' + code;
+            document.getElementById('analyseSubtitle').textContent = 'Chargement des bilans...';
+            document.getElementById('analyseKPIs').innerHTML = '';
+
+            try {
+                const snap = await db.ref('parties/' + code + '/historiqueBilans').once('value');
+                const bilans = snap.val();
+
+                if (!bilans || bilans.length < 2) {
+                    document.getElementById('analyseSubtitle').textContent = 'Pas assez de données (moins de 2 bilans enregistrés).';
+                    return;
+                }
+
+                const p = partiesData[code];
+                const nbJ = p?.players ? Object.keys(p.players).length : '?';
+                document.getElementById('analyseSubtitle').textContent = `${bilans.length} bilans · ${nbJ} joueurs · Phase max ${bilans[bilans.length-1]?.phase || '?'}`;
+
+                // Extraire les séries
+                const tours = bilans.map(b => b.tour || 0);
+                const euros = bilans.map(b => b.actif?.caisseEuro || 0);
+                const hashs = bilans.map(b => b.actif?.caisseEspoyr || 0);
+                const dettes = bilans.map(b => b.passif?.emprunts || 0);
+                const scores = bilans.map(b => b.scoreEconomique || 0);
+                const potAAA = bilans.map(b => b.bilanAAA?.passif?.solde || 0);
+                const circHash = bilans.map(b => b.bilanAAA?.circulationHash || 0);
+                const membres = bilans.map(b => b.bilanAAA?.membres || 0);
+                const phases = bilans.map(b => b.phase || 1);
+                const arrieres = bilans.map(b => b.passif?.arrieres || 0);
+
+                // Trouver le tour de transition Phase 2
+                let tourP2 = null;
+                for (let i = 1; i < phases.length; i++) {
+                    if (phases[i] >= 2 && phases[i-1] < 2) { tourP2 = tours[i]; break; }
+                }
+
+                // KPIs
+                const dernierBilan = bilans[bilans.length - 1];
+                const premierBilan = bilans[0];
+                const euroFin = dernierBilan.actif?.caisseEuro || 0;
+                const hashFin = dernierBilan.actif?.caisseEspoyr || 0;
+                const detteFin = dernierBilan.passif?.emprunts || 0;
+                const detteDebut = premierBilan.passif?.emprunts || 0;
+                const ratioHash = (euroFin + hashFin) > 0 ? Math.round(hashFin / (euroFin + hashFin) * 100) : 0;
+                const membresFin = dernierBilan.bilanAAA?.membres || 0;
+                const circFin = dernierBilan.bilanAAA?.circulationHash || 0;
+
+                document.getElementById('analyseKPIs').innerHTML = `
+                    <div class="kpi"><div class="kpi-val" style="color:#2563eb;">${Math.round(euroFin)}€</div><div class="kpi-label">€ en circulation (fin)</div></div>
+                    <div class="kpi"><div class="kpi-val" style="color:#059669;">${Math.round(hashFin)}#</div><div class="kpi-label"># en caisse (fin)</div></div>
+                    <div class="kpi"><div class="kpi-val" style="color:#7c3aed;">${ratioHash}%</div><div class="kpi-label">Part des # dans les liquidités</div></div>
+                    <div class="kpi"><div class="kpi-val" style="color:#dc2626;">${Math.round(detteFin)}€</div><div class="kpi-label">Dette totale (fin)</div></div>
+                    <div class="kpi"><div class="kpi-val">${membresFin}/${nbJ}</div><div class="kpi-label">Membres AAA</div></div>
+                    <div class="kpi"><div class="kpi-val" style="color:#059669;">${Math.round(circFin)}#</div><div class="kpi-label"># créés (total)</div></div>
+                `;
+
+                // Options communes
+                const gridColor = 'rgba(0,0,0,0.06)';
+                const txtColor = '#64748b';
+
+                // Plugin pour afficher la ligne verticale Phase 2
+                const phaseLinePlugin = {
+                    id: 'phaseLine',
+                    afterDraw(chart) {
+                        if (!tourP2) return;
+                        const xScale = chart.scales.x;
+                        const idx = tours.indexOf(tourP2);
+                        if (idx < 0) return;
+                        const x = xScale.getPixelForValue(idx);
+                        const ctx = chart.ctx;
+                        ctx.save();
+                        ctx.setLineDash([5, 3]);
+                        ctx.strokeStyle = '#f59e0b';
+                        ctx.lineWidth = 1.5;
+                        ctx.beginPath();
+                        ctx.moveTo(x, chart.chartArea.top);
+                        ctx.lineTo(x, chart.chartArea.bottom);
+                        ctx.stroke();
+                        ctx.fillStyle = '#f59e0b';
+                        ctx.font = '10px Arial';
+                        ctx.fillText('Phase 2', x + 4, chart.chartArea.top + 12);
+                        ctx.restore();
+                    }
+                };
+
+                const labels = tours.map(t => 'T' + t);
+
+                // Chart 1 — € vs #
+                analyseCharts.push(new Chart(document.getElementById('chartEuroHash'), {
+                    type: 'line',
+                    data: {
+                        labels,
+                        datasets: [
+                            { label: '€ en caisse', data: euros, borderColor: '#2563eb', backgroundColor: '#2563eb22', fill: true, tension: 0.3, pointRadius: 2 },
+                            { label: '# en caisse', data: hashs, borderColor: '#059669', backgroundColor: '#05966922', fill: true, tension: 0.3, pointRadius: 2 }
+                        ]
+                    },
+                    options: { responsive: true, plugins: { legend: { labels: { font: { size: 11 }, color: txtColor } } }, scales: { y: { grid: { color: gridColor }, ticks: { color: txtColor } }, x: { grid: { display: false }, ticks: { color: txtColor, font: { size: 10 } } } } },
+                    plugins: [phaseLinePlugin]
+                }));
+
+                // Chart 2 — Dette
+                analyseCharts.push(new Chart(document.getElementById('chartDette'), {
+                    type: 'line',
+                    data: {
+                        labels,
+                        datasets: [
+                            { label: 'Emprunts €', data: dettes, borderColor: '#dc2626', backgroundColor: '#dc262622', fill: true, tension: 0.3, pointRadius: 2 },
+                            { label: 'Arriérés €', data: arrieres, borderColor: '#f59e0b', backgroundColor: '#f59e0b22', fill: true, tension: 0.3, pointRadius: 2 }
+                        ]
+                    },
+                    options: { responsive: true, plugins: { legend: { labels: { font: { size: 11 }, color: txtColor } } }, scales: { y: { grid: { color: gridColor }, ticks: { color: txtColor } }, x: { grid: { display: false }, ticks: { color: txtColor, font: { size: 10 } } } } },
+                    plugins: [phaseLinePlugin]
+                }));
+
+                // Chart 3 — Score économique
+                analyseCharts.push(new Chart(document.getElementById('chartScore'), {
+                    type: 'line',
+                    data: {
+                        labels,
+                        datasets: [
+                            { label: 'Score économique', data: scores, borderColor: '#7c3aed', backgroundColor: '#7c3aed22', fill: true, tension: 0.3, pointRadius: 2 }
+                        ]
+                    },
+                    options: { responsive: true, plugins: { legend: { labels: { font: { size: 11 }, color: txtColor } } }, scales: { y: { grid: { color: gridColor }, ticks: { color: txtColor } }, x: { grid: { display: false }, ticks: { color: txtColor, font: { size: 10 } } } } },
+                    plugins: [phaseLinePlugin]
+                }));
+
+                // Chart 4 — Pot AAA + membres
+                analyseCharts.push(new Chart(document.getElementById('chartAAA'), {
+                    type: 'line',
+                    data: {
+                        labels,
+                        datasets: [
+                            { label: '# en circulation', data: circHash, borderColor: '#059669', backgroundColor: '#05966922', fill: true, tension: 0.3, pointRadius: 2, yAxisID: 'y' },
+                            { label: 'Pot AAA (solde)', data: potAAA, borderColor: '#2563eb', borderDash: [4,2], fill: false, tension: 0.3, pointRadius: 2, yAxisID: 'y' },
+                            { label: 'Membres AAA', data: membres, borderColor: '#f59e0b', backgroundColor: '#f59e0b44', fill: false, tension: 0, pointRadius: 3, yAxisID: 'y1', stepped: true }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { labels: { font: { size: 11 }, color: txtColor } } },
+                        scales: {
+                            y: { position: 'left', grid: { color: gridColor }, ticks: { color: txtColor }, title: { display: true, text: '#', color: txtColor } },
+                            y1: { position: 'right', grid: { display: false }, ticks: { color: '#f59e0b', stepSize: 1 }, title: { display: true, text: 'Membres', color: '#f59e0b' }, min: 0 },
+                            x: { grid: { display: false }, ticks: { color: txtColor, font: { size: 10 } } }
+                        }
+                    },
+                    plugins: [phaseLinePlugin]
+                }));
+
+            } catch (e) {
+                document.getElementById('analyseSubtitle').textContent = 'Erreur : ' + e.message;
             }
         }
 
@@ -468,6 +683,9 @@
                     const phase = p.state?.phase || '-';
                     const tours = p.state?.toursComplets || '-';
 
+                    const phaseNum = (typeof phase === 'number') ? phase : 1;
+                    const hasAnalyse = phaseNum >= 2;
+
                     html += '<tr>';
                     html += `<td><strong>${code}</strong></td>`;
                     html += `<td>${date}</td>`;
@@ -475,7 +693,7 @@
                     html += `<td>${nbHumains}👤${nbBots > 0 ? ' + ' + nbBots + '🤖' : ''}</td>`;
                     html += `<td>Phase ${phase}</td>`;
                     html += `<td>${tours}</td>`;
-                    html += `<td><button class="btn-delete" onclick="demanderSuppression('${code}')">🗑️</button></td>`;
+                    html += `<td>${hasAnalyse ? `<button class="btn-analyse" onclick="afficherAnalyse('${code}')">📈</button> ` : ''}<button class="btn-delete" onclick="demanderSuppression('${code}')">🗑️</button></td>`;
                     html += '</tr>';
                 });
 
