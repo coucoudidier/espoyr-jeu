@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title># ESPOYR Multijoueur V3(128 11 6) TEST</title>
+    <title># ESPOYR Multijoueur V3(1) TEST</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -1116,8 +1116,10 @@
             }
             
             // Redistribution itérative
-            let totalManque = contributions.reduce((s, c) => s + c.manque, 0);
             let iter = 0;
+            let potEuroActuel = arrondir2(contributions.reduce((s, c) => arrondir2(s + c.partPayable), 0));
+            let totalManque = arrondir2(montantAvecTaxes - potEuroActuel);
+            
             while (totalManque > 0.01 && iter < 10) {
                 iter++;
                 const payeurs = contributions.filter(c => {
@@ -1130,9 +1132,10 @@
                     const j = joueurs.find(jj => jj.id === p.joueurId);
                     const sup = arrondir2(Math.min(redistrib, Math.max(0, arrondir2(j.euro - p.partPayable))));
                     p.partPayable = arrondir2(p.partPayable + sup);
-                    p.manque = arrondir2(p.manque - sup);
                 }
-                totalManque = arrondir2(contributions.reduce((s, c) => s + Math.max(0, c.manque), 0));
+                // Recalculer le VRAI manque = cible - total collecté
+                potEuroActuel = arrondir2(contributions.reduce((s, c) => arrondir2(s + c.partPayable), 0));
+                totalManque = arrondir2(montantAvecTaxes - potEuroActuel);
             }
             
             // Pot € et complément #
