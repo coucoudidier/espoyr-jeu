@@ -1139,7 +1139,19 @@
             }
             
             // Pot € et complément #
-            const potEuro = arrondir2(contributions.reduce((s, c) => arrondir2(s + c.partPayable), 0));
+            let potEuro = arrondir2(contributions.reduce((s, c) => arrondir2(s + c.partPayable), 0));
+            
+            // ═══ CORRECTION FINALE ARRONDI : ajuster le dernier payeur pour que potEuro = cible exacte ═══
+            const ecartFinal = arrondir2(potEuro - montantAvecTaxes);
+            if (Math.abs(ecartFinal) > 0 && ecartFinal <= 0.05) {
+                // Trouver le dernier joueur qui a payé
+                const dernierPayeur = [...contributions].reverse().find(c => c.partPayable > 0);
+                if (dernierPayeur) {
+                    dernierPayeur.partPayable = arrondir2(dernierPayeur.partPayable - ecartFinal);
+                    potEuro = arrondir2(contributions.reduce((s, c) => arrondir2(s + c.partPayable), 0));
+                }
+            }
+            
             const manqueTotal = arrondir2(montantAvecTaxes - potEuro);
             
             let complementHash = [];
