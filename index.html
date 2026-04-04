@@ -1,10 +1,10 @@
- <!-- V3(1) TEST - Build 171 - index-128-11 -->
+ <!-- V3(1) TEST - Build 172 - index-128-11 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title># ESPOYR Multijoueur V3(128 11 5) TEST</title>
+    <title># ESPOYR Multijoueur V3(1) TEST</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -1039,6 +1039,455 @@
             { id: 11, nom: '🌿 Préserver les semences paysannes',     gain: 200 }
         ];
         
+        // ═══════════════════════════════════════════════════════════════
+        // MODULE ACTIVITÉS COLLECTIVES — Phase 3
+        // ═══════════════════════════════════════════════════════════════
+        
+        const COLLECTIF_ICONS = {
+            1: {icon:'🌱', nom:'Jardin communautaire'},
+            2: {icon:'🌾', nom:'Meunerie locale'},
+            3: {icon:'🥬', nom:'Maraîchage local'},
+            4: {icon:'🏥', nom:'Centre de santé'},
+            5: {icon:'🐄', nom:'Élevage de proximité'},
+            6: {icon:'🤝', nom:'Entraide citoyenne'},
+            7: {icon:'📚', nom:'École coopérative'},
+            8: {icon:'🌲', nom:'Forêt préventive'},
+            9: {icon:'⚡', nom:'Éolienne coopérative'},
+            10:{icon:'💧', nom:'Réseau d\'eau collective'},
+            11:{icon:'🌿', nom:'Semences paysannes'},
+        };
+        
+        function collectifEstEligible(caseId) {
+            if (!(gameConfig.collectifEnabled ?? CONFIG.collectifEnabled)) return false;
+            if ((gameState?.phase || 1) < 3) return false;
+            if (casesCollectives[caseId]) return false; // Déjà collective
+            const c = CASES[caseId];
+            if (!c) return false;
+            if (c.type === 'chance' || c.type === 'malchance') return true;
+            if (c.type === 'activite') {
+                const actSnap = COMPTABILITE.caisseActivites?.[caseId];
+                if (actSnap && actSnap.proprietaireId) return false; // Occupée
+                return true; // Libre
+            }
+            return false;
+        }
+        
+        function collectifEstCollective(caseId) {
+            return !!(casesCollectives[caseId]);
+        }
+        
+        function collectifTravauxDisponibles() {
+            const utilises = new Set(Object.values(casesCollectives).map(c => c.travauxCoopId));
+            return TRAVAUX_COOP.filter(t => !utilises.has(t.id));
+        }
+        
+        function collectifRichesseJoueur(joueurId) {
+            const caisse = COMPTABILITE.caisseJoueurs[joueurId];
+            if (!caisse) return 0;
+            let r = (caisse.euro || 0) + (caisse.espoyr || 0);
+            Object.entries(COMPTABILITE.caisseActivites || {}).forEach(([actId, act]) => {
+                if (act.proprietaireId === joueurId) r += CASES[parseInt(actId)]?.prix || 0;
+            });
+            r -= (caisse.emprunt || 0);
+            return Math.max(0, r);
+        }
+        
+        function collectifCalculerContributions(prixActivite, joueurs, potAAASolde) {
+            const taxes = arrondir2(prixActivite * 0.10);
+            const montantAvecTaxes = arrondir2(prixActivite + taxes);
+            const richesseTotale = joueurs.reduce((s, j) => s + j.richesse, 0);
+            
+            // Parts proportionnelles
+            let contributions = joueurs.map(j => {
+                const ratio = richesseTotale > 0 ? j.richesse / richesseTotale : 1 / joueurs.length;
+                const partIdeale = arrondir2(montantAvecTaxes * ratio);
+                const partPayable = arrondir2(Math.min(partIdeale, Math.max(0, j.euro)));
+                return { joueurId: j.id, partIdeale, partPayable, manque: arrondir2(partIdeale - partPayable) };
+            });
+            
+            // Correction arrondi sur part idéale
+            const sommeIdeale = contributions.reduce((s, c) => arrondir2(s + c.partIdeale), 0);
+            const ecartIdeale = arrondir2(montantAvecTaxes - sommeIdeale);
+            if (Math.abs(ecartIdeale) > 0 && contributions.length > 0) {
+                const d = contributions[contributions.length - 1];
+                d.partIdeale = arrondir2(d.partIdeale + ecartIdeale);
+                d.partPayable = arrondir2(Math.min(d.partIdeale, Math.max(0, joueurs.find(j => j.id === d.joueurId).euro)));
+                d.manque = arrondir2(d.partIdeale - d.partPayable);
+            }
+            
+            // Redistribution itérative
+            let totalManque = contributions.reduce((s, c) => s + c.manque, 0);
+            let iter = 0;
+            while (totalManque > 0.01 && iter < 10) {
+                iter++;
+                const payeurs = contributions.filter(c => {
+                    const j = joueurs.find(jj => jj.id === c.joueurId);
+                    return j && j.euro > c.partPayable;
+                });
+                if (payeurs.length === 0) break;
+                const redistrib = arrondir2(totalManque / payeurs.length);
+                for (const p of payeurs) {
+                    const j = joueurs.find(jj => jj.id === p.joueurId);
+                    const sup = arrondir2(Math.min(redistrib, Math.max(0, arrondir2(j.euro - p.partPayable))));
+                    p.partPayable = arrondir2(p.partPayable + sup);
+                    p.manque = arrondir2(p.manque - sup);
+                }
+                totalManque = arrondir2(contributions.reduce((s, c) => s + Math.max(0, c.manque), 0));
+            }
+            
+            // Pot € et complément #
+            const potEuro = arrondir2(contributions.reduce((s, c) => arrondir2(s + c.partPayable), 0));
+            const manqueTotal = arrondir2(montantAvecTaxes - potEuro);
+            
+            let complementHash = [];
+            if (manqueTotal > 0.01) {
+                const partHash = arrondir2(manqueTotal / joueurs.length);
+                complementHash = joueurs.map(j => ({ joueurId: j.id, montantHash: partHash }));
+                const sommeH = complementHash.reduce((s, c) => arrondir2(s + c.montantHash), 0);
+                const ecartH = arrondir2(manqueTotal - sommeH);
+                if (Math.abs(ecartH) > 0 && complementHash.length > 0)
+                    complementHash[complementHash.length - 1].montantHash = arrondir2(complementHash[complementHash.length - 1].montantHash + ecartH);
+            }
+            const potHash = arrondir2(complementHash.reduce((s, c) => arrondir2(s + c.montantHash), 0));
+            
+            // Compensation Pot AAA
+            const compensationPossible = arrondir2(Math.min(potEuro, potAAASolde));
+            const compensations = contributions.map(c => ({
+                joueurId: c.joueurId, euroVerse: c.partPayable,
+                hashCompense: potEuro > 0 ? arrondir2(c.partPayable / potEuro * compensationPossible) : 0,
+            }));
+            const sommeComp = compensations.reduce((s, c) => arrondir2(s + c.hashCompense), 0);
+            const ecartComp = arrondir2(compensationPossible - sommeComp);
+            if (Math.abs(ecartComp) > 0 && compensations.length > 0)
+                compensations[compensations.length - 1].hashCompense = arrondir2(compensations[compensations.length - 1].hashCompense + ecartComp);
+            
+            return {
+                prixActivite, taxes, montantAvecTaxes,
+                potEuro, potHash, manqueTotal, contributions, complementHash,
+                compensationPossible, compensationPartielle: compensationPossible < potEuro,
+                compensations, taxesPayables: arrondir2(Math.min(taxes, potEuro)),
+                totalCollecte: arrondir2(potEuro + potHash),
+                equilibre: arrondir2(potEuro + potHash) === montantAvecTaxes,
+            };
+        }
+        
+        function collectifCalculerFacture(caseId, equipList) {
+            const cc = casesCollectives[caseId];
+            if (!cc) return 0;
+            const prix = cc.prix || CONFIG.collectifPrixDefaut;
+            const basePct = gameConfig.factureBasePct ?? CONFIG.factureBasePct ?? 0.15;
+            const base = Math.floor(prix * basePct);
+            const facteur = getFacteurInflation();
+            let facture = arrondir2(base * facteur * (gameConfig.collectifFactureReduction ?? CONFIG.collectifFactureReduction));
+            const nbEquip = cc.equipements || 0;
+            for (let i = 0; i < nbEquip; i++) facture = arrondir2(facture * (gameConfig.collectifEquipReduction ?? CONFIG.collectifEquipReduction));
+            return Math.max(1, arrondir2(facture));
+        }
+        
+        function collectifBotVote(profil, travaux) {
+            if (!travaux || travaux.length === 0) return null;
+            const prefs = {
+                'COOPERATIF':[7,6,4,3], 'SOLIDAIRE':[4,6,7,1], 'INVESTISSEUR':[9,10,5,2],
+                'EQUILIBRE':[1,3,9,7], 'PRUDENT':[8,3,1,4], 'PREDATEUR':[9,2,5,10],
+            };
+            for (const id of (prefs[profil] || prefs['EQUILIBRE'])) {
+                if (travaux.find(t => t.id === id)) return id;
+            }
+            return travaux[0].id;
+        }
+        
+        function collectifResultatVote(votes, declencheurId) {
+            const scores = {};
+            for (const [pid, tid] of Object.entries(votes)) {
+                if (tid === null || tid === undefined) continue;
+                scores[tid] = (scores[tid] || 0) + 1;
+            }
+            if (Object.keys(scores).length === 0) return TRAVAUX_COOP[0];
+            const maxScore = Math.max(...Object.values(scores));
+            const gagnants = Object.keys(scores).filter(id => scores[id] === maxScore);
+            if (gagnants.length === 1) return TRAVAUX_COOP.find(t => t.id === parseInt(gagnants[0])) || TRAVAUX_COOP[0];
+            const voteDecl = votes[declencheurId];
+            if (voteDecl !== null && gagnants.includes(String(voteDecl)))
+                return TRAVAUX_COOP.find(t => t.id === parseInt(voteDecl)) || TRAVAUX_COOP[0];
+            return TRAVAUX_COOP.find(t => t.id === parseInt(gagnants[0])) || TRAVAUX_COOP[0];
+        }
+        
+        // ═══ EXÉCUTION ACHAT COLLECTIF (écritures comptables) ═══
+        async function collectifExecuterAchat(caseId, travauxItem, resultat) {
+            const nomActivite = COLLECTIF_ICONS[travauxItem.id]?.nom || travauxItem.nom;
+            const prix = resultat.prixActivite;
+            
+            // 1. Chaque joueur contribue en €
+            for (const c of resultat.contributions) {
+                if (c.partPayable > 0) {
+                    const caisse = COMPTABILITE.caisseJoueurs[c.joueurId];
+                    caisse.euro = arrondir2(caisse.euro - c.partPayable);
+                    enregistrerEcriture({ joueurId: c.joueurId, libelle: `Contribution collective ${nomActivite} (${c.partPayable.toFixed(2)}€)`, compteDebit: 261, compteCredit: 500, montantEuro: c.partPayable, contexte: 'collectif_achat' });
+                }
+            }
+            
+            // 2. Compensation # depuis Pot AAA
+            for (const comp of resultat.compensations) {
+                if (comp.hashCompense > 0) {
+                    COMPTABILITE.caisseJoueurs[comp.joueurId].espoyr = arrondir2((COMPTABILITE.caisseJoueurs[comp.joueurId].espoyr || 0) + comp.hashCompense);
+                    COMPTABILITE.potAAA.solde = arrondir2((COMPTABILITE.potAAA.solde || 0) - comp.hashCompense);
+                    enregistrerEcriture({ joueurId: comp.joueurId, libelle: `Compensation AAA ${nomActivite} (${comp.hashCompense.toFixed(2)}#)`, compteDebit: 501, compteCredit: 468, montantEspoyr: comp.hashCompense, contexte: 'collectif_compensation' });
+                    enregistrerEcriture({ joueurId: 'POT_AAA', libelle: `Compensation ${comp.joueurId} (${comp.hashCompense.toFixed(2)}#)`, compteDebit: 671, compteCredit: 580, montantEspoyr: comp.hashCompense, contexte: 'collectif_compensation' });
+                }
+            }
+            
+            // 3. Complément # si nécessaire
+            for (const compl of resultat.complementHash) {
+                if (compl.montantHash > 0) {
+                    COMPTABILITE.caisseJoueurs[compl.joueurId].espoyr = arrondir2((COMPTABILITE.caisseJoueurs[compl.joueurId].espoyr || 0) - compl.montantHash);
+                    enregistrerEcriture({ joueurId: compl.joueurId, libelle: `Complément # collectif ${nomActivite} (${compl.montantHash.toFixed(2)}#)`, compteDebit: 261, compteCredit: 501, montantEspoyr: compl.montantHash, contexte: 'collectif_complement' });
+                }
+            }
+            
+            // 4. Taxes depuis Pot € → État
+            if (resultat.taxesPayables > 0) {
+                COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) + resultat.taxesPayables);
+                COMPTABILITE.etat.taxesRecues = arrondir2((COMPTABILITE.etat.taxesRecues || 0) + resultat.taxesPayables);
+                COMPTABILITE.etat.recettes.total = arrondir2((COMPTABILITE.etat.recettes.total || 0) + resultat.taxesPayables);
+                enregistrerEcriture({ joueurId: 'ETAT', libelle: `Droits enregistrement ${nomActivite} (${resultat.taxesPayables.toFixed(2)}€)`, compteDebit: 500, compteCredit: 704, montantEuro: resultat.taxesPayables, contexte: 'collectif_taxes' });
+            }
+            
+            // 5. Transformer la case
+            const iconInfo = COLLECTIF_ICONS[travauxItem.id] || { icon: '🤝', nom: nomActivite };
+            casesCollectives[caseId] = {
+                travauxCoopId: travauxItem.id,
+                nom: iconInfo.nom, icon: iconInfo.icon,
+                prix: prix, equipements: 0,
+                proprietaireId: 'POT_AAA',
+                dateCreation: Date.now(),
+            };
+            
+            // 6. Enregistrer activité dans comptabilité
+            initCaisseActivite(caseId);
+            COMPTABILITE.caisseActivites[caseId].proprietaireId = 'POT_AAA';
+            COMPTABILITE.caisseActivites[caseId].capital = prix;
+            
+            // 7. Sync Firebase
+            await gameRef.child(`casesCollectives/${caseId}`).set(casesCollectives[caseId]);
+            await gameRef.child(`activites/${caseId}`).set('POT_AAA');
+            
+            // Sync soldes joueurs
+            for (const c of resultat.contributions) {
+                const caisse = COMPTABILITE.caisseJoueurs[c.joueurId];
+                await db.ref(`parties/${currentGameCode}/players/${c.joueurId}/euro`).set(caisse.euro);
+                await db.ref(`parties/${currentGameCode}/players/${c.joueurId}/espoyr`).set(caisse.espoyr);
+            }
+            
+            await syncComptabiliteToFirebase();
+            updateBoard();
+            
+            sendSystemMessage(`🏗️ ${iconInfo.icon} ${iconInfo.nom} — activité collective créée sur la case ${caseId} !`);
+            return true;
+        }
+        
+        // ═══ PAIEMENT FACTURE COLLECTIVE (passage sur case collective) ═══
+        async function collectifPayerFacture(joueurId, caseId) {
+            const cc = casesCollectives[caseId];
+            if (!cc) return null;
+            const facture = collectifCalculerFacture(caseId, []);
+            const caisse = COMPTABILITE.caisseJoueurs[joueurId];
+            if (!caisse) return null;
+            
+            const paye = arrondir2(Math.min(facture, Math.max(0, caisse.espoyr || 0)));
+            if (paye <= 0) return { facture, paye: 0 };
+            
+            // Joueur paie en #
+            caisse.espoyr = arrondir2(caisse.espoyr - paye);
+            enregistrerEcriture({ joueurId, libelle: `Travail coopératif ${cc.nom} (${paye.toFixed(2)}#)`, compteDebit: 613, compteCredit: 501, montantEspoyr: paye, contexte: 'collectif_facture' });
+            
+            // Pot AAA reçoit
+            COMPTABILITE.potAAA.solde = arrondir2((COMPTABILITE.potAAA.solde || 0) + paye);
+            enregistrerEcriture({ joueurId: 'POT_AAA', libelle: `Recette ${cc.nom} (${paye.toFixed(2)}#)`, compteDebit: 580, compteCredit: 706, montantEspoyr: paye, contexte: 'collectif_facture' });
+            
+            await syncComptabiliteToFirebase();
+            return { facture, paye };
+        }
+        
+        // ═══ FLUX PRINCIPAL : ACHAT COLLECTIF (vote + contribution + exécution) ═══
+        async function handleCollectifAchat(caseId, declencheurId) {
+            if (achatCollectifEnCours) return;
+            achatCollectifEnCours = true;
+            
+            try {
+                const c = CASES[caseId];
+                const prix = c?.prix || CONFIG.collectifPrixDefaut;
+                const travauxDispo = collectifTravauxDisponibles();
+                
+                if (travauxDispo.length === 0) {
+                    sendSystemMessage(`🏗️ Toutes les activités collectives ont été créées.`);
+                    achatCollectifEnCours = false;
+                    return;
+                }
+                
+                // 1. Vote — bots votent immédiatement, humain via modal
+                const votes = {};
+                const players = Object.values(playersData);
+                
+                // Bots votent
+                for (const p of players) {
+                    if (p.isBot) {
+                        const profil = (p.profil || 'EQUILIBRE').toUpperCase();
+                        votes[p.id] = collectifBotVote(profil, travauxDispo);
+                    }
+                }
+                
+                // Humain vote via modal (ou timeout)
+                const humanPlayers = players.filter(p => !p.isBot);
+                
+                if (humanPlayers.length > 0 && humanPlayers.some(p => p.id === myPlayerId)) {
+                    const choix = await new Promise(resolve => {
+                        let timerVal = gameConfig.collectifVoteTimer ?? CONFIG.collectifVoteTimer;
+                        let timerInterval;
+                        
+                        const btns = travauxDispo.map(t => {
+                            const info = COLLECTIF_ICONS[t.id] || { icon: '🤝', nom: t.nom };
+                            return `<button class="btn" style="background:#dcfce7;color:#059669;margin:3px;padding:8px 12px;font-size:0.85rem;" onclick="window._collectifVoteResolve(${t.id})">${info.icon} ${info.nom}</button>`;
+                        }).join('');
+                        
+                        window._collectifVoteResolve = (id) => {
+                            if (timerInterval) clearInterval(timerInterval);
+                            delete window._collectifVoteResolve;
+                            closeModal();
+                            resolve(id);
+                        };
+                        
+                        showModal(`
+                            <h3>🗳️ Vote — Activité collective</h3>
+                            <p>Case ${caseId} : <strong>${c?.icon || '📍'} ${c?.name || 'Case libre'}</strong> (${prix}€)</p>
+                            <p style="font-size:0.85rem;color:#6b7280;">Choisissez l'activité collective à créer :</p>
+                            <div style="display:flex;flex-wrap:wrap;justify-content:center;margin:10px 0;">${btns}</div>
+                            <p id="collectifTimer" style="text-align:center;font-size:0.9rem;color:#b45309;">⏱️ ${timerVal}s</p>
+                        `, `<button class="btn btn-secondary" onclick="window._collectifVoteResolve(null)">Passer (vote nul)</button>`);
+                        
+                        timerInterval = setInterval(() => {
+                            timerVal--;
+                            const el = document.getElementById('collectifTimer');
+                            if (el) el.textContent = `⏱️ ${timerVal}s`;
+                            if (timerVal <= 0) {
+                                clearInterval(timerInterval);
+                                if (window._collectifVoteResolve) window._collectifVoteResolve(null);
+                            }
+                        }, 1000);
+                    });
+                    
+                    votes[myPlayerId] = choix;
+                }
+                
+                // Calculer le résultat
+                const travauxGagnant = collectifResultatVote(votes, declencheurId);
+                sendSystemMessage(`🗳️ Vote : ${COLLECTIF_ICONS[travauxGagnant.id]?.icon || '🤝'} ${COLLECTIF_ICONS[travauxGagnant.id]?.nom || travauxGagnant.nom} remporte le vote !`);
+                
+                // 2. Calculer les contributions
+                const joueursData = players.filter(p => !p.faillite).map(p => ({
+                    id: p.id,
+                    euro: COMPTABILITE.caisseJoueurs[p.id]?.euro || 0,
+                    espoyr: COMPTABILITE.caisseJoueurs[p.id]?.espoyr || 0,
+                    richesse: collectifRichesseJoueur(p.id),
+                }));
+                
+                const potAAASolde = COMPTABILITE.potAAA?.solde || 0;
+                const resultat = collectifCalculerContributions(prix, joueursData, potAAASolde);
+                
+                // 3. Vérifier compensation Pot AAA
+                if (resultat.compensationPartielle) {
+                    // Vote d'annulation via modal
+                    const continuer = await new Promise(resolve => {
+                        showModal(`
+                            <h3>⚠️ Pot AAA insuffisant</h3>
+                            <p>Le Pot AAA ne peut compenser que <strong>${resultat.compensationPossible.toFixed(2)}#</strong> sur ${resultat.potEuro.toFixed(2)}€ versés.</p>
+                            <p>Compensation partielle : ${Math.round(resultat.compensationPossible / resultat.potEuro * 100)}%</p>
+                            <p style="font-weight:bold;">Continuer quand même ?</p>
+                        `, `
+                            <button class="btn btn-primary" onclick="closeModal();(${resolve.toString()})(true);">✅ Continuer</button>
+                            <button class="btn btn-secondary" onclick="closeModal();(${resolve.toString()})(false);">❌ Annuler</button>
+                        `);
+                    });
+                    
+                    if (!continuer) {
+                        sendSystemMessage(`❌ Achat collectif annulé (Pot AAA insuffisant).`);
+                        achatCollectifEnCours = false;
+                        return;
+                    }
+                }
+                
+                // 4. Afficher le récapitulatif et exécuter
+                const lignesContrib = resultat.contributions.map(c => {
+                    const nom = playersData[c.joueurId]?.name || c.joueurId;
+                    const comp = resultat.compensations.find(co => co.joueurId === c.joueurId);
+                    return `<p style="margin:2px 0;font-size:0.85rem;">${playersData[c.joueurId]?.avatar || '👤'} ${nom}: -${c.partPayable.toFixed(2)}€ → +${(comp?.hashCompense || 0).toFixed(2)}#</p>`;
+                }).join('');
+                
+                await new Promise(resolve => {
+                    showModal(`
+                        <h3>🏗️ Achat collectif — ${COLLECTIF_ICONS[travauxGagnant.id]?.icon} ${COLLECTIF_ICONS[travauxGagnant.id]?.nom}</h3>
+                        <p>Prix : <strong>${prix}€</strong> + taxes ${resultat.taxes.toFixed(2)}€ = ${resultat.montantAvecTaxes.toFixed(2)}€</p>
+                        <div style="background:#f0fdf4;padding:8px;border-radius:8px;margin:8px 0;">
+                            <p style="margin:0;font-weight:bold;">Contributions :</p>
+                            ${lignesContrib}
+                        </div>
+                        <p style="font-size:0.85rem;color:#6b7280;">Pot € : ${resultat.potEuro.toFixed(2)}€ | Pot # : ${resultat.potHash.toFixed(2)}# | Compensation : ${resultat.compensationPossible.toFixed(2)}#</p>
+                        ${resultat.equilibre ? '<p style="color:#059669;">✅ Équilibre vérifié</p>' : '<p style="color:#dc2626;">⚠️ Déséquilibre détecté</p>'}
+                    `, `<button class="btn btn-primary" onclick="closeModal(); window._collectifExecResolve && window._collectifExecResolve();">Valider l'achat</button>`);
+                    window._collectifExecResolve = resolve;
+                });
+                delete window._collectifExecResolve;
+                
+                await collectifExecuterAchat(caseId, travauxGagnant, resultat);
+                
+            } finally {
+                achatCollectifEnCours = false;
+            }
+        }
+        
+        // ═══ PASSAGE SUR ACTIVITÉ COLLECTIVE (modal travail coopératif) ═══
+        async function handleCollectifPassage(caseId, joueurId) {
+            const cc = casesCollectives[caseId];
+            if (!cc) return;
+            const facture = collectifCalculerFacture(caseId, []);
+            const caisse = COMPTABILITE.caisseJoueurs[joueurId];
+            const espoyrDispo = caisse?.espoyr || 0;
+            const canPay = espoyrDispo >= facture;
+            
+            if (joueurId === myPlayerId) {
+                // Joueur humain : modal avec choix
+                const accepte = await new Promise(resolve => {
+                    showModal(`
+                        <h3>${cc.icon} ${cc.nom} — Activité collective</h3>
+                        <div style="background:#fef3c7;padding:10px;border-radius:8px;margin:8px 0;border-left:4px solid #FDDB31;">
+                            <p style="margin:0;"><strong>Travail coopératif :</strong> ${facture.toFixed(2)}#</p>
+                            <p style="margin:4px 0 0;font-size:0.8rem;color:#6b7280;">Ton solde : ${espoyrDispo.toFixed(2)}#</p>
+                        </div>
+                        ${canPay ? '' : '<p style="color:#dc2626;font-size:0.85rem;">Pas assez de # — tu peux refuser.</p>'}
+                    `, `
+                        ${canPay ? `<button class="btn btn-primary" onclick="closeModal();window._collectifPassResolve(true);">🤝 Accepter (${facture.toFixed(2)}#)</button>` : ''}
+                        <button class="btn btn-secondary" onclick="closeModal();window._collectifPassResolve(false);">Refuser</button>
+                    `);
+                    window._collectifPassResolve = resolve;
+                });
+                delete window._collectifPassResolve;
+                
+                if (accepte) {
+                    const result = await collectifPayerFacture(joueurId, caseId);
+                    await db.ref(`parties/${currentGameCode}/players/${joueurId}/espoyr`).set(caisse.espoyr);
+                    sendSystemMessage(`🤝 ${playersData[joueurId]?.name} effectue un travail coopératif à ${cc.icon} ${cc.nom} (${result.paye.toFixed(2)}#)`);
+                } else {
+                    sendSystemMessage(`${playersData[joueurId]?.name} passe devant ${cc.icon} ${cc.nom} sans s'arrêter.`);
+                }
+            } else {
+                // Bot : accepte si assez de #
+                if (canPay) {
+                    const result = await collectifPayerFacture(joueurId, caseId);
+                    await db.ref(`parties/${currentGameCode}/players/${joueurId}/espoyr`).set(caisse.espoyr);
+                    sendSystemMessage(`🤝 ${playersData[joueurId]?.name} travaille à ${cc.icon} ${cc.nom} (${result.paye.toFixed(2)}#)`);
+                }
+            }
+        }
+
         const PLAYER_COLORS = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
         
         // Pourcentages salaire CONTRIBUTIF (fixe)
@@ -1157,7 +1606,13 @@
                 aaa:         false,  // 🔶 Pot AAA
                 analyse:     true,   // 📊 Analyses & Phases
                 systeme:     false   // ⚙️ Système & Technique
-            }
+            },
+            // ═══ ACTIVITÉS COLLECTIVES (Phase 3) ═══
+            collectifEnabled: true,
+            collectifPrixDefaut: 200,
+            collectifVoteTimer: 30,
+            collectifFactureReduction: 0.80,
+            collectifEquipReduction: 0.70
         };
         
         // Config modifiable par l'host
@@ -1177,6 +1632,10 @@
         let inflationTauxActuel = 0.03;    // Taux courant (peut être ajusté)
         let inflationTauxPrecedent = 0.03; // Pour calculer la tendance (flèche)
         let inflationDernierAjustement = 0; // Tour du dernier ajustement
+        
+        // ═══ ÉTAT ACTIVITÉS COLLECTIVES ═══
+        let casesCollectives = {};
+        let achatCollectifEnCours = false;
 
         // ========== REPRISE / TICKET JOUEUR (A+B) ==========
         const RESUME_KEY_PREFIX = 'ESPOYR_RESUME_';
@@ -4412,7 +4871,6 @@ function isAbsent(player) {
             if (montantHT > 0) {
                 COMPTABILITE.caisseJoueurs[proprietaireId].revenusDepuisPassage = 
                     arrondir2((COMPTABILITE.caisseJoueurs[proprietaireId].revenusDepuisPassage || 0) + montantHT);
-                console.log(`🏛️ REVENUS ACCUMULÉS: ${playersData[proprietaireId]?.name || proprietaireId} +${montantHT.toFixed(2)}€ → total=${COMPTABILITE.caisseJoueurs[proprietaireId].revenusDepuisPassage.toFixed(2)}€`);
             }
             
             // MAJ caisse activité (statistiques)
@@ -6229,6 +6687,12 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
                 if (startBtn) startBtn.disabled = count < (gameConfig.minPlayers || 2);
             });
             
+            // ═══ Activités Collectives (Firebase sync) ═══
+            gameRef.child('casesCollectives').on('value', (snap) => {
+                casesCollectives = snap.val() || {};
+                updateBoard();
+            });
+            
             // Chat
             gameRef.child('chat').orderByChild('timestamp').limitToLast(50).on('child_added', (snap) => {
                 const msg = snap.val();
@@ -7305,6 +7769,18 @@ if (isMyTurn) {
                     ownerStyle = `border-color: ${PLAYER_COLORS[idx]}`;
                 }
                 
+                // ═══ CASE COLLECTIVE : affichage spécial ═══
+                const cc = casesCollectives[c.id];
+                let caseIcon = c.icon;
+                let caseName = c.name;
+                let caseClass = c.type;
+                if (cc) {
+                    caseIcon = cc.icon;
+                    caseName = cc.nom;
+                    caseClass = 'activite collective';
+                    ownerStyle = 'border-color: #FDDB31; border-width: 3px; background: linear-gradient(135deg, #fefce8, #fef9c3);';
+                }
+                
                 // Afficher les types d'équipements (A, B, AA, AB, BB)
                 let equipIndicator = '';
                 if (equipList.length > 0) {
@@ -7321,14 +7797,15 @@ if (isMyTurn) {
                 }
                 
                 return `
-                    <div class="case ${c.type} ${owner ? 'owned' : ''} ${isCurrent ? 'current' : ''}" style="${ownerStyle}"
-                         data-case-id="${c.id}" onclick="showCaseInfo(${c.id})" title="${c.name}">
+                    <div class="case ${caseClass} ${owner ? 'owned' : ''} ${isCurrent ? 'current' : ''}" style="${ownerStyle}"
+                         data-case-id="${c.id}" onclick="showCaseInfo(${c.id})" title="${caseName}">
                         <span class="case-number">${c.id}</span>
                         ${(c.hash && (gameState?.phase || 1) >= 3) ? '<span class="case-hash">#</span>' : ''}
-                        <span class="case-icon">${c.icon}</span>
-                        <span class="case-name">${c.name}</span>
-                        ${c.prix ? `<span class="case-price">${fmt(c.prix)}€ ${equipIndicator}</span>` : ''}
-                        ${ownerPlayer ? `<span class="owner-indicator">${ownerPlayer.avatar}</span>` : ''}
+                        ${cc ? '<span style="position:absolute;top:1px;right:1px;font-size:0.5rem;background:#FDDB31;border-radius:2px;padding:0 2px;">AAA</span>' : ''}
+                        <span class="case-icon">${caseIcon}</span>
+                        <span class="case-name">${caseName}</span>
+                        ${c.prix ? `<span class="case-price">${fmt(c.prix)}€ ${equipIndicator}</span>` : (cc ? `<span class="case-price">${fmt(cc.prix)}€</span>` : '')}
+                        ${(ownerPlayer && !cc) ? `<span class="owner-indicator">${ownerPlayer.avatar}</span>` : ''}
                         ${playersHere.length > 0 ? `
                             <div class="players-on-case">
                                 ${playersHere.map(p => {
@@ -8224,10 +8701,7 @@ function initSystemeDe() {
             
             // ═══ TAXE 20% SUR REVENUS D'ACTIVITÉS ═══
             // Prélevée AVANT le salaire (sur les revenus du cycle précédent)
-            const _revDebug = COMPTABILITE.caisseJoueurs[myPlayerId]?.revenusDepuisPassage || 0;
-            console.log(`🏛️ TAXE REVENUS DEBUG: joueur=${myName} revenusDepuisPassage=${_revDebug}€`);
             const taxeRevenusResult = await comptaTaxeRevenus(myPlayerId);
-            console.log(`🏛️ TAXE REVENUS RÉSULTAT: revenus=${taxeRevenusResult.revenus} taxe=${taxeRevenusResult.taxe} paye=${taxeRevenusResult.paye}`);
             if (taxeRevenusResult.paye > 0) {
                 sendSystemMessage(`🏛️ ${myName} : taxe 20% sur ${taxeRevenusResult.revenus.toFixed(2)}€ de revenus → -${taxeRevenusResult.paye.toFixed(2)}€`);
             }
@@ -8634,6 +9108,20 @@ function initSystemeDe() {
                 const activites = activitesSnap.val() || {};
                 const owner = activites[position];
                 
+                // ═══ ACTIVITÉ COLLECTIVE : passage dessus ═══
+                if (collectifEstCollective(position)) {
+                    await handleCollectifPassage(position, myPlayerId);
+                    nextTurn();
+                    return;
+                }
+                
+                // ═══ ACTIVITÉ LIBRE en Phase 3 : déclencher achat collectif ═══
+                if (!owner && collectifEstEligible(position)) {
+                    await handleCollectifAchat(position, myPlayerId);
+                    nextTurn();
+                    return;
+                }
+                
                 if (!owner) {
                     showBuyModal(c, currentEuro);
                 } else if (owner !== myPlayerId) {
@@ -8655,8 +9143,30 @@ function initSystemeDe() {
                     }
                 }
             } else if (c.type === 'chance') {
+                // ═══ Phase 3 : Chance devient case collective ═══
+                if (collectifEstEligible(position)) {
+                    await handleCollectifAchat(position, myPlayerId);
+                    nextTurn();
+                    return;
+                }
+                if (collectifEstCollective(position)) {
+                    await handleCollectifPassage(position, myPlayerId);
+                    nextTurn();
+                    return;
+                }
                 await handleChance();
             } else if (c.type === 'malchance') {
+                // ═══ Phase 3 : Malchance devient case collective ═══
+                if (collectifEstEligible(position)) {
+                    await handleCollectifAchat(position, myPlayerId);
+                    nextTurn();
+                    return;
+                }
+                if (collectifEstCollective(position)) {
+                    await handleCollectifPassage(position, myPlayerId);
+                    nextTurn();
+                    return;
+                }
                 await handleMalchance();
             } else if (c.type === 'frais') {
                 await handleFrais(c);
@@ -12562,7 +13072,6 @@ function initSystemeDe() {
             
             // Salaire
             if (passedStart) {
-                console.log(`🏁 BOT PASSAGE L1: ${bot.name} id=${bot.id} pos=${bot.position}→${newPosition} dé=${dice}`);
                 const phase = gameState.phase || 1;
                 const deSalaire = Math.floor(Math.random() * 6) + 1;
                 const botProfil = bot.profil || 'contributif';
@@ -12606,10 +13115,7 @@ function initSystemeDe() {
                 }
                 
                 // ═══ TAXE 20% SUR REVENUS D'ACTIVITÉS (bot) ═══
-                const _botRevDebug = COMPTABILITE.caisseJoueurs[bot.id]?.revenusDepuisPassage || 0;
-                console.log(`🏛️ BOT TAXE DEBUG: ${bot.name} id=${bot.id} revenusDepuisPassage=${_botRevDebug} passedStart=${passedStart}`);
                 const taxeRevBot = await comptaTaxeRevenus(bot.id);
-                console.log(`🏛️ BOT TAXE RÉSULTAT: ${bot.name} revenus=${taxeRevBot.revenus} taxe=${taxeRevBot.taxe} paye=${taxeRevBot.paye}`);
                 if (taxeRevBot.paye > 0) {
                     sendSystemMessage(`🏛️ ${bot.name} : taxe 20% sur ${taxeRevBot.revenus.toFixed(2)}€ → -${taxeRevBot.paye.toFixed(2)}€`);
                 }
@@ -12778,7 +13284,14 @@ function initSystemeDe() {
                 const activites = activitesSnap.val() || {};
                 const owner = activites[position];
                 
-                if (!owner && (caisse.euro || 0) >= c.prix) {
+                // ═══ ACTIVITÉ COLLECTIVE : bot passage ═══
+                if (collectifEstCollective(position)) {
+                    await handleCollectifPassage(position, botId);
+                    // Continue to nextTurn via normal flow
+                } else if (!owner && collectifEstEligible(position)) {
+                    // ═══ ACHAT COLLECTIF : bot déclenche ═══
+                    await handleCollectifAchat(position, botId);
+                } else if (!owner && (caisse.euro || 0) >= c.prix) {
                     // Décision achat
                     const shouldBuy = profil.acheteToujours || (caisse.euro || 0) >= c.prix * 1.5;
                     if (shouldBuy) {
@@ -13089,6 +13602,12 @@ function initSystemeDe() {
                 if (playersData[botId]) playersData[botId].declarationFiscale = true;
                 sendSystemMessage(`📋 ${bot.name} valide sa déclaration fiscale ✅`);
             } else if (c.type === 'chance') {
+                // ═══ Phase 3 : Chance → achat collectif ═══
+                if (collectifEstEligible(position)) {
+                    await handleCollectifAchat(position, botId);
+                } else if (collectifEstCollective(position)) {
+                    await handleCollectifPassage(position, botId);
+                } else {
                 const card = CHANCE_CARDS[Math.floor(Math.random() * CHANCE_CARDS.length)];
                 const phase = gameState?.phase || 1;
                 
@@ -13098,7 +13617,6 @@ function initSystemeDe() {
                 } else {
                     // Phase 1 : État finance
                     if (card.all) {
-                        // Carte collective — tous les joueurs reçoivent
                         const allPlayers = Object.values(playersData);
                         let totalVerse = 0;
                         for (const p of allPlayers) {
@@ -13109,7 +13627,6 @@ function initSystemeDe() {
                         }
                         sendSystemMessage(`🍀 CHANCE: ${card.text} (État: -${fmt(totalVerse)}€)`);
                     } else {
-                        // Carte individuelle — bot seul reçoit
                         await comptaChanceViaEtat(botId, card.amount);
                         await db.ref(`parties/${currentGameCode}/players/${botId}/euro`)
                             .set(COMPTABILITE.caisseJoueurs[botId].euro);
@@ -13117,7 +13634,14 @@ function initSystemeDe() {
                     }
                     await syncComptabiliteToFirebase();
                 }
+                } // fin else (pas collectif)
             } else if (c.type === 'malchance') {
+                // ═══ Phase 3 : Malchance → achat collectif ═══
+                if (collectifEstEligible(position)) {
+                    await handleCollectifAchat(position, botId);
+                } else if (collectifEstCollective(position)) {
+                    await handleCollectifPassage(position, botId);
+                } else {
                 // Bot: acquisition bien personnel (même logique que humain)
                 initCaisseJoueur(botId);
                 const botCaisse = COMPTABILITE.caisseJoueurs[botId];
@@ -13159,6 +13683,7 @@ function initSystemeDe() {
                 await syncComptabiliteToFirebase();
                 sendSystemMessage(`👨‍👩‍👧‍👦 ${bot.name} acquiert ${bien.icon} ${bien.nom} (${fmt(bien.mensualite)}€/tour)`);
                 }
+                } // fin else (pas collectif malchance)
             }
             
             // Petit délai visuel puis passage de tour (dans la chaîne async)
