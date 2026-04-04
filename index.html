@@ -4497,7 +4497,7 @@ function isAbsent(player) {
                 
             } else {
                 // Contributif : payé par l'État
-                COMPTABILITE.etat.tresor -= montant;
+                COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) - montant);
                 COMPTABILITE.etat.salairesVerses += montant;
                 COMPTABILITE.etat.depenses.salaires += montant;  // Cumul dépenses
                 COMPTABILITE.etat.depenses.total += montant;
@@ -4605,11 +4605,11 @@ function isAbsent(player) {
             if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
             
             // ========== ÉTAT reçoit 50% des taxes (TVA + Droits) ==========
-            COMPTABILITE.etat.tresor += partEtat;
-            COMPTABILITE.etat.taxesRecues += partEtat;
+            COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) + partEtat);
+            COMPTABILITE.etat.taxesRecues = arrondir2((COMPTABILITE.etat.taxesRecues || 0) + partEtat);
             COMPTABILITE.etat.recettes.tva += tvaParEntite;
             COMPTABILITE.etat.recettes.droits += droitsParEntite;
-            COMPTABILITE.etat.recettes.total += partEtat;
+            COMPTABILITE.etat.recettes.total = arrondir2((COMPTABILITE.etat.recettes.total || 0) + partEtat);
             COMPTABILITE.etat.grandLivre[500] += partEtat;
             COMPTABILITE.etat.grandLivre[704] += tvaParEntite;
             COMPTABILITE.etat.grandLivre[705] += droitsParEntite;
@@ -4710,7 +4710,7 @@ function isAbsent(player) {
             act.equipementA = (act.equipementA || 0) + 1;
             
             // État reçoit le paiement
-            COMPTABILITE.etat.tresor += cout;
+            COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) + cout);
             COMPTABILITE.etat.recettes.total = (COMPTABILITE.etat.recettes.total || 0) + cout;
             
             // Écriture 1: Joueur - Équipement
@@ -4761,7 +4761,7 @@ function isAbsent(player) {
             COMPTABILITE.caisseActivites[actId].equipementB = (COMPTABILITE.caisseActivites[actId].equipementB || 0) + 1;
             
             // État reçoit
-            COMPTABILITE.etat.tresor += cout;
+            COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) + cout);
             COMPTABILITE.etat.recettes.total = (COMPTABILITE.etat.recettes.total || 0) + cout;
             
             // Écriture 1: Joueur
@@ -4798,7 +4798,7 @@ function isAbsent(player) {
             COMPTABILITE.caisseActivites[actId].equipementA = (COMPTABILITE.caisseActivites[actId].equipementA || 0) + 1;
             
             // État reçoit la différence
-            COMPTABILITE.etat.tresor += cout;
+            COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) + cout);
             COMPTABILITE.etat.recettes.total = (COMPTABILITE.etat.recettes.total || 0) + cout;
             
             // Écriture 1: Joueur - Conversion
@@ -4946,9 +4946,9 @@ activiteId: actId
 
             
             // ========== État reçoit la TVA ==========
-            COMPTABILITE.etat.tresor += montantTVA;
+            COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) + montantTVA);
             COMPTABILITE.etat.recettes.tva += montantTVA;
-            COMPTABILITE.etat.recettes.total += montantTVA;
+            COMPTABILITE.etat.recettes.total = arrondir2((COMPTABILITE.etat.recettes.total || 0) + montantTVA);
             COMPTABILITE.etat.grandLivre[500] += montantTVA;
             COMPTABILITE.etat.grandLivre[704] += montantTVA;
             
@@ -5700,8 +5700,8 @@ activiteId: actId
             initCaisseJoueur(joueurId);
             
             COMPTABILITE.caisseJoueurs[joueurId].euro -= montant;
-            COMPTABILITE.etat.tresor += montant;
-            COMPTABILITE.etat.taxesRecues += montant;
+            COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) + montant);
+            COMPTABILITE.etat.taxesRecues = arrondir2((COMPTABILITE.etat.taxesRecues || 0) + montant);
             
             return enregistrerEcriture({
                 joueurId, libelle: `Taxe 10%`,
@@ -5815,7 +5815,7 @@ activiteId: actId
             if (paye > 0) {
                 caisse.euro -= paye;
                 caisse.taxesPayees = (caisse.taxesPayees || 0) + paye;
-                COMPTABILITE.etat.tresor += paye;
+                COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) + paye);
                 COMPTABILITE.etat.taxesRecues = (COMPTABILITE.etat.taxesRecues || 0) + paye;
                 COMPTABILITE.etat.recettes.taxe = (COMPTABILITE.etat.recettes.taxe || 0) + paye;
                 COMPTABILITE.etat.recettes.total = (COMPTABILITE.etat.recettes.total || 0) + paye;
@@ -5890,10 +5890,10 @@ activiteId: actId
             if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
             
             // État reçoit 100% (HT + TVA)
-            COMPTABILITE.etat.tresor += montant;
+            COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) + montant);
             COMPTABILITE.etat.recettes.tva += facture.tva;
             COMPTABILITE.etat.recettes.frais += facture.ht;
-            COMPTABILITE.etat.recettes.total += montant;
+            COMPTABILITE.etat.recettes.total = arrondir2((COMPTABILITE.etat.recettes.total || 0) + montant);
             COMPTABILITE.etat.grandLivre[500] += montant;
             COMPTABILITE.etat.grandLivre[704] += facture.tva;
             COMPTABILITE.etat.grandLivre[702] += facture.ht;
@@ -5968,7 +5968,7 @@ activiteId: actId
             if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
             
             // 2. État paie depuis son trésor
-            COMPTABILITE.etat.tresor -= montant;
+            COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) - montant);
             COMPTABILITE.etat.depenses.total += montant;
             COMPTABILITE.etat.grandLivre[500] -= montant;
             COMPTABILITE.etat.grandLivre[658] = (COMPTABILITE.etat.grandLivre[658] || 0) + montant;
@@ -9957,9 +9957,9 @@ function initSystemeDe() {
             COMPTABILITE.caisseJoueurs[vendeurId].euro += prixVente;
             
             // État reçoit les droits
-            COMPTABILITE.etat.tresor += droits;
+            COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) + droits);
             COMPTABILITE.etat.recettes.droits += droits;
-            COMPTABILITE.etat.recettes.total += droits;
+            COMPTABILITE.etat.recettes.total = arrondir2((COMPTABILITE.etat.recettes.total || 0) + droits);
             COMPTABILITE.etat.grandLivre[500] += droits;
             COMPTABILITE.etat.grandLivre[705] += droits;
             
@@ -11472,7 +11472,7 @@ function initSystemeDe() {
                 maCaisse.euro -= resteEnEuro;
                 COMPTABILITE.caisseJoueurs[ownerId].euro += Math.round(resteEnEuro / 1.21 * 100) / 100; // HT
                 const tvaReste = resteEnEuro - Math.round(resteEnEuro / 1.21 * 100) / 100;
-                COMPTABILITE.etat.tresor += tvaReste;
+                COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) + tvaReste);
                 sendSystemMessage(`⚠️ Complément ${fmt(resteEnEuro)}€ (découvert)`);
             }
             
@@ -12582,7 +12582,7 @@ function initSystemeDe() {
                 const decouvert = Math.abs(soldeExport);
                 
                 // L'État comble le découvert
-                COMPTABILITE.etat.tresor -= decouvert;
+                COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) - decouvert);
                 COMPTABILITE.etat.depenses.comblementExport += decouvert;
                 COMPTABILITE.etat.depenses.total += decouvert;
                 COMPTABILITE.etat.grandLivre[500] -= decouvert;
@@ -12714,7 +12714,7 @@ function initSystemeDe() {
                         
                         // MAJ État
                         COMPTABILITE.etat.dette.capital += manque;
-                        COMPTABILITE.etat.tresor += manque;
+                        COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) + manque);
                         COMPTABILITE.etat.grandLivre[500] += manque;
                         COMPTABILITE.etat.grandLivre[165] += manque;
                         
@@ -12731,7 +12731,7 @@ function initSystemeDe() {
                     }
                     
                     // Paiement des intérêts - côté État
-                    COMPTABILITE.etat.tresor -= interets;
+                    COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) - interets);
                     COMPTABILITE.etat.depenses.interets += interets;
                     COMPTABILITE.etat.depenses.total += interets;
                     COMPTABILITE.etat.dette.interetsCumules += interets;
@@ -13508,7 +13508,7 @@ function initSystemeDe() {
                                 caisse.euro -= resteEuro;
                                 const montantHT = Math.round(resteEuro / 1.21 * 100) / 100;
                                 COMPTABILITE.caisseJoueurs[owner].euro += montantHT;
-                                COMPTABILITE.etat.tresor += (resteEuro - montantHT);
+                                COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) + (resteEuro - montantHT));
                             }
                             // Skip tour + compteur
                             const skipSnap = await gameRef.child(`skipTurns/${botId}`).once('value');
@@ -15924,6 +15924,25 @@ function initSystemeDe() {
         // ========== INFO CASE ==========
         async function showCaseInfo(caseId) {
             const c = CASES[caseId];
+            
+            // ═══ CASE COLLECTIVE : affichage spécifique ═══
+            const cc = casesCollectives[caseId];
+            if (cc) {
+                const facture = collectifCalculerFacture(caseId, []);
+                const inflStats = getInflationStats();
+                showModal(`
+                    <h3>${cc.icon} ${cc.nom} <span style="background:#FDDB31;padding:2px 6px;border-radius:4px;font-size:0.7rem;">AAA COLLECTIF</span></h3>
+                    <div style="background:#fefce8;padding:10px;border-radius:8px;margin:8px 0;border-left:4px solid #FDDB31;">
+                        <p style="margin:0;"><strong>Propriétaire :</strong> Pot AAA (collectif)</p>
+                        <p style="margin:4px 0;"><strong>Prix d'achat :</strong> ${cc.prix}€</p>
+                        <p style="margin:4px 0;"><strong>Facture passage :</strong> ${facture.toFixed(2)}# <span style="font-size:0.8rem;color:#6b7280;">(base -20%${cc.equipements > 0 ? ', équip. -30%×' + cc.equipements : ''}, inflation +${inflStats.inflationPct}%)</span></p>
+                        <p style="margin:4px 0;"><strong>Équipements :</strong> ${cc.equipements || 0}/3</p>
+                        <p style="margin:4px 0;font-size:0.8rem;color:#059669;">💚 Les recettes vont dans le Pot AAA pour financer d'autres projets collectifs.</p>
+                    </div>
+                `, `<button class="btn btn-secondary" onclick="closeModal()">Fermer</button>`);
+                return;
+            }
+            
             if (!c || c.type !== 'activite') {
                 showModal(`<h3>${c.icon} ${c.name}</h3><p>${c.type}</p>`,
                     `<button class="btn btn-secondary" onclick="closeModal()">Fermer</button>`);
