@@ -1,4 +1,4 @@
- <!-- V3(11) TEST - Build 171 - index-128-11 -->
+ <!-- V3(1) TEST - Build 171 - index-128-11 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -4412,6 +4412,7 @@ function isAbsent(player) {
             if (montantHT > 0) {
                 COMPTABILITE.caisseJoueurs[proprietaireId].revenusDepuisPassage = 
                     arrondir2((COMPTABILITE.caisseJoueurs[proprietaireId].revenusDepuisPassage || 0) + montantHT);
+                console.log(`🏛️ REVENUS ACCUMULÉS: ${playersData[proprietaireId]?.name || proprietaireId} +${montantHT.toFixed(2)}€ → total=${COMPTABILITE.caisseJoueurs[proprietaireId].revenusDepuisPassage.toFixed(2)}€`);
             }
             
             // MAJ caisse activité (statistiques)
@@ -8223,7 +8224,10 @@ function initSystemeDe() {
             
             // ═══ TAXE 20% SUR REVENUS D'ACTIVITÉS ═══
             // Prélevée AVANT le salaire (sur les revenus du cycle précédent)
+            const _revDebug = COMPTABILITE.caisseJoueurs[myPlayerId]?.revenusDepuisPassage || 0;
+            console.log(`🏛️ TAXE REVENUS DEBUG: joueur=${myName} revenusDepuisPassage=${_revDebug}€`);
             const taxeRevenusResult = await comptaTaxeRevenus(myPlayerId);
+            console.log(`🏛️ TAXE REVENUS RÉSULTAT: revenus=${taxeRevenusResult.revenus} taxe=${taxeRevenusResult.taxe} paye=${taxeRevenusResult.paye}`);
             if (taxeRevenusResult.paye > 0) {
                 sendSystemMessage(`🏛️ ${myName} : taxe 20% sur ${taxeRevenusResult.revenus.toFixed(2)}€ de revenus → -${taxeRevenusResult.paye.toFixed(2)}€`);
             }
