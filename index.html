@@ -1500,8 +1500,11 @@
                 }
                 
                 // Proposition équipement collectif (si < 3)
+                console.log(`🔧 EQUIP CHECK: equipements=${cc.equipements || 0} < 3 ? ${(cc.equipements || 0) < 3} | achatEnCours=${achatCollectifEnCours}`);
                 if ((cc.equipements || 0) < 3) {
+                    console.log(`🔧 EQUIP: appel proposerEquipementCollectif(${caseId}, ${joueurId})`);
                     await proposerEquipementCollectif(caseId, joueurId);
+                    console.log(`🔧 EQUIP: proposerEquipementCollectif terminé`);
                 }
             } else {
                 // Bot : travail coopératif
@@ -8537,6 +8540,7 @@ async function effectuerDeplacement(joueur, valeurDe, sens) {
     console.log(`📍 ARRIVEE: ${joueur.name} case=${posArrivee} passage=${passageDepart} isMe=${joueur.id === myPlayerId}`);
     if (passageDepart && joueur.id === myPlayerId) {
         // Passage Ligne 1 pour joueur humain : salaire + intérêts + remboursement + recap modal
+        // → handleLanding est appelé par le bouton OK du modal salaire
         console.log(`💰 → handleSalary pour ${joueur.name}`);
         const currentPlayer = playersData[joueur.id] || joueur;
         await handleSalary(currentPlayer, valeurDe, posArrivee);
@@ -9219,6 +9223,7 @@ function initSystemeDe() {
         
         // ========== ARRIVÉE SUR CASE ==========
         async function handleLanding(position) {
+            console.log(`📍 handleLanding APPELÉ: position=${position} type=${CASES[position]?.type} collectif=${collectifEstCollective(position)}`);
             const c = CASES[position];
             // Recharger la comptabilité depuis Firebase (évite soldes stale en multijoueur)
             await loadComptabiliteFromFirebase();
@@ -9234,7 +9239,9 @@ function initSystemeDe() {
                 
                 // ═══ ACTIVITÉ COLLECTIVE : passage dessus ═══
                 if (collectifEstCollective(position)) {
+                    console.log(`🏗️ COLLECTIF PASSAGE: case ${position} détectée comme collective`);
                     await handleCollectifPassage(position, myPlayerId);
+                    console.log(`🏗️ COLLECTIF PASSAGE: handleCollectifPassage terminé`);
                     nextTurn();
                     return;
                 }
