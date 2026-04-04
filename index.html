@@ -1475,7 +1475,6 @@
             const canPay = espoyrDispo >= facture;
             
             if (joueurId === myPlayerId) {
-                // Joueur humain : modal avec choix
                 const accepte = await new Promise(resolve => {
                     showModal(`
                         <h3>${cc.icon} ${cc.nom} — Activité collective</h3>
@@ -1499,13 +1498,116 @@
                 } else {
                     sendSystemMessage(`${playersData[joueurId]?.name} passe devant ${cc.icon} ${cc.nom} sans s'arrêter.`);
                 }
+                
+                // Proposition équipement collectif (si < 3)
+                if ((cc.equipements || 0) < 3) {
+                    await proposerEquipementCollectif(caseId, joueurId);
+                }
             } else {
-                // Bot : accepte si assez de #
+                // Bot : travail coopératif
                 if (canPay) {
                     const result = await collectifPayerFacture(joueurId, caseId);
                     await db.ref(`parties/${currentGameCode}/players/${joueurId}/espoyr`).set(caisse.espoyr);
                     sendSystemMessage(`🤝 ${playersData[joueurId]?.name} travaille à ${cc.icon} ${cc.nom} (${result.paye.toFixed(2)}#)`);
                 }
+                // Bot : proposition équipement (profils coopératif/solidaire/investisseur)
+                if ((cc.equipements || 0) < 3) {
+                    const botProfil = (playersData[joueurId]?.profil || 'EQUILIBRE').toUpperCase();
+                    if (['COOPERATIF','SOLIDAIRE','INVESTISSEUR','EQUILIBRE'].includes(botProfil)) {
+                        await proposerEquipementCollectif(caseId, joueurId);
+                    }
+                }
+            }
+        }
+        
+        // ═══ ÉQUIPEMENT COLLECTIF — Même mécanisme 2 pots que l'achat ═══
+        async function proposerEquipementCollectif(caseId, declencheurId) {
+            if (achatCollectifEnCours) return;
+            const cc = casesCollectives[caseId];
+            if (!cc || (cc.equipements || 0) >= 3) return;
+            
+            const prixEquip = Math.floor((cc.prix || CONFIG.collectifPrixDefaut) * 0.50);
+            const factureAvant = collectifCalculerFacture(caseId, []);
+            const factureApres = arrondir2(factureAvant * (gameConfig.collectifEquipReduction ?? CONFIG.collectifEquipReduction));
+            
+            // Humain : demander confirmation
+            if (declencheurId === myPlayerId) {
+                const veut = await new Promise(resolve => {
+                    showModal(`
+                        <h3>🔧 Équipement collectif — ${cc.icon} ${cc.nom}</h3>
+                        <p>Équipements : <strong>${cc.equipements || 0}/3</strong></p>
+                        <p>Chaque équipement réduit la facture de <strong>30%</strong> pour tous.</p>
+                        <div style="background:#f0fdf4;padding:8px;border-radius:8px;margin:8px 0;">
+                            <p style="margin:0;">Prix : <strong>${prixEquip}€</strong> (financement collectif, compensé en #)</p>
+                            <p style="margin:4px 0 0;font-size:0.85rem;">Facture : ${factureAvant.toFixed(2)}# → <strong style="color:#059669;">${factureApres.toFixed(2)}#</strong></p>
+                        </div>
+                    `, `
+                        <button class="btn btn-primary" onclick="closeModal();window._collectifEquipResolve(true);">🔧 Investir</button>
+                        <button class="btn btn-secondary" onclick="closeModal();window._collectifEquipResolve(false);">Non merci</button>
+                    `);
+                    window._collectifEquipResolve = resolve;
+                });
+                delete window._collectifEquipResolve;
+                if (!veut) return;
+            }
+            
+            achatCollectifEnCours = true;
+            try {
+                const players = Object.values(playersData).filter(p => !p.faillite);
+                const joueursData = players.map(p => ({
+                    id: p.id,
+                    euro: COMPTABILITE.caisseJoueurs[p.id]?.euro || 0,
+                    espoyr: COMPTABILITE.caisseJoueurs[p.id]?.espoyr || 0,
+                    richesse: collectifRichesseJoueur(p.id),
+                }));
+                const potAAASolde = COMPTABILITE.potAAA?.solde || 0;
+                const resultat = collectifCalculerContributions(prixEquip, joueursData, potAAASolde);
+                
+                // Exécuter (mêmes écritures que l'achat collectif)
+                for (const c of resultat.contributions) {
+                    if (c.partPayable > 0) {
+                        COMPTABILITE.caisseJoueurs[c.joueurId].euro = arrondir2(COMPTABILITE.caisseJoueurs[c.joueurId].euro - c.partPayable);
+                        enregistrerEcriture({ joueurId: c.joueurId, libelle: `Contribution équip. ${cc.nom} (${c.partPayable.toFixed(2)}€)`, compteDebit: 260, compteCredit: 500, montantEuro: c.partPayable, contexte: 'collectif_equip' });
+                    }
+                }
+                for (const comp of resultat.compensations) {
+                    if (comp.hashCompense > 0) {
+                        COMPTABILITE.caisseJoueurs[comp.joueurId].espoyr = arrondir2((COMPTABILITE.caisseJoueurs[comp.joueurId].espoyr || 0) + comp.hashCompense);
+                        COMPTABILITE.potAAA.solde = arrondir2((COMPTABILITE.potAAA.solde || 0) - comp.hashCompense);
+                        enregistrerEcriture({ joueurId: comp.joueurId, libelle: `Compensation équip. ${cc.nom} (${comp.hashCompense.toFixed(2)}#)`, compteDebit: 501, compteCredit: 468, montantEspoyr: comp.hashCompense, contexte: 'collectif_equip' });
+                        enregistrerEcriture({ joueurId: 'POT_AAA', libelle: `Comp. équip. ${comp.joueurId} (${comp.hashCompense.toFixed(2)}#)`, compteDebit: 671, compteCredit: 580, montantEspoyr: comp.hashCompense, contexte: 'collectif_equip' });
+                    }
+                }
+                for (const compl of resultat.complementHash) {
+                    if (compl.montantHash > 0) {
+                        COMPTABILITE.caisseJoueurs[compl.joueurId].espoyr = arrondir2((COMPTABILITE.caisseJoueurs[compl.joueurId].espoyr || 0) - compl.montantHash);
+                        enregistrerEcriture({ joueurId: compl.joueurId, libelle: `Complément # équip. ${cc.nom} (${compl.montantHash.toFixed(2)}#)`, compteDebit: 260, compteCredit: 501, montantEspoyr: compl.montantHash, contexte: 'collectif_equip' });
+                    }
+                }
+                if (resultat.taxesPayables > 0) {
+                    COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) + resultat.taxesPayables);
+                    COMPTABILITE.etat.taxesRecues = arrondir2((COMPTABILITE.etat.taxesRecues || 0) + resultat.taxesPayables);
+                    COMPTABILITE.etat.recettes.total = arrondir2((COMPTABILITE.etat.recettes.total || 0) + resultat.taxesPayables);
+                    if (COMPTABILITE.caisseJoueurs['ETAT']) COMPTABILITE.caisseJoueurs['ETAT'].euro = COMPTABILITE.etat.tresor;
+                    enregistrerEcriture({ joueurId: 'ETAT', libelle: `Droits équip. ${cc.nom} (${resultat.taxesPayables.toFixed(2)}€)`, compteDebit: 500, compteCredit: 704, montantEuro: resultat.taxesPayables, contexte: 'collectif_equip' });
+                }
+                
+                // Incrémenter équipement
+                cc.equipements = (cc.equipements || 0) + 1;
+                await gameRef.child(`casesCollectives/${caseId}/equipements`).set(cc.equipements);
+                
+                // Sync
+                for (const c of resultat.contributions) {
+                    const caisse = COMPTABILITE.caisseJoueurs[c.joueurId];
+                    await db.ref(`parties/${currentGameCode}/players/${c.joueurId}/euro`).set(caisse.euro);
+                    await db.ref(`parties/${currentGameCode}/players/${c.joueurId}/espoyr`).set(caisse.espoyr);
+                }
+                await syncComptabiliteToFirebase();
+                updateBoard();
+                
+                sendSystemMessage(`🔧 ${cc.icon} ${cc.nom} — équipement collectif ${cc.equipements}/3 installé ! Facture réduite de 30%.`);
+            } finally {
+                achatCollectifEnCours = false;
             }
         }
 
