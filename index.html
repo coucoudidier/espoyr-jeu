@@ -1225,7 +1225,7 @@
                 if (c.partPayable > 0) {
                     const caisse = COMPTABILITE.caisseJoueurs[c.joueurId];
                     caisse.euro = arrondir2(caisse.euro - c.partPayable);
-                    enregistrerEcriture({ joueurId: c.joueurId, libelle: `Contribution collective ${nomActivite} (${c.partPayable.toFixed(2)}€)`, compteDebit: 261, compteCredit: 500, montantEuro: c.partPayable, contexte: 'collectif_achat' });
+                    enregistrerEcriture({ joueurId: c.joueurId, libelle: `Contribution collective ${nomActivite} (${c.partPayable.toFixed(2)}€)`, compteDebit: 260, compteCredit: 500, montantEuro: c.partPayable, contexte: 'collectif_achat' });
                 }
             }
             
@@ -1243,7 +1243,7 @@
             for (const compl of resultat.complementHash) {
                 if (compl.montantHash > 0) {
                     COMPTABILITE.caisseJoueurs[compl.joueurId].espoyr = arrondir2((COMPTABILITE.caisseJoueurs[compl.joueurId].espoyr || 0) - compl.montantHash);
-                    enregistrerEcriture({ joueurId: compl.joueurId, libelle: `Complément # collectif ${nomActivite} (${compl.montantHash.toFixed(2)}#)`, compteDebit: 261, compteCredit: 501, montantEspoyr: compl.montantHash, contexte: 'collectif_complement' });
+                    enregistrerEcriture({ joueurId: compl.joueurId, libelle: `Complément # collectif ${nomActivite} (${compl.montantHash.toFixed(2)}#)`, compteDebit: 260, compteCredit: 501, montantEspoyr: compl.montantHash, contexte: 'collectif_complement' });
                 }
             }
             
