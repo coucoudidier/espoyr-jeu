@@ -1,4 +1,4 @@
- <!-- V3(128-11-4) TEST - Build 171 - index-128-11 -->
+ <!-- V3(1) TEST - Build 171 - index-128-11 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -12562,6 +12562,7 @@ function initSystemeDe() {
             
             // Salaire
             if (passedStart) {
+                console.log(`🏁 BOT PASSAGE L1: ${bot.name} id=${bot.id} pos=${bot.position}→${newPosition} dé=${dice}`);
                 const phase = gameState.phase || 1;
                 const deSalaire = Math.floor(Math.random() * 6) + 1;
                 const botProfil = bot.profil || 'contributif';
@@ -12605,7 +12606,10 @@ function initSystemeDe() {
                 }
                 
                 // ═══ TAXE 20% SUR REVENUS D'ACTIVITÉS (bot) ═══
+                const _botRevDebug = COMPTABILITE.caisseJoueurs[bot.id]?.revenusDepuisPassage || 0;
+                console.log(`🏛️ BOT TAXE DEBUG: ${bot.name} id=${bot.id} revenusDepuisPassage=${_botRevDebug} passedStart=${passedStart}`);
                 const taxeRevBot = await comptaTaxeRevenus(bot.id);
+                console.log(`🏛️ BOT TAXE RÉSULTAT: ${bot.name} revenus=${taxeRevBot.revenus} taxe=${taxeRevBot.taxe} paye=${taxeRevBot.paye}`);
                 if (taxeRevBot.paye > 0) {
                     sendSystemMessage(`🏛️ ${bot.name} : taxe 20% sur ${taxeRevBot.revenus.toFixed(2)}€ → -${taxeRevBot.paye.toFixed(2)}€`);
                 }
