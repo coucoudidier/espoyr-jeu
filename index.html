@@ -1270,7 +1270,15 @@
             COMPTABILITE.caisseActivites[caseId].proprietaireId = 'POT_AAA';
             COMPTABILITE.caisseActivites[caseId].capital = prix;
             
-            // 7. Sync Firebase
+            // 7. Sync Firebase — COMPTABILITE d'abord pour éviter que les listeners écrasent les valeurs
+            // Forcer la cohérence etat.tresor ↔ caisseJoueurs.ETAT si ce dernier existe
+            if (COMPTABILITE.caisseJoueurs['ETAT']) {
+                COMPTABILITE.caisseJoueurs['ETAT'].euro = COMPTABILITE.etat.tresor || 0;
+            }
+            
+            await syncComptabiliteToFirebase();
+            
+            // Puis écrire les données Firebase spécifiques
             await gameRef.child(`casesCollectives/${caseId}`).set(casesCollectives[caseId]);
             await gameRef.child(`activites/${caseId}`).set('POT_AAA');
             
@@ -1280,8 +1288,6 @@
                 await db.ref(`parties/${currentGameCode}/players/${c.joueurId}/euro`).set(caisse.euro);
                 await db.ref(`parties/${currentGameCode}/players/${c.joueurId}/espoyr`).set(caisse.espoyr);
             }
-            
-            await syncComptabiliteToFirebase();
             updateBoard();
             
             sendSystemMessage(`🏗️ ${iconInfo.icon} ${iconInfo.nom} — activité collective créée sur la case ${caseId} !`);
