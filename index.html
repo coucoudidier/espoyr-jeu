@@ -487,7 +487,10 @@
                         </div>
                         <div id="diceMessage" style="font-size: 0.9rem;">En attente...</div>
                         <div class="dice" id="dice">🎲</div>
-                        <button class="btn btn-orange" id="rollDiceBtn" onclick="rollDice()">🎲 Lancer</button>
+                        <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+                            <button class="btn btn-orange" id="rollDiceBtn" onclick="rollDice()">🎲 Lancer</button>
+                            <span id="inflationIndicator" style="font-size: 0.8rem; cursor: pointer; padding: 4px 8px; border-radius: 6px; background: #f3f4f6; display: none;" onclick="showInflationModal()">📈 +0% →</span>
+                        </div>
                     </div>
                     
                     <!-- ACTIONS RAPIDES -->
@@ -799,7 +802,16 @@
         }
         
         // Calcul facture = 5% du total investi (activité + tous équipements)
-        function calculerFactureActivite(caseId, equipList) {
+        // ═══ INFLATION — Fonctions de calcul ═══
+        
+        // Facteur d'inflation basé sur le tour actuel
+        function getFacteurInflation() {
+            const tour = gameState?.toursComplets || gameState?.turn || 1;
+            return 1 + (tour * inflationTauxActuel);
+        }
+        
+        // Facture de base (sans inflation) = % du total investi
+        function getFactureBase(caseId, equipList) {
             const c = CASES[caseId];
             if (!c || c.type !== 'activite') return 0;
             
@@ -807,11 +819,83 @@
             const nbB = (equipList || []).filter(e => e === 'B').length;
             
             let totalInvesti = c.prix;
-            if (nbA > 0) totalInvesti += getPrixA(caseId);           // 1er A à 70%
-            if (nbA > 1) totalInvesti += getPrixB(caseId) * (nbA - 1); // A suivants à 50%
-            totalInvesti += getPrixB(caseId) * nbB;                    // tous les B à 50%
+            if (nbA > 0) totalInvesti += getPrixA(caseId);
+            if (nbA > 1) totalInvesti += getPrixB(caseId) * (nbA - 1);
+            totalInvesti += getPrixB(caseId) * nbB;
             
-            return Math.floor(totalInvesti * 0.05);
+            const basePct = gameConfig.factureBasePct ?? CONFIG.factureBasePct ?? 0.15;
+            return Math.floor(totalInvesti * basePct);
+        }
+        
+        // Facture avec inflation appliquée
+        function calculerFactureActivite(caseId, equipList) {
+            const base = getFactureBase(caseId, equipList);
+            const facteur = getFacteurInflation();
+            return Math.max(1, Math.floor(base * facteur));
+        }
+        
+        // Stats inflation complètes (pour affichage + modal)
+        function getInflationStats() {
+            const tour = gameState?.toursComplets || gameState?.turn || 1;
+            const facteur = getFacteurInflation();
+            const inflationPct = Math.round((facteur - 1) * 100);
+            
+            // Tendance (flèche)
+            let tendance = '→';  // stable
+            const diff = inflationTauxActuel - inflationTauxPrecedent;
+            if (diff > 0.005) tendance = '↑';       // monte
+            else if (diff > 0.001) tendance = '↗';  // monte doucement
+            else if (diff < -0.005) tendance = '↓'; // baisse
+            else if (diff < -0.001) tendance = '↘'; // baisse doucement
+            
+            // Couleur selon le niveau
+            let couleur = '#059669'; // vert
+            if (inflationPct > 100) couleur = '#dc2626';      // rouge
+            else if (inflationPct > 50) couleur = '#d97706';   // orange
+            else if (inflationPct > 20) couleur = '#ca8a04';   // jaune
+            
+            // Pouvoir d'achat
+            const actOwners = COMPTABILITE?.caisseActivites || {};
+            const factures = Object.keys(actOwners)
+                .filter(id => actOwners[id]?.proprietaireId)
+                .map(id => calculerFactureActivite(parseInt(id), []));
+            const facMoyenne = factures.length > 0 ? factures.reduce((a,b) => a+b, 0) / factures.length : 0;
+            const pouvoirAchat = facMoyenne > 0 ? arrondir2(CONFIG.salaireBase / facMoyenne) : 99;
+            
+            return {
+                tour, facteur, inflationPct, tendance, couleur,
+                tauxActuel: inflationTauxActuel,
+                facMoyenne: arrondir2(facMoyenne),
+                pouvoirAchat,
+            };
+        }
+        
+        // Adaptation dynamique du taux (appelée toutes les 4 tours)
+        function adapterInflation() {
+            if (!(gameConfig.inflationAdaptive ?? CONFIG.inflationAdaptive)) return;
+            
+            const tour = gameState?.toursComplets || gameState?.turn || 1;
+            if (tour - inflationDernierAjustement < 4) return;
+            
+            const stats = getInflationStats();
+            const paMin = gameConfig.inflationPACibleMin ?? CONFIG.inflationPACibleMin ?? 3;
+            const paMax = gameConfig.inflationPACibleMax ?? CONFIG.inflationPACibleMax ?? 8;
+            
+            inflationTauxPrecedent = inflationTauxActuel;
+            
+            // Vérifier faillites imminentes
+            const nbEnDifficulte = Object.values(COMPTABILITE.caisseJoueurs || {})
+                .filter(c => (c.euro || 0) < -200).length;
+            
+            if (stats.pouvoirAchat < paMin || nbEnDifficulte > 0) {
+                // Trop d'inflation → freiner
+                inflationTauxActuel = Math.max(0.005, inflationTauxActuel * 0.85);
+            } else if (stats.pouvoirAchat > paMax && (gameState?.phase || 1) === 1) {
+                // Pas assez d'inflation en Phase 1 → accélérer
+                inflationTauxActuel = Math.min(0.10, inflationTauxActuel * 1.15);
+            }
+            
+            inflationDernierAjustement = tour;
         }
         
         // Combinaisons valides : nbA >= nbB, max 3 total
@@ -1046,6 +1130,12 @@
             phase3_passagesMin: 12,      // Passages Ligne 1 avant Phase 3
             phase3_tauxEmploiMin: 50,    // % emploi en dessous duquel Phase 3 se déclenche
             phase3_detteMax: 1500,       // Dette totale au-dessus de laquelle Phase 3 se déclenche
+            // ═══ INFLATION — Indexation des factures ═══
+            factureBasePct: 0.15,        // Facture de base = 15% du prix activité (au lieu de 5%)
+            inflationParTour: 0.03,      // +3% par tour
+            inflationAdaptive: true,     // Ajustement dynamique toutes les 4 tours
+            inflationPACibleMin: 3,      // Pouvoir d'achat cible minimum
+            inflationPACibleMax: 8,      // Pouvoir d'achat cible maximum
             // Timings (en secondes) - paramétrables par l'host
             timingDecision: 60,      // Temps pour décider (acheter/passer) - 1 minute
             timingEnchere: 60,       // Temps par tour d'enchère
@@ -1082,6 +1172,11 @@
         let gameRef = null;
         let gameState = null;
         let playersData = {};
+
+        // ═══ ÉTAT INFLATION ═══
+        let inflationTauxActuel = 0.03;    // Taux courant (peut être ajusté)
+        let inflationTauxPrecedent = 0.03; // Pour calculer la tendance (flèche)
+        let inflationDernierAjustement = 0; // Tour du dernier ajustement
 
         // ========== REPRISE / TICKET JOUEUR (A+B) ==========
         const RESUME_KEY_PREFIX = 'ESPOYR_RESUME_';
@@ -3232,6 +3327,8 @@ function isAbsent(player) {
                     interetsPayes: 0,
                     taxesPayees: 0,
                     redistributionsRecues: 0,
+                    revenusDepuisPassage: 0,  // Revenus € d'activités depuis dernier passage L1
+                    taxeRevenusCumul: 0,      // Cumul des taxes sur revenus payées
                     journal: []
                 };
             }
@@ -3243,6 +3340,9 @@ function isAbsent(player) {
             if (c.interetsPayes === undefined) c.interetsPayes = 0;
             if (c.taxesPayees === undefined) c.taxesPayees = 0;
             if (c.redistributionsRecues === undefined) c.redistributionsRecues = 0;
+            // Taxe sur revenus d'activités (migration)
+            if (c.revenusDepuisPassage === undefined) c.revenusDepuisPassage = 0;
+            if (c.taxeRevenusCumul === undefined) c.taxeRevenusCumul = 0;
             // Biens personnels et arriérés (migration)
             if (c.impaye === undefined) c.impaye = 0;
             if (!c.biensPersonnels) c.biensPersonnels = [];
@@ -4308,6 +4408,12 @@ function isAbsent(player) {
             COMPTABILITE.caisseJoueurs[proprietaireId].espoyr += montantEspoyr;
             COMPTABILITE.caisseJoueurs[proprietaireId].facturesRecues += montantHT;  // Cumul propriétaire
             
+            // ═══ TAXE REVENUS : Accumuler les revenus € pour taxation au passage L1 ═══
+            if (montantHT > 0) {
+                COMPTABILITE.caisseJoueurs[proprietaireId].revenusDepuisPassage = 
+                    arrondir2((COMPTABILITE.caisseJoueurs[proprietaireId].revenusDepuisPassage || 0) + montantHT);
+            }
+            
             // MAJ caisse activité (statistiques)
             COMPTABILITE.caisseActivites[actId].recettes += total;
             
@@ -5133,6 +5239,69 @@ activiteId: actId
                 joueurId, libelle: `Taxe 10%`,
                 compteDebit: 635, compteCredit: 500, montantEuro: montant
             });
+        }
+        
+        // ═══ TAXE 20% SUR REVENUS D'ACTIVITÉS ═══
+        // Prélevée au passage Ligne 1 sur les € encaissés depuis le dernier passage
+        // Joueur: D:635 (Impôts sur revenus)  C:500 (Caisse -)
+        // État:   D:500 (Caisse État +)        C:704 (Recettes impôts)
+        async function comptaTaxeRevenus(joueurId) {
+            initCaisseJoueur(joueurId);
+            const caisse = COMPTABILITE.caisseJoueurs[joueurId];
+            const revenus = arrondir2(caisse.revenusDepuisPassage || 0);
+            
+            if (revenus <= 0) return { taxe: 0, paye: 0, impaye: 0, revenus: 0 };
+            
+            const taxe = arrondir2(revenus * 0.20);
+            const ledgerEntryIds = [];
+            
+            // Le joueur paie ce qu'il peut
+            const paye = arrondir2(Math.min(taxe, Math.max(0, caisse.euro)));
+            
+            if (paye > 0) {
+                // 1. Joueur paie — arrondir2 sur TOUS les résultats
+                caisse.euro = arrondir2(caisse.euro - paye);
+                caisse.taxesPayees = arrondir2((caisse.taxesPayees || 0) + paye);
+                caisse.taxeRevenusCumul = arrondir2((caisse.taxeRevenusCumul || 0) + paye);
+                
+                let e = enregistrerEcriture({
+                    joueurId,
+                    libelle: `Taxe 20% revenus activités (${paye.toFixed(2)}€ sur ${revenus.toFixed(2)}€)`,
+                    compteDebit: 635,   // Impôts et taxes (charge +)
+                    compteCredit: 500,  // Caisse joueur (actif -)
+                    montantEuro: paye,
+                    contexte: 'taxe_revenus'
+                });
+                if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
+                
+                // 2. État reçoit — MÊME montant paye, arrondir2 sur résultats
+                COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) + paye);
+                COMPTABILITE.etat.taxesRecues = arrondir2((COMPTABILITE.etat.taxesRecues || 0) + paye);
+                COMPTABILITE.etat.recettes.total = arrondir2((COMPTABILITE.etat.recettes.total || 0) + paye);
+                COMPTABILITE.etat.grandLivre[500] = arrondir2((COMPTABILITE.etat.grandLivre[500] || 0) + paye);
+                COMPTABILITE.etat.grandLivre[704] = arrondir2((COMPTABILITE.etat.grandLivre[704] || 0) + paye);
+                
+                e = enregistrerEcriture({
+                    joueurId: 'ETAT',
+                    libelle: `Taxe revenus ${playersData[joueurId]?.name || joueurId} (${paye.toFixed(2)}€)`,
+                    compteDebit: 500,   // Caisse État (actif +)
+                    compteCredit: 704,  // Recettes impôts (produit +)
+                    montantEuro: paye,
+                    contexte: 'etat'
+                });
+                if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
+            }
+            
+            // Impayé → arriérés si pas assez
+            const impaye = arrondir2(taxe - paye);
+            if (impaye > 0) {
+                caisse.impaye = arrondir2((caisse.impaye || 0) + impaye);
+            }
+            
+            // Reset compteur revenus
+            caisse.revenusDepuisPassage = 0;
+            
+            return { taxe, paye, impaye, revenus, ledgerEntryIds };
         }
         
         // Calculer le patrimoine d'un joueur (valeur activités + équipements, hors cash)
@@ -6374,6 +6543,15 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             // S'assurer que tous les joueurs ont leur comptabilité initialisée
             await loadComptabiliteFromFirebase();
             
+            // ═══ AUTO-CALIBRATION INFLATION selon nb joueurs ═══
+            // Plus de joueurs = plus de passages/tour → base plus basse
+            const basePctParJoueurs = { 2: 0.20, 3: 0.17, 4: 0.15, 5: 0.13, 6: 0.12 };
+            gameConfig.factureBasePct = basePctParJoueurs[nbJoueurs] ?? (0.20 / Math.max(1, nbJoueurs / 2));
+            inflationTauxActuel = gameConfig.inflationParTour ?? CONFIG.inflationParTour ?? 0.03;
+            inflationTauxPrecedent = inflationTauxActuel;
+            inflationDernierAjustement = 0;
+            console.log(`📈 Inflation calibrée: base ${(gameConfig.factureBasePct*100).toFixed(0)}%, taux ${(inflationTauxActuel*100).toFixed(1)}%/tour (${nbJoueurs} joueurs)`);
+            
             // Vérifier et initialiser la comptabilité de chaque joueur
             // SÉCURITÉ: uniquement si la caisse n'existe pas du tout (jamais initialisée)
             // Ne PAS réinitialiser si euro === 0 (joueur qui a tout dépensé)
@@ -6637,7 +6815,7 @@ Conserve ce fichier pour rejoindre la partie en cas de déconnexion.`;
                         <select id="configPhase2Passages" style="width: 100%; padding: 8px; margin-top: 4px;">
                             ${[4, 6, 8, 10, 12, 15].map(v => `<option value="${v}" ${v === (gameConfig.phase2_passagesMin ?? CONFIG.phase2_passagesMin) ? 'selected' : ''}>${v} passages</option>`).join('')}
                         </select>
-                        <p style="font-size: 0.75rem; color: #6b7280;">Nombre de passages avant que l'érosion commence</p>
+                        <p style="font-size: 0.75rem; color: #6b7280;">Nombre de passages avant que l'inflation s'accélère</p>
                     </div>
                     
                     <div>
@@ -6825,6 +7003,93 @@ Conserve ce fichier pour rejoindre la partie en cas de déconnexion.`;
         }
         
         // ========== UI JEU ==========
+        // ═══ AFFICHAGE INFLATION (à côté du dé) ═══
+        function updateInflationDisplay() {
+            const el = document.getElementById('inflationIndicator');
+            if (!el) return;
+            
+            const stats = getInflationStats();
+            
+            if (stats.inflationPct <= 0) {
+                el.style.display = 'none';
+                return;
+            }
+            
+            el.style.display = 'inline-block';
+            el.style.color = stats.couleur;
+            el.style.borderLeft = `3px solid ${stats.couleur}`;
+            el.innerHTML = `📈 +${stats.inflationPct}% ${stats.tendance}`;
+            el.title = `Inflation: +${stats.inflationPct}% | Facture moy: ${stats.facMoyenne}€ | PA: ${stats.pouvoirAchat} — Cliquer pour détails`;
+        }
+        
+        function showInflationModal() {
+            const stats = getInflationStats();
+            const basePct = Math.round((gameConfig.factureBasePct ?? CONFIG.factureBasePct) * 100);
+            const nbJoueurs = Object.keys(playersData).length;
+            
+            // Exemples de factures concrètes
+            const exemples = [
+                { nom: 'Coiffeur', prix: 160 },
+                { nom: 'Boulangerie', prix: 200 },
+                { nom: 'Restaurant', prix: 280 },
+                { nom: 'Ferme', prix: 350 },
+            ].map(ex => {
+                const base = Math.floor(ex.prix * (gameConfig.factureBasePct ?? CONFIG.factureBasePct));
+                const indexee = Math.max(1, Math.floor(base * stats.facteur));
+                return `<tr><td>${ex.nom} (${ex.prix}€)</td><td style="text-align:right">${base}€</td><td style="text-align:right;font-weight:bold;color:${stats.couleur}">${indexee}€</td></tr>`;
+            }).join('');
+            
+            // Facteurs qui font monter/baisser
+            const facteurs = `
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:10px 0;">
+                    <div style="background:#fef2f2; padding:8px; border-radius:6px;">
+                        <p style="margin:0; font-weight:bold; color:#dc2626;">↑ Ce qui fait monter</p>
+                        <p style="margin:4px 0 0; font-size:0.8rem;">• Chaque tour : +${(inflationTauxActuel*100).toFixed(1)}%</p>
+                        <p style="margin:2px 0 0; font-size:0.8rem;">• Plus de joueurs = plus de circulation</p>
+                        <p style="margin:2px 0 0; font-size:0.8rem;">• Emprunts → masse monétaire ↑</p>
+                    </div>
+                    <div style="background:#f0fdf4; padding:8px; border-radius:6px;">
+                        <p style="margin:0; font-weight:bold; color:#059669;">↓ Ce qui freine</p>
+                        <p style="margin:4px 0 0; font-size:0.8rem;">• Adaptation auto si PA < ${CONFIG.inflationPACibleMin}</p>
+                        <p style="margin:2px 0 0; font-size:0.8rem;">• Espoyr # réduisent la pression €</p>
+                        <p style="margin:2px 0 0; font-size:0.8rem;">• Faillites → taux freiné</p>
+                    </div>
+                </div>`;
+            
+            showModal(`
+                <h3>📈 Indicateurs économiques — Tour ${stats.tour}</h3>
+                
+                <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:10px 0;">
+                    <div style="background:#f9fafb; padding:10px; border-radius:8px; text-align:center;">
+                        <div style="font-size:0.75rem; color:#6b7280;">Inflation</div>
+                        <div style="font-size:1.4rem; font-weight:bold; color:${stats.couleur};">+${stats.inflationPct}%</div>
+                        <div style="font-size:1rem;">${stats.tendance}</div>
+                    </div>
+                    <div style="background:#f9fafb; padding:10px; border-radius:8px; text-align:center;">
+                        <div style="font-size:0.75rem; color:#6b7280;">Pouvoir d'achat</div>
+                        <div style="font-size:1.4rem; font-weight:bold;">${stats.pouvoirAchat}</div>
+                        <div style="font-size:0.7rem; color:#6b7280;">salaire / facture</div>
+                    </div>
+                    <div style="background:#f9fafb; padding:10px; border-radius:8px; text-align:center;">
+                        <div style="font-size:0.75rem; color:#6b7280;">Taux/tour</div>
+                        <div style="font-size:1.4rem; font-weight:bold;">${(inflationTauxActuel*100).toFixed(1)}%</div>
+                        <div style="font-size:0.7rem; color:#6b7280;">auto: ${nbJoueurs}j → base ${basePct}%</div>
+                    </div>
+                </div>
+                
+                <table style="width:100%; font-size:0.85rem; border-collapse:collapse; margin:8px 0;">
+                    <tr style="background:#f3f4f6;"><th style="text-align:left;padding:4px;">Activité</th><th style="text-align:right;padding:4px;">Base</th><th style="text-align:right;padding:4px;">Indexée</th></tr>
+                    ${exemples}
+                </table>
+                
+                ${facteurs}
+                
+                <p style="font-size:0.75rem; color:#9ca3af; margin:8px 0 0; text-align:center;">
+                    Salaire fixe ${CONFIG.salaireBase}€ — Les prix montent, pas les revenus.
+                </p>
+            `, `<button class="btn btn-secondary" onclick="closeModal()">Fermer</button>`);
+        }
+        
         function updateGameUI() {
             if (!gameState) return;
             
@@ -6834,6 +7099,9 @@ Conserve ce fichier pour rejoindre la partie en cas de déconnexion.`;
             const phaseEl = document.getElementById('phaseNumber');
             phaseEl.textContent = phase;
             phaseEl.style.color = { 1: '#10b981', 2: '#f59e0b', 3: '#ef4444' }[phase];
+            
+            // ═══ Mise à jour indicateur inflation ═══
+            updateInflationDisplay();
             
             // Indicateur du sens de déplacement
             const sensEl = document.getElementById('sensIndicator');
@@ -7902,29 +8170,19 @@ function initSystemeDe() {
                 pourcentage = SALARY_CONTRIBUTIF[deSalaire] || 1;  // Toujours 100%
             }
             salaire = Math.floor(salaire * pourcentage);
-            salaireAvantErosion = salaire;  // Garder pour calcul complément
+            salaireAvantErosion = salaire;
             
-            // Érosion phases 2 et 3
-            if (phase >= 2) {
-                const passagesP2 = (player.passagesDepuisPhase2 || 0) + 1;
-                const facteurErosion = Math.pow(0.92, passagesP2);
-                salaire = Math.floor(salaire * facteurErosion);
-                
-                await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/passagesDepuisPhase2`).set(passagesP2);
-                
-                if (phase === 3) {
-                    salaire = Math.floor(salaire * 0.80);
-                }
-            }
-            
-            salaire = Math.max(100, salaire);
+            // ═══ SALAIRE FIXE — Plus d'érosion salariale ═══
+            // L'inflation est sur les FACTURES, pas sur les salaires
+            // (supprimé: facteurErosion, phase 3 ×0.80)
             
             // ========== COMPLÉMENT AAA EN # ==========
-            // Si membre AAA et en Phase 2+, compensation de l'érosion en #
+            // Si membre AAA et en Phase 2+, bonus # pour compenser l'inflation des factures
             const isMembre = COMPTABILITE.potAAA.membres?.includes(myPlayerId);
             if (isMembre && phase >= 2) {
-                // Complément = perte due à l'érosion
-                complementAAA = Math.max(0, salaireAvantErosion - salaire);
+                // Complément = estimation de la perte de pouvoir d'achat due à l'inflation
+                const inflStats = getInflationStats();
+                complementAAA = Math.max(0, Math.floor(salaire * Math.min(0.30, inflStats.inflationPct / 200)));
                 
                 // Vérifier que le Pot AAA a assez
                 const potDisponible = COMPTABILITE.potAAA.solde || 0;
@@ -7961,6 +8219,13 @@ function initSystemeDe() {
                     await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/espoyr`)
                         .set(COMPTABILITE.caisseJoueurs[myPlayerId].espoyr);
                 }
+            }
+            
+            // ═══ TAXE 20% SUR REVENUS D'ACTIVITÉS ═══
+            // Prélevée AVANT le salaire (sur les revenus du cycle précédent)
+            const taxeRevenusResult = await comptaTaxeRevenus(myPlayerId);
+            if (taxeRevenusResult.paye > 0) {
+                sendSystemMessage(`🏛️ ${myName} : taxe 20% sur ${taxeRevenusResult.revenus.toFixed(2)}€ de revenus → -${taxeRevenusResult.paye.toFixed(2)}€`);
             }
             
             // Comptabilité salaire €
@@ -8138,11 +8403,27 @@ function initSystemeDe() {
                     </p>
                 </div>`;
             
-            // --- Érosion ---
-            if (phase >= 2) {
+            // --- Taxe 20% revenus activités ---
+            if (taxeRevenusResult.revenus > 0) {
                 modalHtml += `
-                    <div style="background: #fef3c7; padding: 8px; border-radius: 8px; margin-bottom: 8px;">
-                        <span style="color: #b45309;">⚠️ Phase ${phase} : érosion ${fmt(salaireAvantErosion)}€ → ${fmt(salaire)}€</span>
+                    <div style="background: #f3e8ff; padding: 10px; border-radius: 8px; margin-bottom: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>🏛️ <strong>Taxe revenus</strong> (20%)</span>
+                            <span style="font-size: 1.1rem; font-weight: bold; color: #7c3aed;">-${taxeRevenusResult.paye.toFixed(2)}€</span>
+                        </div>
+                        <p style="margin: 4px 0 0 0; font-size: 0.8rem; color: #6b7280;">
+                            Revenus depuis dernier passage : ${taxeRevenusResult.revenus.toFixed(2)}€ × 20% = ${taxeRevenusResult.taxe.toFixed(2)}€
+                            ${taxeRevenusResult.impaye > 0 ? ` <span style="color:#dc2626;">(impayé: ${taxeRevenusResult.impaye.toFixed(2)}€ → arriérés)</span>` : ''}
+                        </p>
+                    </div>`;
+            }
+            
+            // --- Inflation ---
+            const _inflStats = getInflationStats();
+            if (_inflStats.inflationPct > 0) {
+                modalHtml += `
+                    <div style="background: #fef3c7; padding: 8px; border-radius: 8px; margin-bottom: 8px; cursor: pointer;" onclick="closeModal(); showInflationModal();">
+                        <span style="color: #b45309;">📈 Inflation +${_inflStats.inflationPct}% ${_inflStats.tendance} — Facture moy. ${_inflStats.facMoyenne}€ (cliquer pour détails)</span>
                     </div>`;
             }
             
@@ -8204,7 +8485,7 @@ function initSystemeDe() {
                             <span style="font-weight: bold; color: #059669;">${LOGO_AAA} Complément AAA</span>
                             <span style="font-weight: bold; color: #059669;">+${fmt(complementAAA)}#</span>
                         </div>
-                        <p style="margin: 2px 0 0 0; font-size: 0.8rem; color: #6b7280;">Solidarité : compensation de l'érosion</p>
+                        <p style="margin: 2px 0 0 0; font-size: 0.8rem; color: #6b7280;">Solidarité : compensation de l'inflation</p>
                     </div>`;
             }
             if (isMembre && phase >= 2 && complementAAA === 0) {
@@ -8327,7 +8608,7 @@ function initSystemeDe() {
             
             if (phase === 1 && passagesTotal >= seuilPhase2) {
                 await gameRef.child('state/phase').set(2);
-                sendSystemMessage(`📊 PHASE 2 ! L'érosion commence... (${passagesTotal} passages Ligne 1)`);
+                sendSystemMessage(`📊 PHASE 2 ! L'inflation s'accélère — les prix des factures augmentent (${passagesTotal} passages Ligne 1)`);
             } else if (phase === 2 && (tauxEmploi < seuilPhase3Emploi || detteTotale > seuilPhase3Dette || passagesTotal >= seuilPhase3Passages)) {
                 await gameRef.child('state/phase').set(3);
                 sendSystemMessage(`🌍 PHASE 3 ! Effondrement...`);
@@ -8413,7 +8694,7 @@ function initSystemeDe() {
                     <p style="margin: 2px 0 0 0;">🛰️ Hors circuit : ${partHorsCircuit.toFixed(2)}€ (économie spéculative / importation)</p>
                 </div>
                 
-                <p><strong>Facture/passage :</strong> ${fmt(calculerFactureActivite(c.id, []))}€ <span style="font-size:0.8rem; color:#6b7280;">(5% de ${fmt(c.prix)}€)</span></p>
+                <p><strong>Facture/passage :</strong> ${fmt(calculerFactureActivite(c.id, []))}€ <span style="font-size:0.8rem; color:#6b7280;">(base ${Math.round((gameConfig.factureBasePct ?? 0.15)*100)}% + inflation ${getInflationStats().inflationPct}%)</span></p>
                 <hr style="margin: 10px 0;">
                 <p>Tu as : <strong>${fmt(currentEuro)}€</strong></p>
                 ${!canBuy ? '<p style="color: #ef4444;">❌ Pas assez</p>' : ''}
@@ -8748,7 +9029,7 @@ function initSystemeDe() {
                 <div id="modalTimer" style="text-align: center; margin-bottom: 10px;"></div>
                 <h3>${c.icon} ${c.name} - Ta propriété</h3>
                 <p><strong>Équipements :</strong> ${equipDisplay} (${total}/3 max)</p>
-                <p><strong>Facture actuelle :</strong> ${fmt(factureActuelle)}€ <span style="font-size:0.8rem; color:#6b7280;">(5% de ${fmt(Math.floor(factureActuelle / 0.05))}€ investi)</span></p>
+                <p><strong>Facture actuelle :</strong> ${fmt(factureActuelle)}€ <span style="font-size:0.8rem; color:#6b7280;">(base ${fmt(getFactureBase(c.id, equipList))}€ + inflation ${getInflationStats().inflationPct}%)</span></p>
                 <p>Tu as : <strong>${fmt(currentEuro)}€</strong></p>
                 <hr style="margin: 10px 0;">
                 ${buttonsHtml}
@@ -9537,9 +9818,11 @@ function initSystemeDe() {
             const prixPersoSnap = await gameRef.child(`prixPersonnalises/${c.id}`).once('value');
             const prixPerso = prixPersoSnap.val();
             
-            // Calcul facture = 5% du total investi (activité + tous équipements)
+            // Calcul facture = base indexée à l'inflation
             const factureBase = calculerFactureActivite(c.id, equipTypes);
             const facture = prixPerso !== null ? prixPerso : factureBase;
+            const factureHorsInflation = getFactureBase(c.id, equipTypes);
+            const inflPct = getInflationStats().inflationPct;
             
             // Message visible par tous — le propriétaire sait qu'un modal est ouvert
             sendSystemMessage(`⏳ ${myName} doit payer ${fmt(facture)}€ à ${ownerPlayer?.name} (${c.icon} ${c.name}) — en attente de sa décision...`);
@@ -9564,7 +9847,8 @@ function initSystemeDe() {
                 <div style="background: #f3f4f6; padding: 10px; border-radius: 8px; margin: 10px 0;">
                     <p style="margin: 0;"><strong>Facture :</strong> <span style="font-size: 1.2rem; color: #dc2626;">${fmt(facture)}€</span></p>
                     ${prixPerso !== null ? `<p style="margin: 4px 0 0 0; font-size: 0.8rem; color: #6b7280;">(Prix ajusté, base: ${fmt(factureBase)}€)</p>` : ''}
-                    ${equipTypes.length > 0 ? `<p style="margin: 4px 0 0 0; font-size: 0.8rem;">Équipements: <strong>${equipTypes.join('+')}</strong> (5% total investi)</p>` : ''}
+                    ${inflPct > 0 ? `<p style="margin: 4px 0 0 0; font-size: 0.8rem; color: #b45309;">📈 Base ${fmt(factureHorsInflation)}€ + inflation ${inflPct}% = ${fmt(factureBase)}€</p>` : ''}
+                    ${equipTypes.length > 0 ? `<p style="margin: 4px 0 0 0; font-size: 0.8rem;">Équipements: <strong>${equipTypes.join('+')}</strong></p>` : ''}
                 </div>
                 
                 <div style="background: #dbeafe; padding: 10px; border-radius: 8px; margin: 10px 0;">
@@ -11275,19 +11559,24 @@ function initSystemeDe() {
         async function handleFrais(c) {
             const soldeBefore = COMPTABILITE.caisseJoueurs[myPlayerId]?.euro || 0;
             
+            // ═══ Frais indexés à l'inflation ═══
+            const coutIndexe = Math.max(1, Math.floor(c.cout * getFacteurInflation()));
+            
             // ========== ÉTAPE 3 : Affichage facture avant paiement ==========
-            // Calculer la facture pour affichage
-            const facturePreview = calculerFacture('frais', c.cout);
+            const facturePreview = calculerFacture('frais', coutIndexe);
             const factureHTML = genererHTMLFacture(facturePreview, `${c.icon} ${c.name}`);
             
-            // Afficher le modal avec facture (obligatoire, pas d'annulation)
+            const inflInfo = getInflationStats().inflationPct > 0 
+                ? `<p style="font-size:0.75rem; color:#b45309; margin:4px 0 0;">📈 Base ${c.cout}€ + inflation ${getInflationStats().inflationPct}% = ${coutIndexe}€</p>` : '';
+            
             showModal(`
                 <h3>${c.icon} ${c.name}</h3>
                 <p style="font-size: 0.9rem; color: #6b7280; font-style: italic; margin: 6px 0 10px 0;">
                     ${c.description || ''}
                 </p>
                 ${factureHTML}
-            `, `<button class="btn btn-primary" onclick="confirmerPaiementFrais('${c.id}', ${c.cout}, '${c.name}', '${c.icon}')">Payer ${c.cout}€</button>`);
+                ${inflInfo}
+            `, `<button class="btn btn-primary" onclick="confirmerPaiementFrais('${c.id}', ${coutIndexe}, '${c.name}', '${c.icon}')">Payer ${fmt(coutIndexe)}€</button>`);
         }
         
         // Fonction de confirmation du paiement des frais
@@ -11594,6 +11883,9 @@ function initSystemeDe() {
         async function handleLigne2(c) {
             const players = Object.values(playersData);
             
+            // ═══ Frais indexés à l'inflation ═══
+            const coutIndexe = Math.max(1, Math.floor(c.cout * getFacteurInflation()));
+            
             // Charger la comptabilité la plus récente depuis Firebase
             await ensurePlayerComptaLoaded();
             
@@ -11601,34 +11893,29 @@ function initSystemeDe() {
             const playerEffects = [];
             
             for (const p of players) {
-                // S'assurer que la caisse du joueur existe avec le bon solde
                 if (!COMPTABILITE.caisseJoueurs[p.id]) {
                     initCaisseJoueur(p.id);
                     COMPTABILITE.caisseJoueurs[p.id].euro = p.euro || CONFIG.capitalInitial;
-                    console.log(`⚠️ Caisse joueur ${p.name} initialisée avec ${COMPTABILITE.caisseJoueurs[p.id].euro}€`);
                 }
                 
                 const soldeBefore = COMPTABILITE.caisseJoueurs[p.id].euro;
-                const result = await comptaFrais(p.id, c.cout, c.name);
+                const result = await comptaFrais(p.id, coutIndexe, c.name);
                 if (result?.ledgerEntryIds) ledgerEntryIds.push(...result.ledgerEntryIds);
                 
                 const soldeAfter = COMPTABILITE.caisseJoueurs[p.id].euro;
-                playerEffects.push({ playerId: p.id, name: p.name, before: soldeBefore, after: soldeAfter, paid: c.cout });
+                playerEffects.push({ playerId: p.id, name: p.name, before: soldeBefore, after: soldeAfter, paid: coutIndexe });
                 
                 await db.ref(`parties/${currentGameCode}/players/${p.id}/euro`).set(soldeAfter);
             }
             await syncComptabiliteToFirebase();
             
-            // LOG EVENT: LINE_2_FEE
             logEvent('LINE_2_FEE', myPlayerId, {
-                caseId: c.id,
-                caseName: c.name,
-                amount: c.cout,
-                playersAffected: playerEffects.length,
-                effects: playerEffects
+                caseId: c.id, caseName: c.name,
+                amount: coutIndexe, baseAmount: c.cout,
+                playersAffected: playerEffects.length, effects: playerEffects
             }, ledgerEntryIds);
             
-            sendSystemMessage(`${c.icon} ${c.name} ! Tout le monde paie ${fmt(c.cout)}€`);
+            sendSystemMessage(`${c.icon} ${c.name} ! Tout le monde paie ${fmt(coutIndexe)}€`);
             
             // Afficher le modal avec un timer qui passe au tour suivant automatiquement
             let countdown = 3;
@@ -11639,7 +11926,7 @@ function initSystemeDe() {
                 <p style="font-size: 0.9rem; color: #6b7280; font-style: italic; margin: 4px 0 8px 0;">
                     ${c.description || ''}
                 </p>
-                <p>Tous les joueurs paient <strong>${fmt(c.cout)}€</strong></p>
+                <p>Tous les joueurs paient <strong>${fmt(coutIndexe)}€</strong>${getInflationStats().inflationPct > 0 ? ` <span style="font-size:0.8rem;color:#b45309;">(base ${c.cout}€ + inflation)</span>` : ''}</p>
                 <div style="background: #fef3c7; padding: 10px; border-radius: 8px; margin: 10px 0;">
                     ${playerEffects.map(e => `<p style="margin: 3px 0;">${playersData[e.playerId]?.avatar || '👤'} ${e.name}: ${fmt(e.before)}€ → ${fmt(e.after)}€</p>`).join('')}
                 </div>
@@ -11757,6 +12044,9 @@ function initSystemeDe() {
             
             // 5. Vérification spirale de dette
             await verifierSpiraleEtat();
+            
+            // 6. Adaptation dynamique de l'inflation
+            adapterInflation();
             
             await syncComptabiliteToFirebase();
         }
@@ -12280,25 +12570,14 @@ function initSystemeDe() {
                 let salaire = Math.floor(CONFIG.salaireBase * pourcentage);
                 const salaireAvantErosion = salaire;
                 
-                // Érosion phases 2 et 3 (comme pour les joueurs humains)
-                if (phase >= 2) {
-                    const passagesP2 = (bot.passagesDepuisPhase2 || 0) + 1;
-                    const facteurErosion = Math.pow(0.92, passagesP2);
-                    salaire = Math.floor(salaire * facteurErosion);
-                    
-                    await db.ref(`parties/${currentGameCode}/players/${bot.id}/passagesDepuisPhase2`).set(passagesP2);
-                    
-                    if (phase === 3) {
-                        salaire = Math.floor(salaire * 0.80);
-                    }
-                }
-                
-                salaire = Math.max(100, salaire);
+                // ═══ SALAIRE FIXE — Plus d'érosion salariale ═══
+                // L'inflation est sur les FACTURES, pas sur les salaires
                 
                 // Complément AAA pour les bots membres
                 let complementAAA = 0;
                 if (isMembre && phase >= 2) {
-                    complementAAA = Math.max(0, salaireAvantErosion - salaire);
+                    const inflStats = getInflationStats();
+                    complementAAA = Math.max(0, Math.floor(salaire * Math.min(0.30, inflStats.inflationPct / 200)));
                     const potDisponible = COMPTABILITE.potAAA.solde || 0;
                     complementAAA = Math.min(complementAAA, potDisponible);
                     
@@ -12319,6 +12598,12 @@ function initSystemeDe() {
                         await db.ref(`parties/${currentGameCode}/players/${bot.id}/espoyr`)
                             .set(COMPTABILITE.caisseJoueurs[bot.id].espoyr);
                     }
+                }
+                
+                // ═══ TAXE 20% SUR REVENUS D'ACTIVITÉS (bot) ═══
+                const taxeRevBot = await comptaTaxeRevenus(bot.id);
+                if (taxeRevBot.paye > 0) {
+                    sendSystemMessage(`🏛️ ${bot.name} : taxe 20% sur ${taxeRevBot.revenus.toFixed(2)}€ → -${taxeRevBot.paye.toFixed(2)}€`);
                 }
                 
                 await comptaSalaire(bot.id, salaire, deSalaire);
@@ -12453,7 +12738,7 @@ function initSystemeDe() {
                 if (complementAAA > 0) {
                     sendSystemMessage(`💰 ${bot.name} reçoit ${fmt(salaire)}€ + ${LOGO_AAA}${fmt(complementAAA)}# (complément AAA)`);
                 } else {
-                    sendSystemMessage(`💰 ${bot.name} reçoit ${fmt(salaire)}€${phase >= 2 ? ' (érosion)' : ''}`);
+                    sendSystemMessage(`💰 ${bot.name} reçoit ${fmt(salaire)}€`);
                 }
             }
             
@@ -12774,7 +13059,9 @@ function initSystemeDe() {
                     await syncComptabiliteToFirebase();
                 }
             } else if (c.type === 'frais' || c.type === 'ligne2') {
-                const cout = c.cout || 50;
+                // ═══ Frais indexés à l'inflation ═══
+                const coutBase = c.cout || 50;
+                const cout = Math.max(1, Math.floor(coutBase * getFacteurInflation()));
                 if (c.type === 'ligne2') {
                     const players = Object.values(playersData);
                     for (const p of players) {
@@ -13163,6 +13450,19 @@ function initSystemeDe() {
                 commentaires.push(`🌍 L'Exportation est à découvert de ${fmt(Math.abs(soldeExport))}€. Les salaires créatifs sont payés à crédit — qui comble ce trou ?`);
             }
             
+            // ── 8b. Inflation et pouvoir d'achat ──
+            const inflStats = getInflationStats();
+            if (inflStats.inflationPct > 5) {
+                const pa = inflStats.pouvoirAchat;
+                if (pa < 4) {
+                    commentaires.push(`📈 Inflation : +${inflStats.inflationPct}% ${inflStats.tendance} — Les prix ont presque doublé. Un salaire de ${CONFIG.salaireBase}€ n'achète plus que ${pa.toFixed(1)} factures moyennes. Sans monnaie complémentaire (#), le système étouffe.`);
+                } else if (pa < 8) {
+                    commentaires.push(`📈 Inflation : +${inflStats.inflationPct}% ${inflStats.tendance} — Le pouvoir d'achat diminue. Facture moyenne : ${inflStats.facMoyenne}€ (contre ${Math.round(inflStats.facMoyenne / inflStats.facteur)}€ au départ).`);
+                } else {
+                    commentaires.push(`📈 Inflation : +${inflStats.inflationPct}% — Les prix commencent à monter.`);
+                }
+            }
+            
             // ── 9. Évolution vs bilan précédent ──
             const bilanPrec = historiqueBilans.length > 1 ? historiqueBilans[historiqueBilans.length - 2] : null;
             if (bilanPrec) {
@@ -13266,6 +13566,22 @@ function initSystemeDe() {
                     </p>
                 </div>
             `;
+            
+            // ═══ Indicateurs inflation ═══
+            const _inflBilan = getInflationStats();
+            const inflationHtml = _inflBilan.inflationPct > 0 ? `
+                <div style="background: #fef3c7; padding: 8px; border-radius: 6px; margin-bottom: 10px; cursor: pointer;" onclick="closeModal(); showInflationModal();">
+                    <p style="margin: 0; font-size: 0.9rem;">
+                        📈 <strong>Inflation :</strong> +${_inflBilan.inflationPct}% ${_inflBilan.tendance}
+                        <span style="color: ${_inflBilan.couleur};">
+                            | Taux: ${(_inflBilan.tauxActuel*100).toFixed(1)}%/tour
+                            | Facture moy: ${_inflBilan.facMoyenne}€
+                            | PA: ${_inflBilan.pouvoirAchat}
+                        </span>
+                    </p>
+                    <p style="margin: 2px 0 0; font-size: 0.75rem; color: #92400e;">Cliquer pour détails</p>
+                </div>
+            ` : '';
             
             const bilanBanque = `
                 <tr>
@@ -13373,6 +13689,7 @@ function initSystemeDe() {
             showModal(`
                 <h3>📊 Bilan Économique - Tour ${bilan.tour}</h3>
                 ${tendanceHtml}
+                ${inflationHtml}
                 <table class="bilan-table">
                     <thead>
                         <tr>
@@ -15130,9 +15447,9 @@ function initSystemeDe() {
                     <div style="background: #f3f4f6; padding: 10px; border-radius: 8px;">
                         <p style="font-weight: bold; margin: 0 0 8px 0;">📊 Informations</p>
                         <p style="margin: 4px 0;"><strong>Prix achat :</strong> ${fmt(c.prix)}€</p>
-                        <p style="margin: 4px 0;"><strong>Facture base :</strong> ${fmt(calculerFactureActivite(caseId, []))}€ (5% de ${fmt(c.prix)}€)</p>
+                        <p style="margin: 4px 0;"><strong>Facture base :</strong> ${fmt(calculerFactureActivite(caseId, []))}€ (base ${Math.round((gameConfig.factureBasePct ?? 0.15)*100)}% + inflation ${getInflationStats().inflationPct}%)</p>
                         <p style="margin: 4px 0;"><strong>Équipements :</strong> ${equipDisplay}</p>
-                        <p style="margin: 4px 0; font-size: 1.1rem;"><strong>Facture actuelle :</strong> <span style="color: #059669;">${fmt(factureActuelle)}€</span> <span style="font-size:0.8rem;">(5% total investi)</span></p>
+                        <p style="margin: 4px 0; font-size: 1.1rem;"><strong>Facture actuelle :</strong> <span style="color: #059669;">${fmt(factureActuelle)}€</span> <span style="font-size:0.8rem;">(base + inflation)</span></p>
                     </div>
                     
                     <!-- Bilan en format horizontal -->
@@ -15669,7 +15986,7 @@ function initSystemeDe() {
                     <ul style="font-size: 0.9rem;">
                         <li>À chaque lancé de ton dé, 50# sont ajoutés au pot commun AAA pour soutenir les services communs et les investissements utiles à tous.</li>
                         <li>Demander un crédit en # (0%, validé par les membres)</li>
-                        <li>Complément de salaire en # si érosion (Phase 2+)</li>
+                        <li>Complément en # pour compenser l'inflation (Phase 2+)</li>
                         <li>Aide en cas de faillite</li>
                     </ul>
                 `, `<button class="btn btn-primary" onclick="closeModal()">OK</button>`);
@@ -15691,7 +16008,7 @@ function initSystemeDe() {
                         <ul style="font-size:0.85rem; margin:0; padding-left:20px;">
                             <li>À chaque lancé de ton dé, 50# sont ajoutés au pot commun AAA pour soutenir les services communs et les investissements utiles à tous.</li>
                             <li>Demander un crédit en # (0%, validé par les membres)</li>
-                            <li>Complément de salaire en # si érosion (Phase 2+)</li>
+                            <li>Complément en # pour compenser l'inflation (Phase 2+)</li>
                             <li>Aide en cas de faillite (dette annulée + prêt de relance)</li>
                         </ul>
                         <p style="margin:8px 0 0 0; color:#059669; font-weight:bold;">Adhésion gratuite et libre !</p>
@@ -15890,7 +16207,7 @@ function initSystemeDe() {
             
             let html = `<h3>🔧 Équipements</h3>
                 <p>Tu as : <strong>${fmt(currentEuro)}€</strong> | Phase ${phase}</p>
-                <p style="font-size:0.8rem; color:#6b7280;">💡 Investir A = compensation en # | Facture = 5% total investi</p>`;
+                <p style="font-size:0.8rem; color:#6b7280;">💡 Investir A = compensation en # | Facture = base indexée à l'inflation</p>`;
             
             for (const actId of mesActivites) {
                 const c = CASES[actId];
