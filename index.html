@@ -7483,6 +7483,7 @@ Conserve ce fichier pour rejoindre la partie en cas de déconnexion.`;
             if (!el) return;
             
             const stats = getInflationStats();
+            const tauxParTour = arrondir2(inflationTauxActuel * 100); // 3% par tour
             
             if (stats.inflationPct <= 0) {
                 el.style.display = 'none';
@@ -7492,8 +7493,8 @@ Conserve ce fichier pour rejoindre la partie en cas de déconnexion.`;
             el.style.display = 'inline-block';
             el.style.color = stats.couleur;
             el.style.borderLeft = `3px solid ${stats.couleur}`;
-            el.innerHTML = `📈 +${stats.inflationPct}% ${stats.tendance}`;
-            el.title = `Inflation: +${stats.inflationPct}% | Facture moy: ${stats.facMoyenne}€ | PA: ${stats.pouvoirAchat} — Cliquer pour détails`;
+            el.innerHTML = `📈 ${tauxParTour}%/tour ${stats.tendance}`;
+            el.title = `Taux: ${tauxParTour}%/tour | Cumulé: +${stats.inflationPct}% | Facture moy: ${stats.facMoyenne}€ | PA: ${stats.pouvoirAchat} — Cliquer pour détails`;
         }
         
         function showInflationModal() {
