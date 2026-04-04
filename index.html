@@ -1,4 +1,4 @@
- <!-- V3(1) TEST - Build 172 - index-128-11 -->
+ <!-- V3(1) TEST - Build 173 - index-128-11 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -1323,7 +1323,7 @@
             
             // Pot AAA reçoit
             COMPTABILITE.potAAA.solde = arrondir2((COMPTABILITE.potAAA.solde || 0) + paye);
-            enregistrerEcriture({ joueurId: 'POT_AAA', libelle: `Recette ${cc.nom} (${paye.toFixed(2)}#)`, compteDebit: 580, compteCredit: 706, montantEspoyr: paye, contexte: 'collectif_facture' });
+            enregistrerEcriture({ joueurId: 'POT_AAA', libelle: `Recette ${cc.nom} (${paye.toFixed(2)}#)`, compteDebit: 580, compteCredit: 135, montantEspoyr: paye, contexte: 'collectif_facture' });
             
             await syncComptabiliteToFirebase();
             return { facture, paye };
@@ -1500,11 +1500,8 @@
                 }
                 
                 // Proposition équipement collectif (si < 3)
-                console.log(`🔧 EQUIP CHECK: equipements=${cc.equipements || 0} < 3 ? ${(cc.equipements || 0) < 3} | achatEnCours=${achatCollectifEnCours}`);
                 if ((cc.equipements || 0) < 3) {
-                    console.log(`🔧 EQUIP: appel proposerEquipementCollectif(${caseId}, ${joueurId})`);
                     await proposerEquipementCollectif(caseId, joueurId);
-                    console.log(`🔧 EQUIP: proposerEquipementCollectif terminé`);
                 }
             } else {
                 // Bot : travail coopératif
@@ -6147,6 +6144,12 @@ activiteId: actId
             // pour éviter les conflits entre joueurs
             try {
                 reconcilierSoldes(); // Toujours réconcilier avant de pousser
+                
+                // ═══ Sync ETAT: caisseJoueurs['ETAT'] ↔ etat.tresor ═══
+                if (COMPTABILITE.caisseJoueurs['ETAT']) {
+                    COMPTABILITE.etat.tresor = COMPTABILITE.caisseJoueurs['ETAT'].euro || 0;
+                }
+                
                 await gameRef.child('comptabilite').set(COMPTABILITE);
                 console.log('✅ Comptabilité synchronisée');
                 updateMyBalance(); // MAJ affichage solde
@@ -7931,7 +7934,7 @@ if (isMyTurn) {
                         ${cc ? '<span style="position:absolute;top:1px;right:1px;font-size:0.5rem;background:#FDDB31;border-radius:2px;padding:0 2px;">AAA</span>' : ''}
                         <span class="case-icon">${caseIcon}</span>
                         <span class="case-name">${caseName}</span>
-                        ${c.prix ? `<span class="case-price">${fmt(c.prix)}€ ${equipIndicator}</span>` : (cc ? `<span class="case-price">${fmt(cc.prix)}€</span>` : '')}
+                        ${c.prix ? `<span class="case-price">${fmt(c.prix)}€ ${equipIndicator}</span>` : (cc ? `<span class="case-price">${fmt(cc.prix)}€${(cc.equipements || 0) > 0 ? ' <span style="background:#059669;color:white;padding:1px 3px;border-radius:3px;font-size:0.6rem;font-weight:bold;">E' + cc.equipements + '</span>' : ''}</span>` : '')}
                         ${(ownerPlayer && !cc) ? `<span class="owner-indicator">${ownerPlayer.avatar}</span>` : ''}
                         ${playersHere.length > 0 ? `
                             <div class="players-on-case">
@@ -8537,11 +8540,9 @@ async function effectuerDeplacement(joueur, valeurDe, sens) {
     }
 
     // ── Traiter la case d'arrivée ──
-    console.log(`📍 ARRIVEE: ${joueur.name} case=${posArrivee} passage=${passageDepart} isMe=${joueur.id === myPlayerId}`);
     if (passageDepart && joueur.id === myPlayerId) {
         // Passage Ligne 1 pour joueur humain : salaire + intérêts + remboursement + recap modal
         // → handleLanding est appelé par le bouton OK du modal salaire
-        console.log(`💰 → handleSalary pour ${joueur.name}`);
         const currentPlayer = playersData[joueur.id] || joueur;
         await handleSalary(currentPlayer, valeurDe, posArrivee);
     } else {
@@ -9223,7 +9224,6 @@ function initSystemeDe() {
         
         // ========== ARRIVÉE SUR CASE ==========
         async function handleLanding(position) {
-            console.log(`📍 handleLanding APPELÉ: position=${position} type=${CASES[position]?.type} collectif=${collectifEstCollective(position)}`);
             const c = CASES[position];
             // Recharger la comptabilité depuis Firebase (évite soldes stale en multijoueur)
             await loadComptabiliteFromFirebase();
@@ -9239,9 +9239,7 @@ function initSystemeDe() {
                 
                 // ═══ ACTIVITÉ COLLECTIVE : passage dessus ═══
                 if (collectifEstCollective(position)) {
-                    console.log(`🏗️ COLLECTIF PASSAGE: case ${position} détectée comme collective`);
                     await handleCollectifPassage(position, myPlayerId);
-                    console.log(`🏗️ COLLECTIF PASSAGE: handleCollectifPassage terminé`);
                     nextTurn();
                     return;
                 }
