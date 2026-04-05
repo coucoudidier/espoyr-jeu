@@ -1,10 +1,10 @@
- <!-- V3(7) TEST - Build 177 - index-128-11 -->
+ <!-- V3(8) TEST - Build 178 - index-128-11 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title># ESPOYR Multijoueur V3(7) TEST</title>
+    <title># ESPOYR Multijoueur V3(8) TEST</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -362,7 +362,7 @@
         <!-- ÉCRAN ACCUEIL -->
         <div id="homeScreen" class="card">
             <h1><img src="logo__g1_jaune_rond.png" alt="Logo ESPOYR" style="height: 1.5em; vertical-align: middle; margin-right: 8px;">ESPOYR</h1>
-            <p class="subtitle">Jeu collaboratif d'économie - V3(7) TEST</p>
+            <p class="subtitle">Jeu collaboratif d'économie - V3(8) TEST</p>
             <div class="error-message" id="errorMessage"></div>
             
             <div style="margin-bottom: 15px; text-align: center; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
@@ -5046,18 +5046,21 @@ activiteId: actId
             }
 
             
-            // ========== État reçoit la TVA ==========
-            COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) + montantTVA);
-            COMPTABILITE.etat.recettes.tva += montantTVA;
-            COMPTABILITE.etat.recettes.total = arrondir2((COMPTABILITE.etat.recettes.total || 0) + montantTVA);
-            COMPTABILITE.etat.grandLivre[500] += montantTVA;
-            COMPTABILITE.etat.grandLivre[704] += montantTVA;
+            // ========== TVA → pot TVA État + tracker tvaCollectee propriétaire ==========
+            COMPTABILITE.etat.potTVA = arrondir2((COMPTABILITE.etat.potTVA || 0) + montantTVA);
+            COMPTABILITE.etat.recettes.tva = arrondir2((COMPTABILITE.etat.recettes.tva || 0) + montantTVA);
+            COMPTABILITE.etat.grandLivre[445] = arrondir2((COMPTABILITE.etat.grandLivre[445] || 0) + montantTVA);
             
-            // Écriture 3: État - Recette TVA
+            // Tracker TVA collectée sur le propriétaire (pour déclaration L1)
+            COMPTABILITE.caisseJoueurs[proprietaireId].tvaCollectee = arrondir2(
+                (COMPTABILITE.caisseJoueurs[proprietaireId].tvaCollectee || 0) + montantTVA
+            );
+            
+            // Écriture 3: État - TVA facture → pot TVA
             e = enregistrerEcriture({
                 joueurId: 'ETAT', 
-                libelle: `Recette TVA facture ${c?.name || actId}`,
-                compteDebit: 500,   // Caisse État (actif +)
+                libelle: `TVA facture ${c?.name || actId} → pot TVA`,
+                compteDebit: 445,   // Pot TVA (actif +)
                 compteCredit: 704,  // Produits TVA (produit +)
                 montantEuro: montantTVA,
                 contexte: 'etat',
@@ -5871,6 +5874,65 @@ activiteId: actId
             caisse.revenusDepuisPassage = 0;
             
             return { taxe, paye, impaye, revenus, ledgerEntryIds };
+        }
+        
+        // ════════════════════════════════════════════════════════════════
+        // DÉCLARATION TVA — Au passage Ligne 1
+        // Rembourse la TVA déductible au joueur depuis le pot TVA État
+        // Le solde net (collectée - déductible) reste dans le pot
+        // ════════════════════════════════════════════════════════════════
+        async function comptaDeclarationTVA(joueurId) {
+            initCaisseJoueur(joueurId);
+            const caisse = COMPTABILITE.caisseJoueurs[joueurId];
+            const tvaDeductible = arrondir2(caisse.tvaDeductible || 0);
+            const tvaCollectee = arrondir2(caisse.tvaCollectee || 0);
+            const ledgerEntryIds = [];
+            
+            // Rien à déclarer si pas de TVA
+            if (tvaDeductible === 0 && tvaCollectee === 0) {
+                return { tvaDeductible: 0, tvaCollectee: 0, net: 0, rembourse: 0, ledgerEntryIds };
+            }
+            
+            const net = arrondir2(tvaCollectee - tvaDeductible);
+            let rembourse = 0;
+            
+            // Rembourser la TVA déductible au joueur depuis le pot TVA
+            if (tvaDeductible > 0) {
+                rembourse = tvaDeductible;
+                
+                // Joueur récupère sa TVA : D:500 C:411
+                caisse.euro = arrondir2(caisse.euro + rembourse);
+                
+                let e = enregistrerEcriture({
+                    joueurId,
+                    libelle: `Déclaration TVA: remboursement ${fmt(rembourse)}€`,
+                    compteDebit: 500,   // Caisse (actif +)
+                    compteCredit: 411,  // TVA à récupérer (actif -)
+                    montantEuro: rembourse,
+                    contexte: 'declarationTVA'
+                });
+                if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
+                
+                // Pot TVA diminue
+                COMPTABILITE.etat.potTVA = arrondir2((COMPTABILITE.etat.potTVA || 0) - rembourse);
+                COMPTABILITE.etat.grandLivre[445] = arrondir2((COMPTABILITE.etat.grandLivre[445] || 0) - rembourse);
+                
+                e = enregistrerEcriture({
+                    joueurId: 'ETAT',
+                    libelle: `Remboursement TVA à ${playersData[joueurId]?.name || joueurId}`,
+                    compteDebit: 704,   // Produits TVA (produit -)
+                    compteCredit: 445,  // Pot TVA (actif -)
+                    montantEuro: rembourse,
+                    contexte: 'etat'
+                });
+                if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
+            }
+            
+            // RAZ compteurs TVA
+            caisse.tvaDeductible = 0;
+            caisse.tvaCollectee = 0;
+            
+            return { tvaDeductible, tvaCollectee, net, rembourse, ledgerEntryIds };
         }
         
         // Calculer le patrimoine d'un joueur (valeur activités + équipements, hors cash)
@@ -8825,6 +8887,15 @@ function initSystemeDe() {
                 sendSystemMessage(`🏛️ ${myName} : taxe 20% sur ${taxeRevenusResult.revenus.toFixed(2)}€ de revenus → -${taxeRevenusResult.paye.toFixed(2)}€`);
             }
             
+            // ═══ DÉCLARATION TVA — Remboursement TVA déductible ═══
+            const declTVA = await comptaDeclarationTVA(myPlayerId);
+            if (declTVA.rembourse > 0) {
+                sendSystemMessage(`📋 ${myName} : déclaration TVA → remboursement +${declTVA.rembourse.toFixed(2)}€ (collectée: ${declTVA.tvaCollectee.toFixed(2)}€, déductible: ${declTVA.tvaDeductible.toFixed(2)}€)`);
+                // MAJ Firebase après remboursement
+                await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/euro`)
+                    .set(COMPTABILITE.caisseJoueurs[myPlayerId].euro);
+            }
+            
             // Comptabilité salaire €
             const ecriture = await comptaSalaire(myPlayerId, salaire, deSalaire);
             
@@ -9011,6 +9082,20 @@ function initSystemeDe() {
                         <p style="margin: 4px 0 0 0; font-size: 0.8rem; color: #6b7280;">
                             Revenus depuis dernier passage : ${taxeRevenusResult.revenus.toFixed(2)}€ × 20% = ${taxeRevenusResult.taxe.toFixed(2)}€
                             ${taxeRevenusResult.impaye > 0 ? ` <span style="color:#dc2626;">(impayé: ${taxeRevenusResult.impaye.toFixed(2)}€ → arriérés)</span>` : ''}
+                        </p>
+                    </div>`;
+            }
+            
+            // --- Déclaration TVA ---
+            if (declTVA.rembourse > 0) {
+                modalHtml += `
+                    <div style="background: #ecfdf5; padding: 10px; border-radius: 8px; margin-bottom: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>📋 <strong>Déclaration TVA</strong></span>
+                            <span style="font-size: 1.1rem; font-weight: bold; color: #059669;">+${declTVA.rembourse.toFixed(2)}€</span>
+                        </div>
+                        <p style="margin: 4px 0 0 0; font-size: 0.8rem; color: #6b7280;">
+                            TVA collectée: ${declTVA.tvaCollectee.toFixed(2)}€ | TVA déductible: ${declTVA.tvaDeductible.toFixed(2)}€ | Net: ${declTVA.net >= 0 ? '+' : ''}${declTVA.net.toFixed(2)}€
                         </p>
                     </div>`;
             }
@@ -12627,6 +12712,42 @@ function initSystemeDe() {
                     
                     // Analyse textuelle automatique tous les 5 tours
                     autoAnalyseBilan(newTurn);
+                    
+                    // ═══ ÉQUILIBRAGE POT TVA — Retour à la valeur cible ═══
+                    const potTVAActuel = COMPTABILITE.etat.potTVA || 0;
+                    const potTVACible = CONFIG.tvaPotInitial;
+                    const diffPotTVA = arrondir2(potTVAActuel - potTVACible);
+                    if (Math.abs(diffPotTVA) > 0.01) {
+                        if (diffPotTVA > 0) {
+                            // Excédent → transférer au trésor État
+                            COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) + diffPotTVA);
+                            COMPTABILITE.etat.grandLivre[500] = arrondir2((COMPTABILITE.etat.grandLivre[500] || 0) + diffPotTVA);
+                            COMPTABILITE.etat.potTVA = potTVACible;
+                            COMPTABILITE.etat.grandLivre[445] = potTVACible;
+                            enregistrerEcriture({
+                                joueurId: 'ETAT',
+                                libelle: `Transfert excédent pot TVA → trésor (+${fmt(diffPotTVA)}€)`,
+                                compteDebit: 500, compteCredit: 445,
+                                montantEuro: diffPotTVA, contexte: 'etat'
+                            });
+                            sendSystemMessage(`🏛️ Pot TVA: excédent ${fmt(diffPotTVA)}€ transféré au trésor État`);
+                        } else {
+                            // Déficit → trésor comble
+                            const deficit = Math.abs(diffPotTVA);
+                            COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) - deficit);
+                            COMPTABILITE.etat.grandLivre[500] = arrondir2((COMPTABILITE.etat.grandLivre[500] || 0) - deficit);
+                            COMPTABILITE.etat.potTVA = potTVACible;
+                            COMPTABILITE.etat.grandLivre[445] = potTVACible;
+                            enregistrerEcriture({
+                                joueurId: 'ETAT',
+                                libelle: `Trésor comble déficit pot TVA (-${fmt(deficit)}€)`,
+                                compteDebit: 445, compteCredit: 500,
+                                montantEuro: deficit, contexte: 'etat'
+                            });
+                            sendSystemMessage(`🏛️ Pot TVA: déficit ${fmt(deficit)}€ comblé par trésor État`);
+                        }
+                        await syncComptabiliteToFirebase();
+                    }
                 }
                 
                 // Reset compteur actions contributives du joueur qui vient de jouer
@@ -13234,6 +13355,12 @@ function initSystemeDe() {
                 const taxeRevBot = await comptaTaxeRevenus(bot.id);
                 if (taxeRevBot.paye > 0) {
                     sendSystemMessage(`🏛️ ${bot.name} : taxe 20% sur ${taxeRevBot.revenus.toFixed(2)}€ → -${taxeRevBot.paye.toFixed(2)}€`);
+                }
+                
+                // ═══ DÉCLARATION TVA (bot) ═══
+                const declTVABot = await comptaDeclarationTVA(bot.id);
+                if (declTVABot.rembourse > 0) {
+                    sendSystemMessage(`📋 ${bot.name} : déclaration TVA → remboursement +${declTVABot.rembourse.toFixed(2)}€`);
                 }
                 
                 await comptaSalaire(bot.id, salaire, deSalaire);
