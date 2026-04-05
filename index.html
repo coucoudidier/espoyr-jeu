@@ -1,10 +1,10 @@
- <!-- V3(1) TEST - Build 174 - index-128-11 -->
+ <!-- V3(6) TEST - Build 176 - index-128-11 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title># ESPOYR Multijoueur V3(1) TEST</title>
+    <title># ESPOYR Multijoueur V3(6) TEST</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -362,7 +362,7 @@
         <!-- ÉCRAN ACCUEIL -->
         <div id="homeScreen" class="card">
             <h1><img src="logo__g1_jaune_rond.png" alt="Logo ESPOYR" style="height: 1.5em; vertical-align: middle; margin-right: 8px;">ESPOYR</h1>
-            <p class="subtitle">Jeu collaboratif d'économie - V3(1) TEST</p>
+            <p class="subtitle">Jeu collaboratif d'économie - V3(6) TEST</p>
             <div class="error-message" id="errorMessage"></div>
             
             <div style="margin-bottom: 15px; text-align: center; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
@@ -617,7 +617,7 @@
             160: { nom: 'Annulation emprunt', classe: 1, type: 'passif' },
             164: { nom: 'Emprunt bancaire (alias)', classe: 1, type: 'passif' },
             // Classe 2 - Immobilisations
-            200: { nom: 'Immobilisation activité', classe: 2, type: 'actif' },
+            207: { nom: 'Fond de commerce', classe: 2, type: 'actif' },
             210: { nom: 'Équipement A (durable)', classe: 2, type: 'actif' },
             211: { nom: 'Activités (alias)', classe: 2, type: 'actif' },
             218: { nom: 'Équipements (alias)', classe: 2, type: 'actif' },
@@ -632,7 +632,8 @@
             400: { nom: 'Dettes perso', classe: 4, type: 'passif' },
             401: { nom: 'Fournisseurs', classe: 4, type: 'passif' },
             410: { nom: 'Smart contract', classe: 4, type: 'passif' },
-            411: { nom: 'Clients', classe: 4, type: 'actif' },
+            411: { nom: 'TVA à récupérer', classe: 4, type: 'actif' },
+            416: { nom: 'Créances clients', classe: 4, type: 'actif' },
             421: { nom: 'Personnel', classe: 4, type: 'passif' },
             431: { nom: 'État - Taxes', classe: 4, type: 'passif' },
             468: { nom: 'Consignes Espoyr #', classe: 4, type: 'passif' },
@@ -1705,6 +1706,7 @@
             remboursementAutoCapitalPct: 0.10, // 10% du capital rembourse automatiquement en fin de cycle
             limiteEmpruntMin: 750,
             banqueCapitalInitial: 1000, // Capital initial banque
+            tvaPotInitial: 2000,       // Fonds de roulement TVA État (rééquilibré chaque tour)
             // Transitions de phase (basées sur les passages Ligne 1, tous joueurs confondus)
             phase2_passagesMin: 6,       // Passages Ligne 1 avant Phase 2
             phase3_passagesMin: 12,      // Passages Ligne 1 avant Phase 3
@@ -3511,6 +3513,7 @@ function isAbsent(player) {
             },
             etat: {
                 tresor: 0,
+                potTVA: CONFIG.tvaPotInitial,  // Fonds de roulement TVA (cible = tvaPotInitial)
                 taxesRecues: 0,
                 salairesVerses: 0,
                 journal: [],  // Journal de l'État
@@ -3538,6 +3541,7 @@ function isAbsent(player) {
                 // Grand-livre État (soldes par compte)
                 grandLivre: {
                     500: 0,   // Caisse/Trésor
+                    445: CONFIG.tvaPotInitial,   // Pot TVA (fonds de roulement)
                     704: 0,   // Produits TVA
                     705: 0,   // Produits Droits
                     702: 0,   // Produits Frais/Services
@@ -3599,6 +3603,7 @@ function isAbsent(player) {
             if (!COMPTABILITE.etat) COMPTABILITE.etat = { tresor: 0, taxesRecues: 0, salairesVerses: 0, journal: [] };
             if (!COMPTABILITE.etat.journal) COMPTABILITE.etat.journal = [];
             if (COMPTABILITE.etat.salairesVerses === undefined) COMPTABILITE.etat.salairesVerses = 0;
+            if (COMPTABILITE.etat.potTVA === undefined) COMPTABILITE.etat.potTVA = CONFIG.tvaPotInitial;
             // ========== NOUVEAUX CHAMPS ÉTAT (Étape 1) ==========
             // Recettes détaillées
             if (!COMPTABILITE.etat.recettes) {
@@ -3641,12 +3646,14 @@ function isAbsent(player) {
             if (!COMPTABILITE.etat.grandLivre) {
                 COMPTABILITE.etat.grandLivre = {
                     500: COMPTABILITE.etat.tresor || 0, // Migration
+                    445: CONFIG.tvaPotInitial,           // Pot TVA
                     704: 0, 705: 0, 702: 0, 703: 0,
                     165: 0, 641: 0, 662: 0, 658: 0
                 };
             }
             // S'assurer que tous les comptes existent
             if (COMPTABILITE.etat.grandLivre[500] === undefined) COMPTABILITE.etat.grandLivre[500] = COMPTABILITE.etat.tresor || 0;
+            if (COMPTABILITE.etat.grandLivre[445] === undefined) COMPTABILITE.etat.grandLivre[445] = CONFIG.tvaPotInitial;
             if (COMPTABILITE.etat.grandLivre[704] === undefined) COMPTABILITE.etat.grandLivre[704] = 0;
             if (COMPTABILITE.etat.grandLivre[705] === undefined) COMPTABILITE.etat.grandLivre[705] = 0;
             if (COMPTABILITE.etat.grandLivre[702] === undefined) COMPTABILITE.etat.grandLivre[702] = 0;
@@ -3812,7 +3819,7 @@ function isAbsent(player) {
                     facture.lignes = [
                         { description: '611 - Travaux HT', montant: travauxHT },
                         { description: `    TVA ${TVA_TAUX * 100}%`, montant: travauxTVA, indent: true },
-                        { description: '200 - Achat activité HT', montant: activiteHT },
+                        { description: '207 - Achat Fond de commerce HT', montant: activiteHT },
                         { description: `    Droits ${DROITS_ACTIVITE * 100}%`, montant: activiteDroits, indent: true },
                         { description: '─────────────────', montant: null, separator: true },
                         { description: 'Total HT', montant: facture.ht },
@@ -3919,6 +3926,8 @@ function isAbsent(player) {
                     redistributionsRecues: 0,
                     revenusDepuisPassage: 0,  // Revenus € d'activités depuis dernier passage L1
                     taxeRevenusCumul: 0,      // Cumul des taxes sur revenus payées
+                    tvaDeductible: 0,         // TVA payée à l'achat (récupérable au passage L1)
+                    tvaCollectee: 0,          // TVA reçue des clients (à reverser au passage L1)
                     journal: []
                 };
             }
@@ -3933,6 +3942,8 @@ function isAbsent(player) {
             // Taxe sur revenus d'activités (migration)
             if (c.revenusDepuisPassage === undefined) c.revenusDepuisPassage = 0;
             if (c.taxeRevenusCumul === undefined) c.taxeRevenusCumul = 0;
+            if (c.tvaDeductible === undefined) c.tvaDeductible = 0;
+            if (c.tvaCollectee === undefined) c.tvaCollectee = 0;
             // Biens personnels et arriérés (migration)
             if (c.impaye === undefined) c.impaye = 0;
             if (!c.biensPersonnels) c.biensPersonnels = [];
@@ -4651,8 +4662,8 @@ function isAbsent(player) {
             return { ledgerEntryIds, montant, profil };
         }
         
-        // Achat activité - PARTIE DOUBLE COMPLÈTE
-        // D:200 C:500 pour l'achat + répartition 10% État, 10% Export, 80% redistribué
+        // Achat Fond de commerce - PARTIE DOUBLE COMPLÈTE
+        // D:207 C:500 pour l'achat + répartition 10% État, 10% Export, 80% redistribué
         async function comptaAchatActivite(joueurId, actId, prix) {
             initCaisseJoueur(joueurId);
             initCaisseActivite(actId);
@@ -4692,12 +4703,12 @@ function isAbsent(player) {
             });
             if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
             
-            // Écriture 1b: Acheteur - Immobilisation HT (200)
+            // Écriture 1b: Acheteur - Fond de commerce HT (207)
             const activiteHT = Math.round(prix * 0.64 * 100) / 100;
             e = enregistrerEcriture({
                 joueurId, 
                 libelle: `Achat ${CASES[actId]?.name || actId} HT`,
-                compteDebit: 200,   // Immobilisation (actif +)
+                compteDebit: 207,   // Fond de commerce (actif +)
                 compteCredit: 500,  // Caisse (actif -)
                 montantEuro: activiteHT, 
                 activiteId: actId
@@ -5970,7 +5981,7 @@ activiteId: actId
                 // Écriture État: créance sur joueur pour taxe impayée
                 enregistrerEcriture({
                     joueurId: 'ETAT', libelle: `Créance taxe Ligne 3 sur ${playersData[joueurId]?.name || joueurId}`,
-                    compteDebit: 411, compteCredit: 703, montantEuro: impaye,
+                    compteDebit: 416, compteCredit: 703, montantEuro: impaye,
                     contexte: 'taxeLigne3'
                 });
             }
@@ -10100,7 +10111,7 @@ function initSystemeDe() {
             // Écriture 1: Acheteur - Achat immobilisation
             let e = enregistrerEcriture({
                 joueurId: acheteurId, libelle: `Achat enchère ${c.name}`,
-                compteDebit: 200, compteCredit: 500, montantEuro: prixVente, activiteId: enchereEnCours.actId
+                compteDebit: 207, compteCredit: 500, montantEuro: prixVente, activiteId: enchereEnCours.actId
             });
             if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
             
@@ -10745,7 +10756,7 @@ function initSystemeDe() {
                 enregistrerEcriture({
                     joueurId: ownerId,
                     libelle: `Créance report ${c.name} de ${playersData[myPlayerId]?.name} (${fmt(facture)}€)`,
-                    compteDebit: 411,   // Clients (actif +) = créance reconnue
+                    compteDebit: 416,   // Créances clients (actif +) = créance reconnue
                     compteCredit: 700,  // Ventes/Factures (produit +) = revenu reconnu
                     montantEuro: facture,
                     contexte: 'reportPaiement',
@@ -10823,7 +10834,7 @@ function initSystemeDe() {
                         joueurId: dette.createurId,
                         libelle: `Reçu remboursement report ${dette.caseName} de ${playersData[joueurId]?.name || joueurId}`,
                         compteDebit: 500,   // Caisse € (actif +) = cash entre
-                        compteCredit: 411,  // Clients (actif -) = créance diminue
+                        compteCredit: 416,  // Créances clients (actif -) = créance diminue
                         montantEuro: dette.montant,
                         contexte: 'remboursementReport',
                         details: { debiteurId: joueurId, caseId: dette.caseId }
@@ -11125,14 +11136,14 @@ function initSystemeDe() {
                 enregistrerEcriture({
                     joueurId: preteurId,
                     libelle: `Smart Contract prêté à ${myName} (${montantEuro > 0 ? fmt(montantEuro)+'€' : ''}${montantHash > 0 ? ' '+fmt(montantHash)+'#' : ''})`,
-                    compteDebit: 411, compteCredit: 500, montantEuro,
+                    compteDebit: 416, compteCredit: 500, montantEuro,
                     contexte: 'smartContract', details: { debiteurId: myPlayerId, montantEuro, montantHash }
                 });
                 if (montantHash > 0) {
                     enregistrerEcriture({
                         joueurId: preteurId,
                         libelle: `Smart Contract prêté # à ${myName}`,
-                        compteDebit: 411, compteCredit: 501, montantEspoyr: montantHash,
+                        compteDebit: 416, compteCredit: 501, montantEspoyr: montantHash,
                         contexte: 'smartContract', details: { debiteurId: myPlayerId }
                     });
                 }
@@ -11219,14 +11230,14 @@ function initSystemeDe() {
                     if (payeEuro > 0) {
                         enregistrerEcriture({
                             joueurId: sc.createurId, libelle: `Reçu remboursement SC de ${playersData[joueurId]?.name || joueurId} (${fmt(payeEuro)}€)`,
-                            compteDebit: 500, compteCredit: 411, montantEuro: payeEuro,
+                            compteDebit: 500, compteCredit: 416, montantEuro: payeEuro,
                             contexte: 'remboursementSC', details: { debiteurId: joueurId }
                         });
                     }
                     if (payeHash > 0) {
                         enregistrerEcriture({
                             joueurId: sc.createurId, libelle: `Reçu remboursement SC # de ${playersData[joueurId]?.name || joueurId} (${fmt(payeHash)}#)`,
-                            compteDebit: 501, compteCredit: 411, montantEspoyr: payeHash,
+                            compteDebit: 501, compteCredit: 416, montantEspoyr: payeHash,
                             contexte: 'remboursementSC', details: { debiteurId: joueurId }
                         });
                     }
@@ -14714,8 +14725,8 @@ function initSystemeDe() {
             
             // ACTIF €
             const actifEuro_500 = caisseEuro;           // 500 - Caisse €
-            const actifEuro_200 = valeurActivites;      // 200 - Activités
-            const totalActifEuro = actifEuro_500 + actifEuro_200;
+            const actifEuro_207 = valeurActivites;      // 207 - Fond de commerce
+            const totalActifEuro = actifEuro_500 + actifEuro_207;
             
             // PASSIF € (sans 109)
             const passifEuro_101 = capitalInitial;      // 101 - Capital initial
@@ -14841,7 +14852,7 @@ function initSystemeDe() {
                             <p style="margin:0 0 8px 0; font-weight:bold; color:#059669; text-align:center;">ACTIF €</p>
                             <table style="width:100%; font-size:0.85rem;">
                                 <tr><td>500 - Caisse €</td><td style="text-align:right;">${fmt(actifEuro_500)}€</td></tr>
-                                <tr><td>200 - Activités</td><td style="text-align:right;">${fmt(actifEuro_200)}€</td></tr>
+                                <tr><td>207 - Fond de commerce</td><td style="text-align:right;">${fmt(actifEuro_207)}€</td></tr>
                                 <tr style="border-top:2px solid #059669;">
                                     <td><strong>TOTAL ACTIF</strong></td>
                                     <td style="text-align:right;"><strong>${fmt(totalActifEuro)}€</strong></td>
@@ -14967,7 +14978,7 @@ function initSystemeDe() {
             csv += '=== BILAN € (Euros) ===\n\n';
             csv += 'ACTIF €\n';
             csv += `500 - Caisse €;${caisseEuro}\n`;
-            csv += `200 - Activités;${valeurActivites}\n`;
+            csv += `207 - Fond de commerce;${valeurActivites}\n`;
             csv += `TOTAL ACTIF €;${totalActifEuro}\n\n`;
             csv += 'PASSIF €\n';
             csv += `101 - Capital initial;${capitalInitial}\n`;
