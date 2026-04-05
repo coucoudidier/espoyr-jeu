@@ -1,10 +1,10 @@
- <!-- V3(8) TEST - Build 178 - index-128-11 -->
+ <!-- V3(9) TEST - Build 179 - index-128-11 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title># ESPOYR Multijoueur V3(8) TEST</title>
+    <title># ESPOYR Multijoueur V3(9) TEST</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -362,7 +362,7 @@
         <!-- ÉCRAN ACCUEIL -->
         <div id="homeScreen" class="card">
             <h1><img src="logo__g1_jaune_rond.png" alt="Logo ESPOYR" style="height: 1.5em; vertical-align: middle; margin-right: 8px;">ESPOYR</h1>
-            <p class="subtitle">Jeu collaboratif d'économie - V3(8) TEST</p>
+            <p class="subtitle">Jeu collaboratif d'économie - V3(9) TEST</p>
             <div class="error-message" id="errorMessage"></div>
             
             <div style="margin-bottom: 15px; text-align: center; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
@@ -10136,6 +10136,7 @@ function initSystemeDe() {
             const facture = calculerFacture('vente_joueur', prixVente);
             const prixTotal = facture.total;      // Prix + 6%
             const droits = facture.droits;        // 6% → État
+            const fondCommerce = arrondir2(prixVente + droits); // Tout intégré au 207
             const ledgerEntryIds = [];
             
             // Comptabilité : transfert d'argent
@@ -10148,38 +10149,32 @@ function initSystemeDe() {
             // Vendeur reçoit le prix (sans les droits)
             COMPTABILITE.caisseJoueurs[vendeurId].euro += prixVente;
             
-            // État reçoit les droits
+            // État reçoit les droits dans le trésor
             COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) + droits);
-            COMPTABILITE.etat.recettes.droits += droits;
+            COMPTABILITE.etat.recettes.droits = arrondir2((COMPTABILITE.etat.recettes.droits || 0) + droits);
             COMPTABILITE.etat.recettes.total = arrondir2((COMPTABILITE.etat.recettes.total || 0) + droits);
-            COMPTABILITE.etat.grandLivre[500] += droits;
-            COMPTABILITE.etat.grandLivre[705] += droits;
+            COMPTABILITE.etat.grandLivre[500] = arrondir2((COMPTABILITE.etat.grandLivre[500] || 0) + droits);
+            COMPTABILITE.etat.grandLivre[705] = arrondir2((COMPTABILITE.etat.grandLivre[705] || 0) + droits);
             
-            // Transfert de propriété
+            // Transfert de propriété — capital = fond de commerce (prix + droits)
             COMPTABILITE.caisseActivites[enchereEnCours.actId].proprietaireId = acheteurId;
+            COMPTABILITE.caisseActivites[enchereEnCours.actId].capital = fondCommerce;
             
-            // Écriture 1: Acheteur - Achat immobilisation
+            // Écriture 1: Acheteur - Fond de commerce (prix + droits intégrés)
             let e = enregistrerEcriture({
-                joueurId: acheteurId, libelle: `Achat enchère ${c.name}`,
-                compteDebit: 207, compteCredit: 500, montantEuro: prixVente, activiteId: enchereEnCours.actId
+                joueurId: acheteurId, libelle: `Fond de commerce enchère ${c.name}`,
+                compteDebit: 207, compteCredit: 500, montantEuro: fondCommerce, activiteId: enchereEnCours.actId
             });
             if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
             
-            // Écriture 2: Acheteur - Droits d'enregistrement
-            e = enregistrerEcriture({
-                joueurId: acheteurId, libelle: `Droits enregistrement ${c.name}`,
-                compteDebit: 640, compteCredit: 500, montantEuro: droits, activiteId: enchereEnCours.actId
-            });
-            if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
-            
-            // Écriture 3: Vendeur - Vente immobilisation
+            // Écriture 2: Vendeur - Vente immobilisation
             e = enregistrerEcriture({
                 joueurId: vendeurId, libelle: `Vente enchère ${c.name}`,
                 compteDebit: 500, compteCredit: 260, montantEuro: prixVente, activiteId: enchereEnCours.actId
             });
             if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
             
-            // Écriture 4: État - Recette droits
+            // Écriture 3: État - Recette droits
             e = enregistrerEcriture({
                 joueurId: 'ETAT', 
                 libelle: `Recette Droits vente ${c.name}`,
@@ -15444,7 +15439,7 @@ function initSystemeDe() {
                         <tr>
                             <td>Solde actuel</td>
                             <td style="text-align:right; font-weight:bold; color:${solde >= 0 ? '#059669' : '#dc2626'};">
-                                ${solde >= 0 ? '+' : ''}${solde.toFixed(0)}€
+                                ${solde >= 0 ? '+' : ''}${fmt(solde)}€
                                 ${solde < 0 ? ' ⚠️ Découvert' : ''}
                             </td>
                         </tr>
@@ -15455,23 +15450,22 @@ function initSystemeDe() {
                     <div style="background:#dcfce7; padding:10px; border-radius:8px;">
                         <p style="margin:0; font-weight:bold; color:#059669;">📥 RECETTES</p>
                         <table style="width:100%; font-size:0.85rem; margin-top:8px;">
-                            <tr><td>TVA (50%)</td><td style="text-align:right;">-</td></tr>
-                            <tr><td>Droits (50%)</td><td style="text-align:right;">-</td></tr>
+                            <tr><td>Travaux HT</td><td style="text-align:right;">${fmt(recettes)}€</td></tr>
                             <tr style="border-top:2px solid #059669; font-weight:bold;">
-                                <td>TOTAL</td><td style="text-align:right;">${recettes.toFixed(0)}€</td>
+                                <td>TOTAL</td><td style="text-align:right;">${fmt(recettes)}€</td>
                             </tr>
                         </table>
                         <p style="font-size:0.75rem; color:#6b7280; margin:8px 0 0 0;">
-                            💡 Recettes = 50% des taxes sur achats d'activités
+                            💡 Recettes = travaux HT des achats d'activités
                         </p>
                     </div>
                     
                     <div style="background:#fee2e2; padding:10px; border-radius:8px;">
                         <p style="margin:0; font-weight:bold; color:#dc2626;">📤 DÉPENSES</p>
                         <table style="width:100%; font-size:0.85rem; margin-top:8px;">
-                            <tr><td>Salaires créatifs</td><td style="text-align:right;">${salaires.toFixed(0)}€</td></tr>
+                            <tr><td>Salaires créatifs</td><td style="text-align:right;">${fmt(salaires)}€</td></tr>
                             <tr style="border-top:2px solid #dc2626; font-weight:bold;">
-                                <td>TOTAL</td><td style="text-align:right;">${salaires.toFixed(0)}€</td>
+                                <td>TOTAL</td><td style="text-align:right;">${fmt(salaires)}€</td>
                             </tr>
                         </table>
                         <p style="font-size:0.75rem; color:#6b7280; margin:8px 0 0 0;">
@@ -15486,7 +15480,7 @@ function initSystemeDe() {
                         <tr>
                             <td>Recettes - Dépenses</td>
                             <td style="text-align:right; font-weight:bold; color:${resultat >= 0 ? '#059669' : '#dc2626'};">
-                                ${resultat >= 0 ? '+' : ''}${resultat.toFixed(0)}€
+                                ${resultat >= 0 ? '+' : ''}${fmt(resultat)}€
                             </td>
                         </tr>
                     </table>
@@ -15503,7 +15497,7 @@ function initSystemeDe() {
                 <div style="background:#e0e7ff; padding:10px; border-radius:8px;">
                     <p style="margin:0; font-weight:bold;">💡 Fonctionnement</p>
                     <ul style="font-size:0.8rem; margin:8px 0 0 0; padding-left:20px;">
-                        <li>Reçoit 50% des taxes (TVA + Droits) sur les achats d'activités</li>
+                        <li>Reçoit les travaux HT (16%) des achats d'activités</li>
                         <li>Paie les salaires des joueurs "créatifs" (variable selon dé)</li>
                         <li>Si découvert → l'État comble en fin de tour</li>
                     </ul>
