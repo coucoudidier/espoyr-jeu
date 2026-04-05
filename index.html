@@ -1,10 +1,10 @@
- <!-- V3(9) TEST - Build 179 - index-128-11 -->
+ <!-- V3(0) TEST - Build 180 - index-128-11 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title># ESPOYR Multijoueur V3(9) TEST</title>
+    <title># ESPOYR Multijoueur V3(0) TEST</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -362,7 +362,7 @@
         <!-- ÉCRAN ACCUEIL -->
         <div id="homeScreen" class="card">
             <h1><img src="logo__g1_jaune_rond.png" alt="Logo ESPOYR" style="height: 1.5em; vertical-align: middle; margin-right: 8px;">ESPOYR</h1>
-            <p class="subtitle">Jeu collaboratif d'économie - V3(9) TEST</p>
+            <p class="subtitle">Jeu collaboratif d'économie - V3(0) TEST</p>
             <div class="error-message" id="errorMessage"></div>
             
             <div style="margin-bottom: 15px; text-align: center; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
@@ -12188,6 +12188,18 @@ function initSystemeDe() {
         }
         
         async function handleMalchance() {
+            // Vérifier si le joueur possède au moins une activité
+            const activitesJoueur = Object.values(COMPTABILITE.caisseActivites || {})
+                .filter(a => a.proprietaireId === myPlayerId);
+            if (activitesJoueur.length === 0) {
+                sendSystemMessage(`👨‍👩‍👧‍👦 ${myName} n'est pas encore entrepreneur — pas d'acquisition`);
+                showModal(`
+                    <h3>👨‍👩‍👧‍👦 Merci</h3>
+                    <p>Vous n'êtes pas encore entrepreneur, cette case ne vous concerne pas.</p>
+                `, `<button class="btn btn-primary" onclick="closeModal(); safeNextTurn();">OK</button>`);
+                return;
+            }
+            
             // Tirage du dé pour déterminer le bien à acquérir
             initCaisseJoueur(myPlayerId);
             const biensExistants = (COMPTABILITE.caisseJoueurs[myPlayerId].biensPersonnels || []).map(b => b.bienId);
@@ -13880,6 +13892,12 @@ function initSystemeDe() {
                 } else if (collectifEstCollective(position)) {
                     await handleCollectifPassage(position, botId);
                 } else {
+                // Bot: vérifier si le bot possède au moins une activité
+                const activitesBot = Object.values(COMPTABILITE.caisseActivites || {})
+                    .filter(a => a.proprietaireId === botId);
+                if (activitesBot.length === 0) {
+                    sendSystemMessage(`👨‍👩‍👧‍👦 ${bot.name} n'est pas encore entrepreneur — pas d'acquisition`);
+                } else {
                 // Bot: acquisition bien personnel (même logique que humain)
                 initCaisseJoueur(botId);
                 const botCaisse = COMPTABILITE.caisseJoueurs[botId];
@@ -13921,6 +13939,7 @@ function initSystemeDe() {
                 await syncComptabiliteToFirebase();
                 sendSystemMessage(`👨‍👩‍👧‍👦 ${bot.name} acquiert ${bien.icon} ${bien.nom} (${fmt(bien.mensualite)}€/tour)`);
                 }
+                } // fin else activitesBot
                 } // fin else (pas collectif malchance)
             }
             
