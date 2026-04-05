@@ -1,4 +1,4 @@
- <!-- V3(1) TEST - Build 173 - index-128-11 -->
+ <!-- V3(1) TEST - Build 174 - index-128-11 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -481,6 +481,8 @@
                     <div class="board-container" id="gameBoard"></div>
                     <div class="dice-area" id="diceArea">
                         <div class="my-balance-bar" id="myBalanceBar" style="position:relative;">
+                            <span id="balAvatar" style="font-size: inherit;"></span>
+                            <span id="balName" style="font-weight:bold;margin-right:8px;"></span>
                             <span class="bal-euro" id="balEuro">0,00 €</span>
                             <span style="color:#d1d5db;">|</span>
                             <span class="bal-hash" id="balHash">0,00 #</span>
@@ -1645,10 +1647,16 @@
             
             const elEuro = document.getElementById('balEuro');
             const elHash = document.getElementById('balHash');
+            const elAvatar = document.getElementById('balAvatar');
             if (!elEuro || !elHash) return;
             
             elEuro.textContent = `${fmt(euro)} €`;
             elHash.textContent = `${fmt(hash)} #`;
+            // ═══ Avatar + Nom : toujours sync depuis playersData ═══
+            const avatar = playersData[myPlayerId]?.avatar || myAvatar;
+            if (elAvatar && avatar && avatar !== '⬜') elAvatar.textContent = avatar;
+            const elName = document.getElementById('balName');
+            if (elName) elName.textContent = playersData[myPlayerId]?.name || myName;
             
             // Détecter le changement et flasher
             if (_prevBalEuro !== null) {
@@ -7687,6 +7695,9 @@ Conserve ce fichier pour rejoindre la partie en cas de déconnexion.`;
         
         function updateGameUI() {
             if (!gameState) return;
+            
+            // ═══ Toujours mettre à jour la barre de solde (nom + avatar + montants) ═══
+            updateMyBalance();
             
             document.getElementById('turnNumber').textContent = gameState.turn || 1;
             
