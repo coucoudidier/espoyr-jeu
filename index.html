@@ -1,10 +1,10 @@
- <!-- V3(6) TEST - Build 176 - index-128-11 -->
+ <!-- V3(7) TEST - Build 177 - index-128-11 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title># ESPOYR Multijoueur V3(6) TEST</title>
+    <title># ESPOYR Multijoueur V3(7) TEST</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -362,7 +362,7 @@
         <!-- ÉCRAN ACCUEIL -->
         <div id="homeScreen" class="card">
             <h1><img src="logo__g1_jaune_rond.png" alt="Logo ESPOYR" style="height: 1.5em; vertical-align: middle; margin-right: 8px;">ESPOYR</h1>
-            <p class="subtitle">Jeu collaboratif d'économie - V3(6) TEST</p>
+            <p class="subtitle">Jeu collaboratif d'économie - V3(7) TEST</p>
             <div class="error-message" id="errorMessage"></div>
             
             <div style="margin-bottom: 15px; text-align: center; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
@@ -3797,34 +3797,36 @@ function isAbsent(player) {
                 case 'activite_libre':
                     // Achat activité libre : facture détaillée
                     // T = montantTTC = prix affiché
-                    // Travaux (16% de T) avec TVA 21% → 0,16T × 1,21 = 0,1936T
-                    // Activité (64% de T) avec Droits 26% → 0,64T × 1,26 = 0,8064T
-                    // Total taxes = 20% de T → 10% État + 10% Export
+                    // Travaux (16% de T) avec TVA 21% → charge → Export
+                    // Activité (64% de T) avec Droits 26% → actif 207 → Hors Circuit
+                    // TVA → pot TVA État (récupérable au passage L1)
                     const T = montantTTC;
                     const travauxHT = Math.round(T * 0.16 * 100) / 100;
                     const travauxTVA = Math.round(travauxHT * TVA_TAUX * 100) / 100;
                     const activiteHT = Math.round(T * 0.64 * 100) / 100;
                     const activiteDroits = Math.round(activiteHT * DROITS_ACTIVITE * 100) / 100;
+                    const fondCommerce = Math.round((activiteHT + activiteDroits) * 100) / 100;
                     
                     facture.ht = travauxHT + activiteHT; // 80% de T
-                    facture.tva = travauxTVA;            // ~3,36% de T
-                    facture.droits = activiteDroits;     // ~16,64% de T
+                    facture.tva = travauxTVA;            // TVA sur travaux
+                    facture.droits = activiteDroits;     // Droits (capitalisés dans 207)
+                    facture.fondCommerce = fondCommerce;  // 207 = activité HT + droits
                     
-                    // Répartition 50/50 entre État et Export
+                    // Nouvelle répartition : TVA → État, Travaux → Export
                     const totalTaxes = facture.tva + facture.droits;
-                    facture.destinationEtat = Math.round(totalTaxes / 2 * 100) / 100;
-                    facture.destinationExport = Math.round(totalTaxes / 2 * 100) / 100;
-                    facture.destinationRedistribution = facture.ht; // 80% redistribué
+                    facture.destinationEtat = facture.tva;       // TVA seule → pot TVA
+                    facture.destinationExport = travauxHT;       // Travaux HT → Export
+                    facture.destinationHorsCircuit = fondCommerce; // Fond de commerce → Hors Circuit
                     
                     facture.lignes = [
                         { description: '611 - Travaux HT', montant: travauxHT },
                         { description: `    TVA ${TVA_TAUX * 100}%`, montant: travauxTVA, indent: true },
-                        { description: '207 - Achat Fond de commerce HT', montant: activiteHT },
+                        { description: '207 - Achat Fond de commerce', montant: activiteHT },
                         { description: `    Droits ${DROITS_ACTIVITE * 100}%`, montant: activiteDroits, indent: true },
                         { description: '─────────────────', montant: null, separator: true },
                         { description: 'Total HT', montant: facture.ht },
                         { description: 'Total Taxes', montant: totalTaxes },
-                        { description: '  → État', montant: facture.destinationEtat, detail: true },
+                        { description: '  → TVA État', montant: facture.destinationEtat, detail: true },
                         { description: '  → Export', montant: facture.destinationExport, detail: true }
                     ];
                     break;
@@ -4117,6 +4119,7 @@ function isAbsent(player) {
             }
             if (contexte === 'etat' || compteDebit === 635 || compteCredit === 635 || 
                 compteDebit === 431 || compteCredit === 431 || compteDebit === 640 || compteCredit === 640 ||
+                compteDebit === 445 || compteCredit === 445 ||
                 compteDebit === 541 || compteCredit === 541) {
                 COMPTABILITE.etat.journal.push(ecriture);
             }
@@ -4663,7 +4666,8 @@ function isAbsent(player) {
         }
         
         // Achat Fond de commerce - PARTIE DOUBLE COMPLÈTE
-        // D:207 C:500 pour l'achat + répartition 10% État, 10% Export, 80% redistribué
+        // D:207 C:500 (fond de commerce) + D:411 C:500 (TVA) + D:611 C:500 (travaux)
+        // TVA → pot TVA État | Travaux → Export | Fond de commerce → Hors Circuit
         async function comptaAchatActivite(joueurId, actId, prix) {
             initCaisseJoueur(joueurId);
             initCaisseActivite(actId);
@@ -4675,24 +4679,25 @@ function isAbsent(player) {
             // ========== ÉTAPE 5a : Facture détaillée activité libre ==========
             const facture = calculerFacture('activite_libre', prix);
             
-            // Calcul répartition (basé sur facture)
-            const partEtat = facture.destinationEtat;       // 10% (TVA/2 + Droits/2)
-            const partExport = facture.destinationExport;   // 10% (TVA/2 + Droits/2)
-            const partRedistrib = facture.ht;               // 80% HT
-            const partParJoueur = Math.floor(partRedistrib / nbJoueurs);
+            // Nouvelle répartition
+            const partEtat = facture.destinationEtat;            // TVA seule → pot TVA
+            const partExport = facture.destinationExport;        // Travaux HT → Export
+            const partHorsCircuit = facture.destinationHorsCircuit; // Fond de commerce → HC
             
-            // Détail taxes pour État et Export
-            const tvaParEntite = Math.round(facture.tva / 2 * 100) / 100;
-            const droitsParEntite = Math.round(facture.droits / 2 * 100) / 100;
+            // Valeurs pour écritures
+            const travauxHT = Math.round(prix * 0.16 * 100) / 100;
+            const activiteHT = Math.round(prix * 0.64 * 100) / 100;
+            const droits = facture.droits;
+            const fondCommerce = facture.fondCommerce;  // activiteHT + droits
+            const tva = facture.tva;                    // TVA sur travaux
             
             // MAJ soldes acheteur
             COMPTABILITE.caisseJoueurs[joueurId].euro -= prix;
             COMPTABILITE.caisseJoueurs[joueurId].apportsActivites += prix;
             COMPTABILITE.caisseActivites[actId].proprietaireId = joueurId;
-            COMPTABILITE.caisseActivites[actId].capital = prix;
+            COMPTABILITE.caisseActivites[actId].capital = fondCommerce; // 207 = actif (pas le TTC)
             
-            // Écriture 1a: Acheteur - Travaux HT (611)
-            const travauxHT = Math.round(prix * 0.16 * 100) / 100;
+            // Écriture 1a: Acheteur - Travaux HT (charge → résultat)
             let e = enregistrerEcriture({
                 joueurId, 
                 libelle: `Travaux ${CASES[actId]?.name || actId} HT`,
@@ -4703,116 +4708,79 @@ function isAbsent(player) {
             });
             if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
             
-            // Écriture 1b: Acheteur - Fond de commerce HT (207)
-            const activiteHT = Math.round(prix * 0.64 * 100) / 100;
+            // Écriture 1b: Acheteur - Fond de commerce (actif = activité HT + droits)
             e = enregistrerEcriture({
                 joueurId, 
-                libelle: `Achat ${CASES[actId]?.name || actId} HT`,
+                libelle: `Fond de commerce ${CASES[actId]?.name || actId}`,
                 compteDebit: 207,   // Fond de commerce (actif +)
                 compteCredit: 500,  // Caisse (actif -)
-                montantEuro: activiteHT, 
+                montantEuro: fondCommerce, 
                 activiteId: actId
             });
             if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
             
-            // Écriture 1c: Acheteur - TVA (635)
+            // Écriture 1c: Acheteur - TVA à récupérer (actif)
             e = enregistrerEcriture({
                 joueurId, 
                 libelle: `TVA achat ${CASES[actId]?.name || actId}`,
-                compteDebit: 635,   // Taxes (charge +)
+                compteDebit: 411,   // TVA à récupérer (actif +)
                 compteCredit: 500,  // Caisse (actif -)
-                montantEuro: facture.tva, 
+                montantEuro: tva, 
                 activiteId: actId
             });
             if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
             
-            // Écriture 1d: Acheteur - Droits (640)
-            e = enregistrerEcriture({
-                joueurId, 
-                libelle: `Droits enregistrement ${CASES[actId]?.name || actId}`,
-                compteDebit: 640,   // Droits (charge +)
-                compteCredit: 500,  // Caisse (actif -)
-                montantEuro: facture.droits, 
-                activiteId: actId
-            });
-            if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
+            // MAJ compteurs TVA joueur
+            COMPTABILITE.caisseJoueurs[joueurId].tvaDeductible = arrondir2(
+                (COMPTABILITE.caisseJoueurs[joueurId].tvaDeductible || 0) + tva
+            );
             
-            // ========== ÉTAT reçoit 50% des taxes (TVA + Droits) ==========
-            COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) + partEtat);
-            COMPTABILITE.etat.taxesRecues = arrondir2((COMPTABILITE.etat.taxesRecues || 0) + partEtat);
-            COMPTABILITE.etat.recettes.tva += tvaParEntite;
-            COMPTABILITE.etat.recettes.droits += droitsParEntite;
-            COMPTABILITE.etat.recettes.total = arrondir2((COMPTABILITE.etat.recettes.total || 0) + partEtat);
-            COMPTABILITE.etat.grandLivre[500] += partEtat;
-            COMPTABILITE.etat.grandLivre[704] += tvaParEntite;
-            COMPTABILITE.etat.grandLivre[705] += droitsParEntite;
+            // ========== ÉTAT reçoit TVA → pot TVA ==========
+            COMPTABILITE.etat.potTVA = arrondir2((COMPTABILITE.etat.potTVA || 0) + tva);
+            COMPTABILITE.etat.recettes.tva = arrondir2((COMPTABILITE.etat.recettes.tva || 0) + tva);
+            COMPTABILITE.etat.grandLivre[445] = arrondir2((COMPTABILITE.etat.grandLivre[445] || 0) + tva);
             
-            // Écriture 2a: État - Recette TVA
+            // Écriture 2a: État - TVA reçue dans pot TVA
             e = enregistrerEcriture({
                 joueurId: 'ETAT', 
-                libelle: `Recette TVA activité ${CASES[actId]?.name || actId}`,
-                compteDebit: 500,   // Caisse État (actif +)
+                libelle: `TVA achat activité ${CASES[actId]?.name || actId} → pot TVA`,
+                compteDebit: 445,   // Pot TVA (actif +)
                 compteCredit: 704,  // Produits TVA (produit +)
-                montantEuro: tvaParEntite,
+                montantEuro: tva,
                 contexte: 'etat',
                 activiteId: actId
             });
             if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
             
-            // Écriture 2b: État - Recette Droits
-            e = enregistrerEcriture({
-                joueurId: 'ETAT', 
-                libelle: `Recette Droits activité ${CASES[actId]?.name || actId}`,
-                compteDebit: 500,   // Caisse État (actif +)
-                compteCredit: 705,  // Produits Droits (produit +)
-                montantEuro: droitsParEntite,
-                contexte: 'etat',
-                activiteId: actId
-            });
-            if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
+            // ========== EXPORTATION reçoit Travaux HT ==========
+            COMPTABILITE.exportation.solde = arrondir2((COMPTABILITE.exportation.solde || 0) + travauxHT);
+            COMPTABILITE.exportation.recettes = arrondir2((COMPTABILITE.exportation.recettes || 0) + travauxHT);
             
-            // ========== EXPORTATION reçoit 50% des taxes ==========
-            COMPTABILITE.exportation.solde += partExport;
-            COMPTABILITE.exportation.recettes += partExport;
-            
-            // Écriture 3a: Exportation - Recette TVA
+            // Écriture 3a: Exportation - Recette Travaux
             e = enregistrerEcriture({
                 joueurId: 'EXPORTATION', 
-                libelle: `Recette TVA activité ${CASES[actId]?.name || actId}`,
+                libelle: `Travaux activité ${CASES[actId]?.name || actId}`,
                 compteDebit: 540,   // Compte Export (actif +)
-                compteCredit: 704,  // Produits TVA (produit +)
-                montantEuro: tvaParEntite,
+                compteCredit: 705,  // Produits Export (produit +)
+                montantEuro: travauxHT,
                 contexte: 'exportation',
                 activiteId: actId
             });
             if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
             
-            // Écriture 3b: Exportation - Recette Droits
-            e = enregistrerEcriture({
-                joueurId: 'EXPORTATION', 
-                libelle: `Recette Droits activité ${CASES[actId]?.name || actId}`,
-                compteDebit: 540,   // Compte Export (actif +)
-                compteCredit: 705,  // Produits Droits (produit +)
-                montantEuro: droitsParEntite,
-                contexte: 'exportation',
-                activiteId: actId
-            });
-            if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
+            // ========== HORS CIRCUIT reçoit le Fond de commerce ==========
+            COMPTABILITE.horsCircuit.solde = arrondir2((COMPTABILITE.horsCircuit.solde || 0) + fondCommerce);
+            COMPTABILITE.horsCircuit.recettes = arrondir2((COMPTABILITE.horsCircuit.recettes || 0) + fondCommerce);
+            COMPTABILITE.horsCircuit.grandLivre[550] = arrondir2((COMPTABILITE.horsCircuit.grandLivre[550] || 0) + fondCommerce);
+            COMPTABILITE.horsCircuit.grandLivre[792] = arrondir2((COMPTABILITE.horsCircuit.grandLivre[792] || 0) + fondCommerce);
             
-            // ========== 80% HT → Redistribué à tous les joueurs ==========
-// ========== 80% HT → Argents hors circuit (économie spéculative / importation) ==========
-            COMPTABILITE.horsCircuit.solde += partRedistrib;
-            COMPTABILITE.horsCircuit.recettes += partRedistrib;
-            COMPTABILITE.horsCircuit.grandLivre[550] += partRedistrib;
-            COMPTABILITE.horsCircuit.grandLivre[792] += partRedistrib;
-            
-            // Écriture 3c: Hors circuit - Captation HT
+            // Écriture 3b: Hors circuit - Captation fond de commerce
             e = enregistrerEcriture({
                 joueurId: 'HORS_CIRCUIT',
-                libelle: `Économie spéculative / importation (HT) ${CASES[actId]?.name || actId}`,
+                libelle: `Fond de commerce ${CASES[actId]?.name || actId}`,
                 compteDebit: 550,   // Argents hors circuit (actif +)
                 compteCredit: 792,  // Économie spéculative / importation (produit +)
-                montantEuro: partRedistrib,
+                montantEuro: fondCommerce,
                 contexte: 'horsCircuit',
                 activiteId: actId,
                 details: { source: 'achat_activite', acheteur: joueurId }
@@ -4820,7 +4788,7 @@ function isAbsent(player) {
             if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
             
             
-            return { partEtat, partExport, partRedistrib, partParJoueur: 0, partHorsCircuit: partRedistrib, bonusHash: 0, facture, ledgerEntryIds };
+            return { partEtat, partExport, partHorsCircuit, partParJoueur: 0, bonusHash: 0, facture, ledgerEntryIds };
         }
         
         // Achat équipement (D:218 C:500)
@@ -9339,8 +9307,7 @@ function initSystemeDe() {
             // ========== ÉTAPE 5a : Facture détaillée ==========
             const facture = calculerFacture('activite_libre', c.prix);
             const nbJoueurs = Object.keys(playersData).length || 1;
-            const partHorsCircuit = facture.ht;
-            const partParJoueur = 0; // Redistribution supprimée
+            const partHorsCircuit = facture.destinationHorsCircuit || facture.fondCommerce;
             
             // Générer le HTML de la facture
             const factureHTML = genererHTMLFacture(facture, `Achat ${c.name}`);
@@ -9354,9 +9321,9 @@ function initSystemeDe() {
                 
                 <div style="background: #f0fdf4; padding: 8px; border-radius: 6px; margin: 10px 0; font-size: 0.85rem;">
                     <p style="margin: 0; font-weight: bold;">Répartition :</p>
-                    <p style="margin: 4px 0 0 0;">🏛️ État : ${facture.destinationEtat.toFixed(2)}€ (TVA + Droits)</p>
-                    <p style="margin: 2px 0 0 0;">🌍 Export : ${facture.destinationExport.toFixed(2)}€ (TVA + Droits)</p>
-                    <p style="margin: 2px 0 0 0;">🛰️ Hors circuit : ${partHorsCircuit.toFixed(2)}€ (économie spéculative / importation)</p>
+                    <p style="margin: 4px 0 0 0;">🏛️ TVA État : ${facture.destinationEtat.toFixed(2)}€</p>
+                    <p style="margin: 2px 0 0 0;">🌍 Export : ${facture.destinationExport.toFixed(2)}€ (travaux)</p>
+                    <p style="margin: 2px 0 0 0;">🛰️ Hors circuit : ${partHorsCircuit.toFixed(2)}€ (fond de commerce)</p>
                 </div>
                 
                 <p><strong>Facture/passage :</strong> ${fmt(calculerFactureActivite(c.id, []))}€ <span style="font-size:0.8rem; color:#6b7280;">(base ${Math.round((gameConfig.factureBasePct ?? 0.15)*100)}% + inflation ${getInflationStats().inflationPct}%)</span></p>
@@ -9406,8 +9373,6 @@ function initSystemeDe() {
                 bonusEspoyr: Math.floor(prix * 0.1),
                 partEtat: result.partEtat,
                 partExport: result.partExport,
-                partRedistrib: result.partRedistrib,
-                partParJoueur: result.partParJoueur,
                 partHorsCircuit: result.partHorsCircuit,
                 profil
             }, result.ledgerEntryIds || []);
@@ -14726,7 +14691,8 @@ function initSystemeDe() {
             // ACTIF €
             const actifEuro_500 = caisseEuro;           // 500 - Caisse €
             const actifEuro_207 = valeurActivites;      // 207 - Fond de commerce
-            const totalActifEuro = actifEuro_500 + actifEuro_207;
+            const actifEuro_411 = arrondir2((caisse.tvaDeductible || 0) - (caisse.tvaCollectee || 0)); // 411 - TVA à récupérer (solde net)
+            const totalActifEuro = actifEuro_500 + actifEuro_207 + Math.max(0, actifEuro_411);
             
             // PASSIF € (sans 109)
             const passifEuro_101 = capitalInitial;      // 101 - Capital initial
@@ -14853,6 +14819,7 @@ function initSystemeDe() {
                             <table style="width:100%; font-size:0.85rem;">
                                 <tr><td>500 - Caisse €</td><td style="text-align:right;">${fmt(actifEuro_500)}€</td></tr>
                                 <tr><td>207 - Fond de commerce</td><td style="text-align:right;">${fmt(actifEuro_207)}€</td></tr>
+                                ${actifEuro_411 > 0.01 ? `<tr><td>411 - TVA à récupérer</td><td style="text-align:right;">${fmt(actifEuro_411)}€</td></tr>` : ''}
                                 <tr style="border-top:2px solid #059669;">
                                     <td><strong>TOTAL ACTIF</strong></td>
                                     <td style="text-align:right;"><strong>${fmt(totalActifEuro)}€</strong></td>
@@ -14979,6 +14946,7 @@ function initSystemeDe() {
             csv += 'ACTIF €\n';
             csv += `500 - Caisse €;${caisseEuro}\n`;
             csv += `207 - Fond de commerce;${valeurActivites}\n`;
+            if (actifEuro_411 > 0.01) csv += `411 - TVA à récupérer;${actifEuro_411}\n`;
             csv += `TOTAL ACTIF €;${totalActifEuro}\n\n`;
             csv += 'PASSIF €\n';
             csv += `101 - Capital initial;${capitalInitial}\n`;
