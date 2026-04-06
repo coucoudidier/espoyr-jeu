@@ -1,10 +1,10 @@
- <!-- V3(4) TEST - Build 184 - index-128-11 -->
+ <!-- V3(5) TEST - Build 185 - index-128-11 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title># ESPOYR Multijoueur V3(4) TEST</title>
+    <title># ESPOYR Multijoueur V3(5) TEST</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -105,7 +105,7 @@
         .case.chance { background: linear-gradient(135deg, #dbeafe, #bfdbfe); }
         .case.frais { background: linear-gradient(135deg, #fee2e2, #fecaca); }
         .case.taxe { background: linear-gradient(135deg, #f3e8ff, #e9d5ff); }
-        .case.malchance { background: linear-gradient(135deg, #fef3c7, #fde68a); }
+        .case.malchance { background: linear-gradient(135deg, #dbeafe, #bfdbfe); } /* malchance = OPPORTUNITÉS (même couleur que Chance) */
         .case.ligne2 { background: linear-gradient(135deg, #fce7f3, #fbcfe8); }
         .case-number { position: absolute; top: 2px; left: 4px; font-size: 0.55rem; color: #9ca3af; font-weight: bold; }
      .case-icon { font-size: 1.3rem; margin-top: -2px; }
@@ -362,7 +362,7 @@
         <!-- ÉCRAN ACCUEIL -->
         <div id="homeScreen" class="card">
             <h1><img src="logo__g1_jaune_rond.png" alt="Logo ESPOYR" style="height: 1.5em; vertical-align: middle; margin-right: 8px;">ESPOYR</h1>
-            <p class="subtitle">Jeu collaboratif d'économie - V3(4) TEST</p>
+            <p class="subtitle">Jeu collaboratif d'économie - V3(5) TEST</p>
             <div class="error-message" id="errorMessage"></div>
             
             <div style="margin-bottom: 15px; text-align: center; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
@@ -771,7 +771,7 @@
             { id: 15, type: 'activite', name: 'Cordonnier', icon: '👟', prix: 320, facture: 60, hash: true, prixEquip: 160 },
             { id: 16, type: 'activite', name: 'Bijouterie', icon: '💎', prix: 260, facture: 52, hash: true, prixEquip: 130 },
             { id: 17, type: 'activite', name: 'Électricien', icon: '⚡', prix: 220, facture: 44, hash: true, prixEquip: 110 },
-            { id: 18, type: 'malchance', name: 'Merci', icon: '👨‍👩‍👧‍👦' },
+            { id: 18, type: 'malchance', name: 'Opportunités', icon: '🎯' }, // malchance = OPPORTUNITÉS
             { id: 19, type: 'activite', name: 'Plombier', icon: '🔩', prix: 240, facture: 48, hash: true, prixEquip: 120 },
             { id: 20, type: 'frais', name: 'Frais de soins', icon: '🩺', cout: 75, description: 'Consultation, médicaments — prendre soin de sa santé a un coût.' },
             { id: 21, type: 'activite', name: 'Entrepreneur', icon: '🛠️', prix: 320, facture: 65, hash: true, prixEquip: 160 },
@@ -987,7 +987,8 @@
         ];
         
         // MALCHANCE_CARDS — NON UTILISÉ (dead code)
-        // La case Malchance utilise BIENS_MALCHANCE (acquisition obligatoire avec dette)
+        // La case Opportunités (type 'malchance') utilise BIENS_MALCHANCE (acquisition obligatoire avec dette)
+        // malchance = OPPORTUNITÉS (clé interne conservée pour compatibilité)
         // Conservé pour référence en cas de réactivation future
         // const MALCHANCE_CARDS = [
         //     { text: "💸 Intérêts imprévus -50€", amount: 50 },
@@ -998,7 +999,7 @@
         //     { text: "💱 Frais change -75€", amount: 75 }
         // ];
         
-        // Biens personnels acquis sur la case Merci (dé 1-6)
+        // Biens personnels acquis sur la case Opportunités (dé 1-6) — malchance = OPPORTUNITÉS
         const BIENS_MALCHANCE = [
             { id: 1, nom: "Achat indispensable maison voisine", icon: "🏠", description: "Vous devez profiter de la mise en vente de la maison voisine pour vous agrandir si nécessaire.", valeur: 3500, interets: 30, total: 4550, mensualite: 152, duree: 30 },
             { id: 2, nom: "Remplacement indispensable du véhicule", icon: "🚗", description: "Une occasion unique se présente : vous devez changer de véhicule, votre voiture étant déjà bien amortie.", valeur: 800, interets: 25, total: 1000, mensualite: 143, duree: 7 },
@@ -7060,7 +7061,7 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
         const TOAST_PATTERNS = [
             { cat: 'analyse',     re: /ANALYSE|━━━|Qui gagne|Fuite monétaire|PHASE \d|Phase [23]|effondrement/i },
             { cat: 'aaa',         re: /AAA|Pot AAA|cotise|membre AAA/ },
-            { cat: 'chance',      re: /🍀|Chance|CHANCE|acquiert.*\/tour|mensualité|👨‍👩‍👧‍👦/ },
+            { cat: 'chance',      re: /🍀|Chance|CHANCE|acquiert.*\/tour|mensualité|🎯/ },
             { cat: 'lobby',       re: /rejoint|créé la partie|reconnecté|Bienvenue|ouvert le salon|a abandonné/ },
             { cat: 'deplacement', re: /passe par la case Départ|choisi le sens|change pour|🏁|case Départ/ },
             { cat: 'salaire',     re: /💰.*reçoit|salaire/ },
@@ -12254,9 +12255,9 @@ function initSystemeDe() {
             const activitesJoueur = Object.values(COMPTABILITE.caisseActivites || {})
                 .filter(a => a.proprietaireId === myPlayerId);
             if (activitesJoueur.length === 0) {
-                sendSystemMessage(`👨‍👩‍👧‍👦 ${myName} n'est pas encore entrepreneur — pas d'acquisition`);
+                sendSystemMessage(`🎯 ${myName} n'est pas encore entrepreneur — pas d'acquisition`);
                 showModal(`
-                    <h3>👨‍👩‍👧‍👦 Merci</h3>
+                    <h3>🎯 Opportunités</h3>
                     <p>Vous n'êtes pas encore entrepreneur, cette case ne vous concerne pas.</p>
                 `, `<button class="btn btn-primary" onclick="closeModal(); safeNextTurn();">OK</button>`);
                 return;
@@ -12277,15 +12278,15 @@ function initSystemeDe() {
             
             // Si tous les biens sont déjà possédés → skip
             if (biensExistants.includes(bien.id)) {
-                sendSystemMessage(`👨‍👩‍👧‍👦 ${myName} possède déjà tous les biens personnels — pas d'acquisition`);
+                sendSystemMessage(`🎯 ${myName} possède déjà tous les biens personnels — pas d'acquisition`);
                 safeNextTurn();
                 return;
             }
             
-            sendSystemMessage(`👨‍👩‍👧‍👦 ${myName} tire un ${de} → ${bien.icon} ${bien.nom}`);
+            sendSystemMessage(`🎯 ${myName} tire un ${de} → ${bien.icon} ${bien.nom}`);
             
             showModal(`
-                <h3>👨‍👩‍👧‍👦 Merci — Acquisition obligatoire</h3>
+                <h3>🎯 Opportunités à ne pas rater — Acquisition obligatoire</h3>
                 <p style="font-style:italic;color:#6b7280;">${bien.description}</p>
                 
                 <div style="background:#fef3c7;padding:12px;border-radius:8px;margin:10px 0;">
@@ -12336,7 +12337,7 @@ function initSystemeDe() {
             logEvent('ACHAT_BIEN_PERSONNEL', myPlayerId, { bienId: bien.id, nom: bien.nom, valeur: bien.valeur, total: bien.total, mensualite: bien.mensualite });
             
             await syncComptabiliteToFirebase();
-            sendSystemMessage(`👨‍👩‍👧‍👦 ${myName} acquiert ${bien.icon} ${bien.nom} (${fmt(bien.mensualite)}€/tour)`);
+            sendSystemMessage(`🎯 ${myName} acquiert ${bien.icon} ${bien.nom} (${fmt(bien.mensualite)}€/tour)`);
             safeNextTurn();
         }
         
@@ -14013,7 +14014,7 @@ function initSystemeDe() {
                 const activitesBot = Object.values(COMPTABILITE.caisseActivites || {})
                     .filter(a => a.proprietaireId === botId);
                 if (activitesBot.length === 0) {
-                    sendSystemMessage(`👨‍👩‍👧‍👦 ${bot.name} n'est pas encore entrepreneur — pas d'acquisition`);
+                    sendSystemMessage(`🎯 ${bot.name} n'est pas encore entrepreneur — pas d'acquisition`);
                 } else {
                 // Bot: acquisition bien personnel (même logique que humain)
                 initCaisseJoueur(botId);
@@ -14031,7 +14032,7 @@ function initSystemeDe() {
                 
                 // Si tous les biens sont déjà possédés → skip
                 if (biensExistants.includes(bien.id)) {
-                    sendSystemMessage(`👨‍👩‍👧‍👦 ${bot.name} possède déjà tous les biens — pas d'acquisition`);
+                    sendSystemMessage(`🎯 ${bot.name} possède déjà tous les biens — pas d'acquisition`);
                 } else {
                 
                 botCaisse.biensPersonnels.push({
@@ -14054,7 +14055,7 @@ function initSystemeDe() {
                 });
                 
                 await syncComptabiliteToFirebase();
-                sendSystemMessage(`👨‍👩‍👧‍👦 ${bot.name} acquiert ${bien.icon} ${bien.nom} (${fmt(bien.mensualite)}€/tour)`);
+                sendSystemMessage(`🎯 ${bot.name} acquiert ${bien.icon} ${bien.nom} (${fmt(bien.mensualite)}€/tour)`);
                 }
                 } // fin else activitesBot
                 } // fin else (pas collectif malchance)
@@ -15913,7 +15914,7 @@ function initSystemeDe() {
                     <strong>Lecture :</strong><br>
                     📈 PIB = somme des transactions réelles (achats, factures, salaires, taxes, intérêts). Hors prêts, TVA, mensualités, enchères, chance.<br>
                     ⚖️ Balance = Export (travaux HT) − Import (fond de commerce). Toujours négative = l'économie locale fuit vers l'extérieur.<br>
-                    👷 Emploi = activités possédées / ${(gameState?.phase || 1) >= 3 ? '18' : '16'} cases achetables. En Phase 3, Chance et Merci deviennent collectives.<br>
+                    👷 Emploi = activités possédées / ${(gameState?.phase || 1) >= 3 ? '18' : '16'} cases achetables. En Phase 3, Chance et Opportunités deviennent collectives.<br>
                     📊 Gini = inégalité des patrimoines (€ + # + actifs − dettes). 0 = égalité parfaite, 1 = un seul joueur a tout.
                 </div>
             `, `
@@ -18109,7 +18110,7 @@ function initSystemeDe() {
                 'PAY_TAX': '🏛️',
                 'LINE_2_FEE': '📚',
                 'CHANCE_CARD': '🍀',
-                'MALCHANCE_CARD': '👨‍👩‍👧‍👦',
+                'MALCHANCE_CARD': '🎯',
                 'BANK_LOAN': '🏦',
                 'AAA_LOAN': LOGO_AAA,
                 'REPAY_LOAN': '💳',
