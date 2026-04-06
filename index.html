@@ -1,10 +1,10 @@
- <!-- V3(0) TEST - Build 180 - index-128-11 -->
+ <!-- V3(4) TEST - Build 184 - index-128-11 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title># ESPOYR Multijoueur V3(0) TEST</title>
+    <title># ESPOYR Multijoueur V3(4) TEST</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -362,7 +362,7 @@
         <!-- ÉCRAN ACCUEIL -->
         <div id="homeScreen" class="card">
             <h1><img src="logo__g1_jaune_rond.png" alt="Logo ESPOYR" style="height: 1.5em; vertical-align: middle; margin-right: 8px;">ESPOYR</h1>
-            <p class="subtitle">Jeu collaboratif d'économie - V3(0) TEST</p>
+            <p class="subtitle">Jeu collaboratif d'économie - V3(4) TEST</p>
             <div class="error-message" id="errorMessage"></div>
             
             <div style="margin-bottom: 15px; text-align: center; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
@@ -524,8 +524,11 @@
                     <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;">
                         <button class="btn" style="background: #f3e8ff; color: #7c3aed; flex: 1;" onclick="showCompteEtat()">🏛️ État</button>
                         <button class="btn" style="background: #fef9c3; color: #854d0e; flex: 1;" onclick="showCompteExportation()">🌍 Export</button>
-                        <button class="btn" style="background: #e0f2fe; color: #0369a1; flex: 1;" onclick="showCompteHorsCircuit()">🛰️ Hors circuit</button>
+                        <button class="btn" style="background: #e0f2fe; color: #0369a1; flex: 1;" onclick="showCompteHorsCircuit()">🌍 Importation</button>
                         <button class="btn" style="background: #dbeafe; color: #2563eb; flex: 1;" onclick="showCompteBanque()">🏦 Banque</button>
+                    </div>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;">
+                        <button class="btn" style="background: linear-gradient(135deg, #fef3c7, #fde68a); color: #92400e; flex: 1; font-weight: bold;" onclick="showIndicateurs()">📊 Indicateurs</button>
                     </div>
                     <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;">
                         <button class="btn" id="configBtn" style="background: #e5e7eb; color: #374151; flex: 1; display: none;" onclick="showConfigModal()">⚙️ Config</button>
@@ -647,7 +650,7 @@
             512: { nom: 'Banque', classe: 5, type: 'actif' },
             540: { nom: 'Compte Exportation', classe: 5, type: 'actif' },
             541: { nom: 'Compte État', classe: 5, type: 'actif' },
-            550: { nom: 'Argents hors circuit', classe: 5, type: 'actif' },
+            550: { nom: 'Importation', classe: 5, type: 'actif' },  // horsCircuit = Importation
             570: { nom: 'Bons d\'achat # (consignes)', classe: 5, type: 'actif' },
             580: { nom: 'Caisse Pot AAA', classe: 5, type: 'actif' },
             // Classe 6 - Charges
@@ -677,7 +680,7 @@
             771: { nom: 'Produits exceptionnels', classe: 7, type: 'produit' },
             778: { nom: 'Produit exceptionnel annulation', classe: 7, type: 'produit' },
             791: { nom: 'Redistribution bien commun', classe: 7, type: 'produit' },
-            792: { nom: 'Économie spéculative / importation', classe: 7, type: 'produit' },
+            792: { nom: 'Importation', classe: 7, type: 'produit' },  // horsCircuit = Importation
             // ========== COMPTES SPÉCIFIQUES ÉTAT (Étape 1) ==========
             702: { nom: 'Produits Frais/Services', classe: 7, type: 'produit' },
             703: { nom: 'Produits Taxe case', classe: 7, type: 'produit' },
@@ -1636,6 +1639,25 @@
         // Formatage affichage monétaire : 2 décimales
         function fmt(n) { n = Number(n || 0); return n % 1 === 0 ? n.toFixed(0) : n.toFixed(2); }
         
+        // ═══ INDICATEURS ÉCONOMIQUES — Helpers ═══
+        // Accumuler le PIB du tour en cours (appelé dans chaque fonction comptable concernée)
+        function ajouterPIB(montant) {
+            if (COMPTABILITE?.indicateurs && montant > 0) {
+                COMPTABILITE.indicateurs.pibTourEnCours = arrondir2((COMPTABILITE.indicateurs.pibTourEnCours || 0) + montant);
+            }
+        }
+        // Calcul du coefficient de Gini (0=égalité parfaite, 1=inégalité totale)
+        function calculerGini(valeurs) {
+            const n = valeurs.length;
+            if (n < 2) return 0;
+            const sorted = [...valeurs].sort((a, b) => a - b);
+            const mean = sorted.reduce((s, v) => s + v, 0) / n;
+            if (mean <= 0) return 0;
+            let sum = 0;
+            for (let i = 0; i < n; i++) sum += (2 * (i + 1) - n - 1) * sorted[i];
+            return Math.max(0, Math.min(1, arrondir2(sum / (n * n * mean) * 1000) / 1000));
+        }
+        
         // ═══ AFFICHAGE SOLDE EN TEMPS RÉEL ═══
         let _prevBalEuro = null;
         let _prevBalHash = null;
@@ -1700,7 +1722,7 @@
         
         const CONFIG = {
             salaireBase: 350,  // Net payé au joueur
-            capitalInitial: 450,
+            capitalInitial: 225,
             potAAAInitial: 1000,
             tauxInteret: 0.10, // 10% par tour
             remboursementAutoCapitalPct: 0.10, // 10% du capital rembourse automatiquement en fin de cycle
@@ -1713,7 +1735,7 @@
             phase3_tauxEmploiMin: 50,    // % emploi en dessous duquel Phase 3 se déclenche
             phase3_detteMax: 1500,       // Dette totale au-dessus de laquelle Phase 3 se déclenche
             // ═══ INFLATION — Indexation des factures ═══
-            factureBasePct: 0.15,        // Facture de base = 15% du prix activité (au lieu de 5%)
+            factureBasePct: 0.25,        // Facture de base = 25% du prix activité (Gini inégalitaire)
             inflationParTour: 0.03,      // +3% par tour
             inflationAdaptive: true,     // Ajustement dynamique toutes les 4 tours
             inflationPACibleMin: 3,      // Pouvoir d'achat cible minimum
@@ -3560,12 +3582,25 @@ function isAbsent(player) {
                 salairesVerses: 0,
                 journal: []  // Journal de l'Exportation
             },
+            // ═══ horsCircuit = IMPORTATION (argent sorti du circuit local) ═══
             horsCircuit: {
                 solde: 0,
                 recettes: 0,
                 journal: [],
                 grandLivre: { 550: 0, 792: 0 },
                 journalHorsCircuit: []
+            },
+            // ═══ INDICATEURS ÉCONOMIQUES (calculés à chaque tour complet) ═══
+            indicateurs: {
+                pibTourEnCours: 0,     // Accumulé pendant le tour, reset à isNewRound
+                pibParTour: [],        // [tour1, tour2, ...]
+                pibCumul: 0,
+                balanceExportCumul: 0, // Export.recettes cumulé
+                balanceImportCumul: 0, // Import.recettes cumulé
+                balanceParTour: [],    // [balance tour1, tour2, ...]
+                emploiParTour: [],     // [% emploi tour1, ...]
+                giniParTour: [],       // [gini tour1, ...]
+                dernierTourCalcule: 0
             }
         };
         
@@ -3667,6 +3702,7 @@ function isAbsent(player) {
             if (!COMPTABILITE.exportation) COMPTABILITE.exportation = { solde: 0, recettes: 0, salairesVerses: 0, journal: [] };
             if (!COMPTABILITE.exportation.journal) COMPTABILITE.exportation.journal = [];
             if (COMPTABILITE.exportation.solde === undefined) COMPTABILITE.exportation.solde = 0;
+            // horsCircuit = IMPORTATION (clé Firebase conservée pour compatibilité)
             if (!COMPTABILITE.horsCircuit) COMPTABILITE.horsCircuit = { solde: 0, recettes: 0, journal: [], grandLivre: { 550: 0, 792: 0 }, journalHorsCircuit: [] };
             if (!COMPTABILITE.horsCircuit.journal) COMPTABILITE.horsCircuit.journal = [];
             if (COMPTABILITE.horsCircuit.solde === undefined) COMPTABILITE.horsCircuit.solde = 0;
@@ -3681,6 +3717,17 @@ function isAbsent(player) {
             if (!COMPTABILITE.dettesEntreJoueurs) COMPTABILITE.dettesEntreJoueurs = [];
             // Smart Contracts (prêts entre joueurs, Phase 3)
             if (!COMPTABILITE.smartContracts) COMPTABILITE.smartContracts = [];
+            // Indicateurs économiques (migration)
+            if (!COMPTABILITE.indicateurs) COMPTABILITE.indicateurs = {
+                pibTourEnCours: 0, pibParTour: [], pibCumul: 0,
+                balanceExportCumul: 0, balanceImportCumul: 0, balanceParTour: [],
+                emploiParTour: [], giniParTour: [], dernierTourCalcule: 0
+            };
+            if (COMPTABILITE.indicateurs.pibTourEnCours === undefined) COMPTABILITE.indicateurs.pibTourEnCours = 0;
+            if (!COMPTABILITE.indicateurs.pibParTour) COMPTABILITE.indicateurs.pibParTour = [];
+            if (!COMPTABILITE.indicateurs.balanceParTour) COMPTABILITE.indicateurs.balanceParTour = [];
+            if (!COMPTABILITE.indicateurs.emploiParTour) COMPTABILITE.indicateurs.emploiParTour = [];
+            if (!COMPTABILITE.indicateurs.giniParTour) COMPTABILITE.indicateurs.giniParTour = [];
             
             // Convertir journal objet→array si Firebase l'a transformé
             if (COMPTABILITE.journal && !Array.isArray(COMPTABILITE.journal)) {
@@ -4602,6 +4649,7 @@ function isAbsent(player) {
             // Joueur reçoit le salaire
             COMPTABILITE.caisseJoueurs[joueurId].euro += montant;
             COMPTABILITE.caisseJoueurs[joueurId].salairesRecus += montant;  // Cumul
+            ajouterPIB(montant); // PIB: revenu (salaire)
             
             if (profil === 'creatif') {
                 // Créatif : payé par l'Exportation
@@ -4694,6 +4742,7 @@ function isAbsent(player) {
             // MAJ soldes acheteur
             COMPTABILITE.caisseJoueurs[joueurId].euro -= prix;
             COMPTABILITE.caisseJoueurs[joueurId].apportsActivites += prix;
+            ajouterPIB(prix); // PIB: investissement (achat activité)
             COMPTABILITE.caisseActivites[actId].proprietaireId = joueurId;
             COMPTABILITE.caisseActivites[actId].capital = fondCommerce; // 207 = actif (pas le TTC)
             
@@ -4768,7 +4817,7 @@ function isAbsent(player) {
             });
             if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
             
-            // ========== HORS CIRCUIT reçoit le Fond de commerce ==========
+            // ========== IMPORTATION reçoit le Fond de commerce (horsCircuit = Importation) ==========
             COMPTABILITE.horsCircuit.solde = arrondir2((COMPTABILITE.horsCircuit.solde || 0) + fondCommerce);
             COMPTABILITE.horsCircuit.recettes = arrondir2((COMPTABILITE.horsCircuit.recettes || 0) + fondCommerce);
             COMPTABILITE.horsCircuit.grandLivre[550] = arrondir2((COMPTABILITE.horsCircuit.grandLivre[550] || 0) + fondCommerce);
@@ -4809,6 +4858,7 @@ function isAbsent(player) {
             COMPTABILITE.caisseJoueurs[joueurId].euro -= cout;
             act.equipements = (act.equipements || 0) + 1;
             act.equipementA = (act.equipementA || 0) + 1;
+            ajouterPIB(cout); // PIB: investissement (équipement A)
             
             // État reçoit le paiement
             COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) + cout);
@@ -4860,6 +4910,7 @@ function isAbsent(player) {
             COMPTABILITE.caisseJoueurs[joueurId].euro -= cout;
             COMPTABILITE.caisseActivites[actId].equipements = (COMPTABILITE.caisseActivites[actId].equipements || 0) + 1;
             COMPTABILITE.caisseActivites[actId].equipementB = (COMPTABILITE.caisseActivites[actId].equipementB || 0) + 1;
+            ajouterPIB(cout); // PIB: investissement (équipement B)
             
             // État reçoit
             COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) + cout);
@@ -4897,6 +4948,7 @@ function isAbsent(player) {
             COMPTABILITE.caisseJoueurs[joueurId].euro -= cout;
             COMPTABILITE.caisseActivites[actId].equipementB = Math.max(0, (COMPTABILITE.caisseActivites[actId].equipementB || 0) - 1);
             COMPTABILITE.caisseActivites[actId].equipementA = (COMPTABILITE.caisseActivites[actId].equipementA || 0) + 1;
+            ajouterPIB(cout); // PIB: investissement (conversion B→A)
             
             // État reçoit la différence
             COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) + cout);
@@ -4941,6 +4993,7 @@ function isAbsent(player) {
             initCaisseActivite(actId);
             COMPTABILITE.caisseJoueurs[joueurId].euro -= prix;
             COMPTABILITE.caisseActivites[actId].equipements++;
+            ajouterPIB(prix); // PIB: investissement (équipement legacy)
             return enregistrerEcriture({
                 joueurId, libelle: `Équipement ${CASES[actId]?.name || actId}`,
                 compteDebit: 218, compteCredit: 500, montantEuro: prix, activiteId: actId
@@ -4971,6 +5024,7 @@ function isAbsent(player) {
             COMPTABILITE.caisseJoueurs[payeurId].espoyr -= montantEspoyr;
             COMPTABILITE.caisseJoueurs[payeurId].facturesPayees += montantEuro;  // Cumul payeur
             COMPTABILITE.caisseJoueurs[payeurId].taxesPayees += montantTVA;      // Cumul TVA
+            ajouterPIB(montantEuro); // PIB: consommation (facture client TTC)
             
             // MAJ soldes propriétaire (reçoit HT seulement)
             COMPTABILITE.caisseJoueurs[proprietaireId].euro += montantHT;
@@ -5139,6 +5193,7 @@ activiteId: actId
         async function comptaTravailCoop(travailleurId, proprietaireId, actId, gainHash) {
             initCaisseJoueur(travailleurId);
             initCaisseJoueur(proprietaireId);
+            ajouterPIB(gainHash); // PIB: production coopérative (#)
             
             // Travailleur gagne #
             COMPTABILITE.caisseJoueurs[travailleurId].espoyr += gainHash;
@@ -5216,6 +5271,7 @@ activiteId: actId
         async function comptaInterets(joueurId, montant) {
             initCaisseJoueur(joueurId);
             const caisse = COMPTABILITE.caisseJoueurs[joueurId];
+            ajouterPIB(montant); // PIB: service financier (intérêts)
             
             // Calcul: payer en cash si possible, sinon capitaliser
             const montantPaye = Math.min(montant, Math.max(0, caisse.euro || 0));
@@ -5806,6 +5862,7 @@ activiteId: actId
             COMPTABILITE.caisseJoueurs[joueurId].euro -= montant;
             COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) + montant);
             COMPTABILITE.etat.taxesRecues = arrondir2((COMPTABILITE.etat.taxesRecues || 0) + montant);
+            ajouterPIB(montant); // PIB: taxe
             
             return enregistrerEcriture({
                 joueurId, libelle: `Taxe 10%`,
@@ -5835,6 +5892,7 @@ activiteId: actId
                 caisse.euro = arrondir2(caisse.euro - paye);
                 caisse.taxesPayees = arrondir2((caisse.taxesPayees || 0) + paye);
                 caisse.taxeRevenusCumul = arrondir2((caisse.taxeRevenusCumul || 0) + paye);
+                ajouterPIB(paye); // PIB: taxe revenus
                 
                 let e = enregistrerEcriture({
                     joueurId,
@@ -5982,6 +6040,7 @@ activiteId: actId
                 COMPTABILITE.etat.taxesRecues = (COMPTABILITE.etat.taxesRecues || 0) + paye;
                 COMPTABILITE.etat.recettes.taxe = (COMPTABILITE.etat.recettes.taxe || 0) + paye;
                 COMPTABILITE.etat.recettes.total = (COMPTABILITE.etat.recettes.total || 0) + paye;
+                ajouterPIB(paye); // PIB: taxe Ligne 3
                 
                 // Écriture joueur: paie la taxe
                 enregistrerEcriture({
@@ -6031,6 +6090,7 @@ activiteId: actId
             // Joueur paie le montant TTC
             COMPTABILITE.caisseJoueurs[joueurId].euro -= montant;
             COMPTABILITE.caisseJoueurs[joueurId].taxesPayees += montant;  // Cumul (100% vers État)
+            ajouterPIB(montant); // PIB: consommation (frais)
             
             // Écriture 1: Joueur - Frais HT (charge)
             let e = enregistrerEcriture({
@@ -6248,6 +6308,7 @@ activiteId: actId
                 COMPTABILITE.banque = firebaseCompta.banque || COMPTABILITE.banque;
                 COMPTABILITE.exportation = firebaseCompta.exportation || COMPTABILITE.exportation;
                 COMPTABILITE.horsCircuit = firebaseCompta.horsCircuit || COMPTABILITE.horsCircuit;
+                COMPTABILITE.indicateurs = firebaseCompta.indicateurs || COMPTABILITE.indicateurs;
                 
                 normalizeComptabilite();
             }
@@ -7188,8 +7249,8 @@ if (gameData.status !== 'waiting') { showError('Partie déjà commencée !'); re
             
             // ═══ AUTO-CALIBRATION INFLATION selon nb joueurs ═══
             // Plus de joueurs = plus de passages/tour → base plus basse
-            const basePctParJoueurs = { 2: 0.20, 3: 0.17, 4: 0.15, 5: 0.13, 6: 0.12 };
-            gameConfig.factureBasePct = basePctParJoueurs[nbJoueurs] ?? (0.20 / Math.max(1, nbJoueurs / 2));
+            const basePctParJoueurs = { 2: 0.30, 3: 0.27, 4: 0.25, 5: 0.23, 6: 0.25 };
+            gameConfig.factureBasePct = basePctParJoueurs[nbJoueurs] ?? (0.30 / Math.max(1, nbJoueurs / 2));
             inflationTauxActuel = gameConfig.inflationParTour ?? CONFIG.inflationParTour ?? 0.03;
             inflationTauxPrecedent = inflationTauxActuel;
             inflationDernierAjustement = 0;
@@ -9408,7 +9469,7 @@ function initSystemeDe() {
                     <p style="margin: 0; font-weight: bold;">Répartition :</p>
                     <p style="margin: 4px 0 0 0;">🏛️ TVA État : ${facture.destinationEtat.toFixed(2)}€</p>
                     <p style="margin: 2px 0 0 0;">🌍 Export : ${facture.destinationExport.toFixed(2)}€ (travaux)</p>
-                    <p style="margin: 2px 0 0 0;">🛰️ Hors circuit : ${partHorsCircuit.toFixed(2)}€ (fond de commerce)</p>
+                    <p style="margin: 2px 0 0 0;">🌍 Importation : ${partHorsCircuit.toFixed(2)}€ (fond de commerce)</p>
                 </div>
                 
                 <p><strong>Facture/passage :</strong> ${fmt(calculerFactureActivite(c.id, []))}€ <span style="font-size:0.8rem; color:#6b7280;">(base ${Math.round((gameConfig.factureBasePct ?? 0.15)*100)}% + inflation ${getInflationStats().inflationPct}%)</span></p>
@@ -9473,7 +9534,7 @@ function initSystemeDe() {
             await gameRef.child(`activites/${caseId}`).set(myPlayerId);
             await syncComptabiliteToFirebase();
             
-            sendSystemMessage(`🏪 ${myName} achète ${c.icon} (-${fmt(prix)}€) → 🛰️ hors circuit ${fmt(result.partHorsCircuit || 0)}€`);
+            sendSystemMessage(`🏪 ${myName} achète ${c.icon} (-${fmt(prix)}€) → 🌍 importation ${fmt(result.partHorsCircuit || 0)}€`);
             
             // Vérifier si on peut équiper immédiatement
             const currentEuro = COMPTABILITE.caisseJoueurs[myPlayerId]?.euro ?? 0;
@@ -10138,6 +10199,7 @@ function initSystemeDe() {
             const droits = facture.droits;        // 6% → État
             const fondCommerce = arrondir2(prixVente + droits); // Tout intégré au 207
             const ledgerEntryIds = [];
+            ajouterPIB(droits); // PIB: taxe (droits d'enregistrement enchère, pas la revente)
             
             // Comptabilité : transfert d'argent
             initCaisseJoueur(acheteurId);
@@ -12771,6 +12833,61 @@ function initSystemeDe() {
                 
                 if (isNewRound) {
                     await checkPhaseTransition();
+                    
+                    // ═══ INDICATEURS ÉCONOMIQUES — Calcul à chaque tour complet ═══
+                    try {
+                        const ind = COMPTABILITE.indicateurs;
+                        if (ind) {
+                            const phase = gameState?.phase || 1;
+                            
+                            // 1. PIB du tour → historique
+                            const pibTour = arrondir2(ind.pibTourEnCours || 0);
+                            ind.pibParTour.push(pibTour);
+                            ind.pibCumul = arrondir2((ind.pibCumul || 0) + pibTour);
+                            ind.pibTourEnCours = 0; // Reset pour le prochain tour
+                            
+                            // 2. Balance commerciale (export.recettes - import.recettes, brut)
+                            const exportCumul = COMPTABILITE.exportation?.recettes || 0;
+                            const importCumul = COMPTABILITE.horsCircuit?.recettes || 0;
+                            const balance = arrondir2(exportCumul - importCumul);
+                            ind.balanceExportCumul = exportCumul;
+                            ind.balanceImportCumul = importCumul;
+                            ind.balanceParTour.push(balance);
+                            
+                            // 3. Taux d'emploi (activités possédées / total achetable)
+                            const denomEmploi = phase >= 3 ? 18 : 16;
+                            let possedees = 0;
+                            Object.entries(COMPTABILITE.caisseActivites || {}).forEach(([id, a]) => {
+                                if (a.proprietaireId) possedees++;
+                            });
+                            // En Phase 3, compter aussi les cases collectives
+                            if (phase >= 3 && typeof casesCollectives !== 'undefined') {
+                                possedees += Object.keys(casesCollectives || {}).length;
+                            }
+                            const emploi = Math.min(100, Math.round(possedees / denomEmploi * 100));
+                            ind.emploiParTour.push(emploi);
+                            
+                            // 4. Gini (patrimoine = € + # + actifs - dettes, 1:1)
+                            const patrimoines = [];
+                            Object.entries(playersData).forEach(([pid, p]) => {
+                                if (pid === 'ETAT' || pid === 'EXPORTATION' || pid === 'HORS_CIRCUIT' || pid === 'POT_AAA') return;
+                                const c = COMPTABILITE.caisseJoueurs[pid] || {};
+                                let w = (c.euro || 0) + (c.espoyr || 0);
+                                Object.entries(COMPTABILITE.caisseActivites || {}).forEach(([aid, act]) => {
+                                    if (act.proprietaireId === pid) w += (act.capital || CASES[parseInt(aid)]?.prix || 0);
+                                });
+                                w -= (c.emprunt || 0);
+                                patrimoines.push(Math.max(0, w));
+                            });
+                            const g = calculerGini(patrimoines);
+                            ind.giniParTour.push(g);
+                            
+                            ind.dernierTourCalcule = toursComplets;
+                            console.log(`📊 Indicateurs T${toursComplets}: PIB=${pibTour}€ Balance=${balance}€ Emploi=${emploi}% Gini=${g.toFixed(3)}`);
+                        }
+                    } catch (errInd) {
+                        console.error('Erreur calcul indicateurs:', errInd);
+                    }
                 }
             } catch (err) {
                 console.error('Erreur dans nextTurn:', err);
@@ -14418,9 +14535,9 @@ function initSystemeDe() {
                 <tr style="font-size: 0.8rem;">
                     <td colspan="3" style="background:#dcfce7;">
                         <strong>Recettes:</strong> 
-                        TVA ${(COMPTABILITE.etat.recettes?.tva || 0).toFixed(0)}€ | 
-                        Droits ${(COMPTABILITE.etat.recettes?.droits || 0).toFixed(0)}€ | 
-                        Frais ${(COMPTABILITE.etat.recettes?.frais || 0).toFixed(0)}€
+                        TVA ${fmt(COMPTABILITE.etat.recettes?.tva || 0)}€ | 
+                        Droits ${fmt(COMPTABILITE.etat.recettes?.droits || 0)}€ | 
+                        Frais ${fmt(COMPTABILITE.etat.recettes?.frais || 0)}€
                     </td>
                     <td colspan="3" style="background:#fee2e2;">
                         <strong>Dépenses:</strong> 
@@ -14458,7 +14575,7 @@ function initSystemeDe() {
             
             const bilanHorsCircuitHtml = `
                 <tr>
-                    <td colspan="6" style="background:#e0f2fe;"><strong>🛰️ Hors circuit</strong></td>
+                    <td colspan="6" style="background:#e0f2fe;"><strong>🌍 Importation</strong></td>
                 </tr>
                 <tr>
                     <td>Solde</td>
@@ -14467,7 +14584,7 @@ function initSystemeDe() {
                     <td colspan="2">${fmt(bilan.bilanHorsCircuit?.recettes || 0)}€</td>
                 </tr>
                 <tr>
-                    <td colspan="6" style="font-size:0.8rem;">💬 Économie spéculative / importation (captation du HT des achats)</td>
+                    <td colspan="6" style="font-size:0.8rem;">💬 Importation (fond de commerce des achats d'activités)</td>
                 </tr>
             `;
             
@@ -14825,7 +14942,7 @@ function initSystemeDe() {
             // ═══════════════════════════════════════════════════════════════
             // BILAN € (Euros) — Calculs
             // ═══════════════════════════════════════════════════════════════
-            const capitalInitial = 450; // Capital de départ fixe
+            const capitalInitial = gameConfig?.capitalInitial || CONFIG.capitalInitial; // Capital de départ configurable
             const caisseEuro = caisse.euro || 0;
             const empruntBanque = caisse.emprunt || 0;
             
@@ -15065,7 +15182,7 @@ function initSystemeDe() {
             const valeurActivites = activites.reduce((sum, [id, a]) => sum + (a.capital || 0), 0);
             
             // Calculs BILAN €
-            const capitalInitial = 450;
+            const capitalInitial = gameConfig?.capitalInitial || CONFIG.capitalInitial;
             const caisseEuro = caisse.euro || 0;
             const empruntBanque = caisse.emprunt || 0;
             const totalActifEuro = caisseEuro + valeurActivites;
@@ -15176,6 +15293,7 @@ function initSystemeDe() {
             
             // ACTIF (classe 5)
             const tresor = gl[500] || 0;
+            const potTVA = gl[445] || etat.potTVA || 0;
             
             // RECETTES (classe 7 - Produits)
             const rec704_TVA = gl[704] || 0;
@@ -15202,10 +15320,10 @@ function initSystemeDe() {
             
             // Compte 109 - Résultat cumulé (temps réel) = Actif - Dettes
             // Pour équilibrer : Actif = Passif → Passif = Dette + Résultat
-            const compte109_Resultat = tresor - detteCapital;
+            const totalActif = tresor + potTVA;
+            const compte109_Resultat = totalActif - detteCapital;
             
             // Vérification équilibre bilan
-            const totalActif = tresor;
             const totalPassif = compte109_Resultat + detteCapital;
             const bilanEquilibre = Math.abs(totalActif - totalPassif) < 0.01;
             
@@ -15282,6 +15400,10 @@ function initSystemeDe() {
                                     <td>500 - Trésor public</td>
                                     <td style="text-align:right; font-weight:bold;">${tresor.toFixed(2)}€</td>
                                 </tr>
+                                <tr>
+                                    <td>445 - Pot TVA</td>
+                                    <td style="text-align:right; font-weight:bold; color:#7c3aed;">${potTVA.toFixed(2)}€</td>
+                                </tr>
                                 <tr style="border-top:2px solid #059669;">
                                     <td><strong>TOTAL ACTIF</strong></td>
                                     <td style="text-align:right;"><strong>${totalActif.toFixed(2)}€</strong></td>
@@ -15326,8 +15448,8 @@ function initSystemeDe() {
                 <div style="background:#fef3c7; padding:10px; border-radius:8px; margin-bottom:10px;">
                     <p style="margin:0 0 8px 0; font-weight:bold;">💰 DÉTAIL DETTE</p>
                     <table style="width:100%; font-size:0.85rem;">
-                        <tr><td>Capital emprunté</td><td style="text-align:right;">${detteCapital.toFixed(0)}€</td></tr>
-                        <tr><td>Intérêts cumulés payés</td><td style="text-align:right;">${(dette.interetsCumules || 0).toFixed(0)}€</td></tr>
+                        <tr><td>Capital emprunté</td><td style="text-align:right;">${detteCapital.toFixed(2)}€</td></tr>
+                        <tr><td>Intérêts cumulés payés</td><td style="text-align:right;">${(dette.interetsCumules || 0).toFixed(2)}€</td></tr>
                         <tr><td>Intérêts prochains (${(CONFIG.tauxInteret * 100).toFixed(0)}%)</td><td style="text-align:right;">${Math.floor(detteCapital * CONFIG.tauxInteret)}€</td></tr>
                     </table>
                 </div>
@@ -15409,8 +15531,8 @@ function initSystemeDe() {
             
             if (detteCapital > 0) {
                 csv += '=== DÉTAIL DETTE ===\n';
-                csv += `Capital emprunté;${detteCapital.toFixed(0)}\n`;
-                csv += `Intérêts cumulés payés;${(dette.interetsCumules || 0).toFixed(0)}\n\n`;
+                csv += `Capital emprunté;${detteCapital.toFixed(2)}\n`;
+                csv += `Intérêts cumulés payés;${(dette.interetsCumules || 0).toFixed(2)}\n\n`;
             }
             
             csv += '=== JOURNAL ===\n';
@@ -15547,7 +15669,7 @@ function initSystemeDe() {
         }
         
         
-        // ========== COMPTE HORS CIRCUIT ==========
+        // ========== COMPTE IMPORTATION (variable interne: horsCircuit) ==========
         function showCompteHorsCircuit() {
             const hc = COMPTABILITE.horsCircuit || {};
             const journalHC = (hc.journal || []).slice(-10).reverse();
@@ -15565,22 +15687,22 @@ function initSystemeDe() {
             const recettes = hc.recettes || 0;
 
             showModal(`
-                <h3>🛰️ Argents hors circuit<\/h3>
+                <h3>🌍 Importation<\/h3>
                 <div style="background:#e0f2fe; padding:12px; border-radius:8px; margin-bottom:10px;">
                     <p style="margin:0; font-weight:bold;">📊 SITUATION<\/p>
                     <table style="width:100%; font-size:0.9rem; margin-top:8px;">
                         <tr>
                             <td>Solde actuel<\/td>
-                            <td style="text-align:right; font-weight:bold; color:#0369a1;">+${solde.toFixed(0)}€<\/td>
+                            <td style="text-align:right; font-weight:bold; color:#0369a1;">+${fmt(solde)}€<\/td>
                         <\/tr>
                         <tr>
                             <td>Recettes cumulées<\/td>
-                            <td style="text-align:right;">${recettes.toFixed(0)}€<\/td>
+                            <td style="text-align:right;">${fmt(recettes)}€<\/td>
                         <\/tr>
                     <\/table>
                     <p style="font-size:0.75rem; color:#6b7280; margin:8px 0 0 0;">
-                        💬 Captation du <strong>HT<\/strong> des achats d'activités (remplace la redistribution).
-                        Libellé comptable : <em>Économie spéculative / importation<\/em>.
+                        💬 Argent sorti du circuit local pour l'achat de <strong>fond de commerce<\/strong> et de biens extérieurs.
+                        Comptabilité interne : <em>horsCircuit = Importation<\/em>.
                     <\/p>
                 <\/div>
 
@@ -15625,6 +15747,180 @@ function initSystemeDe() {
         }
 
 // ========== COMPTE BANQUE ==========
+        // ========== INDICATEURS ÉCONOMIQUES (variable interne: indicateurs) ==========
+        function showIndicateurs() {
+            const ind = COMPTABILITE.indicateurs || {};
+            const pibH = ind.pibParTour || [];
+            const balH = ind.balanceParTour || [];
+            const empH = ind.emploiParTour || [];
+            const giniH = ind.giniParTour || [];
+            const nbTours = pibH.length;
+            
+            if (nbTours === 0) {
+                showModal('<h3>📊 Indicateurs économiques</h3><p style="color:#9ca3af; text-align:center; padding:20px;">Aucune donnée encore. Les indicateurs sont calculés à chaque tour complet (passage Ligne 1 de tous les joueurs).</p>',
+                    '<button class="btn btn-secondary" onclick="closeModal()">Fermer</button>');
+                return;
+            }
+            
+            // Dernières valeurs
+            const pibLast = pibH[nbTours-1] || 0;
+            const pibPrev = nbTours > 1 ? pibH[nbTours-2] : 0;
+            const pibDelta = arrondir2(pibLast - pibPrev);
+            const pibCumul = ind.pibCumul || 0;
+            
+            const balLast = balH[nbTours-1] || 0;
+            const balPrev = nbTours > 1 ? balH[nbTours-2] : 0;
+            const balDelta = arrondir2(balLast - balPrev);
+            const expCumul = ind.balanceExportCumul || 0;
+            const impCumul = ind.balanceImportCumul || 0;
+            
+            const empLast = empH[nbTours-1] || 0;
+            const empPrev = nbTours > 1 ? empH[nbTours-2] : 0;
+            const empDelta = empLast - empPrev;
+            
+            const giniLast = giniH[nbTours-1] || 0;
+            const giniPrev = nbTours > 1 ? giniH[nbTours-2] : 0;
+            const giniDelta = arrondir2((giniLast - giniPrev) * 1000) / 1000;
+            
+            function trend(d) { return d > 0.5 ? '↗️' : d < -0.5 ? '↘️' : '➡️'; }
+            function trendG(d) { return d > 0.005 ? '↗️ inégalité monte' : d < -0.005 ? '↘️ inégalité baisse' : '➡️ stable'; }
+            function giniColor(g) { return g < 0.2 ? '#22c55e' : g < 0.35 ? '#84cc16' : g < 0.5 ? '#f59e0b' : '#ef4444'; }
+            function giniLabel(g) { return g < 0.2 ? '🟢 Égalitaire' : g < 0.35 ? '🟡 Modéré' : g < 0.5 ? '🟠 Inégal' : '🔴 Très inégal'; }
+            
+            // ═══ SVG GRAPH BUILDER ═══
+            function buildSVG(series, width, height, title) {
+                const W = width, H = height, PAD = 35, PADT = 20;
+                const gW = W - PAD * 2, gH = H - PAD - PADT;
+                const n = Math.max(1, series[0].data.length);
+                
+                // Auto-scale
+                let allVals = [];
+                series.forEach(s => s.data.forEach(v => allVals.push(v)));
+                let yMin = Math.min(0, ...allVals);
+                let yMax = Math.max(1, ...allVals);
+                if (yMax === yMin) yMax = yMin + 1;
+                const margin = (yMax - yMin) * 0.1;
+                yMin -= margin; yMax += margin;
+                
+                function x(i) { return PAD + (i / Math.max(1, n-1)) * gW; }
+                function y(v) { return PADT + gH - ((v - yMin) / (yMax - yMin)) * gH; }
+                
+                let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-height:200px;background:#fafafa;border-radius:8px;">`;
+                svg += `<text x="${W/2}" y="14" text-anchor="middle" font-size="11" font-weight="bold" fill="#334155">${title}</text>`;
+                
+                // Grille Y (5 lignes)
+                for (let i = 0; i <= 4; i++) {
+                    const val = yMin + (yMax - yMin) * i / 4;
+                    const yy = y(val);
+                    svg += `<line x1="${PAD}" y1="${yy}" x2="${W-PAD}" y2="${yy}" stroke="#e2e8f0" stroke-width="0.5"/>`;
+                    svg += `<text x="${PAD-3}" y="${yy+3}" text-anchor="end" font-size="8" fill="#94a3b8">${Math.round(val)}</text>`;
+                }
+                
+                // Ligne zéro si applicable
+                if (yMin < 0 && yMax > 0) {
+                    svg += `<line x1="${PAD}" y1="${y(0)}" x2="${W-PAD}" y2="${y(0)}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,3"/>`;
+                }
+                
+                // Axe X labels
+                for (let i = 0; i < n; i++) {
+                    if (n <= 10 || i % Math.ceil(n/10) === 0 || i === n-1) {
+                        svg += `<text x="${x(i)}" y="${H-2}" text-anchor="middle" font-size="8" fill="#94a3b8">T${i+1}</text>`;
+                    }
+                }
+                
+                // Courbes
+                series.forEach(s => {
+                    if (s.data.length < 2) return;
+                    let path = '';
+                    s.data.forEach((v, i) => { path += (i===0 ? 'M' : 'L') + `${x(i).toFixed(1)},${y(v).toFixed(1)} `; });
+                    svg += `<path d="${path}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"/>`;
+                    // Point final
+                    const lastI = s.data.length - 1;
+                    svg += `<circle cx="${x(lastI)}" cy="${y(s.data[lastI])}" r="3" fill="${s.color}"/>`;
+                    svg += `<text x="${x(lastI)+5}" y="${y(s.data[lastI])+3}" font-size="8" fill="${s.color}" font-weight="bold">${s.label}</text>`;
+                });
+                
+                svg += '</svg>';
+                return svg;
+            }
+            
+            // Graphique 1: PIB + Balance
+            const graph1 = buildSVG([
+                { data: pibH, color: '#2563eb', label: 'PIB' },
+                { data: balH, color: '#dc2626', label: 'Balance' }
+            ], 400, 200, 'PIB et Balance commerciale (€)');
+            
+            // Graphique 2: Emploi + Gini (échelles différentes → normaliser)
+            const giniScaled = giniH.map(g => g * 100); // Gini 0-1 → 0-100
+            const graph2 = buildSVG([
+                { data: empH, color: '#059669', label: 'Emploi%' },
+                { data: giniScaled, color: '#f59e0b', label: 'Gini×100' }
+            ], 400, 200, 'Taux d\'emploi (%) et Gini (×100)');
+            
+            showModal(`
+                <h3>📊 Indicateurs économiques — Tour ${nbTours}</h3>
+                
+                <table style="width:100%; font-size:0.85rem; border-collapse:collapse; margin-bottom:12px;">
+                    <thead>
+                        <tr style="background:#f1f5f9;">
+                            <th style="text-align:left; padding:6px;">Indicateur</th>
+                            <th style="text-align:right; padding:6px;">Valeur</th>
+                            <th style="text-align:right; padding:6px;">Δ tour</th>
+                            <th style="text-align:center; padding:6px;">Tendance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="padding:4px;">📈 <strong>PIB / tour</strong></td>
+                            <td style="text-align:right; padding:4px; font-weight:bold;">${fmt(pibLast)}€</td>
+                            <td style="text-align:right; padding:4px; color:${pibDelta>=0?'#059669':'#dc2626'};">${pibDelta>=0?'+':''}${fmt(pibDelta)}€</td>
+                            <td style="text-align:center;">${trend(pibDelta)}</td>
+                        </tr>
+                        <tr style="background:#f8fafc;">
+                            <td style="padding:4px;">💰 <strong>PIB cumulé</strong></td>
+                            <td style="text-align:right; padding:4px; font-weight:bold;">${fmt(pibCumul)}€</td>
+                            <td colspan="2" style="text-align:center; font-size:0.75rem; color:#6b7280;">depuis le début</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:4px;">⚖️ <strong>Balance commerciale</strong></td>
+                            <td style="text-align:right; padding:4px; font-weight:bold; color:${balLast>=0?'#059669':'#dc2626'};">${balLast>=0?'+':''}${fmt(balLast)}€</td>
+                            <td style="text-align:right; padding:4px; color:${balDelta>=0?'#059669':'#dc2626'};">${balDelta>=0?'+':''}${fmt(balDelta)}€</td>
+                            <td style="text-align:center;">${balLast < 0 ? '🔴 Déficit' : '🟢 Excédent'}</td>
+                        </tr>
+                        <tr style="background:#f8fafc;">
+                            <td style="padding:4px; font-size:0.75rem;">   ↳ Export / Import</td>
+                            <td colspan="3" style="text-align:right; padding:4px; font-size:0.75rem; color:#6b7280;">${fmt(expCumul)}€ / ${fmt(impCumul)}€ (ratio 1:${impCumul > 0 ? (impCumul/Math.max(1,expCumul)).toFixed(1) : '∞'})</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:4px;">👷 <strong>Taux d'emploi</strong></td>
+                            <td style="text-align:right; padding:4px; font-weight:bold;">${empLast}%</td>
+                            <td style="text-align:right; padding:4px; color:${empDelta>=0?'#059669':'#dc2626'};">${empDelta>=0?'+':''}${empDelta}%</td>
+                            <td style="text-align:center;">${trend(empDelta)}</td>
+                        </tr>
+                        <tr style="background:#f8fafc;">
+                            <td style="padding:4px;">📊 <strong>Gini</strong></td>
+                            <td style="text-align:right; padding:4px; font-weight:bold; color:${giniColor(giniLast)};">${giniLast.toFixed(3)}</td>
+                            <td style="text-align:right; padding:4px; color:${giniDelta>0?'#dc2626':'#059669'};">${giniDelta>=0?'+':''}${giniDelta.toFixed(3)}</td>
+                            <td style="text-align:center; font-size:0.75rem;">${giniLabel(giniLast)}</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <div style="margin-bottom:8px;">${graph1}</div>
+                <div style="margin-bottom:8px;">${graph2}</div>
+                
+                <div style="background:#fef3c7; padding:10px; border-radius:8px; font-size:0.75rem; color:#92400e;">
+                    <strong>Lecture :</strong><br>
+                    📈 PIB = somme des transactions réelles (achats, factures, salaires, taxes, intérêts). Hors prêts, TVA, mensualités, enchères, chance.<br>
+                    ⚖️ Balance = Export (travaux HT) − Import (fond de commerce). Toujours négative = l'économie locale fuit vers l'extérieur.<br>
+                    👷 Emploi = activités possédées / ${(gameState?.phase || 1) >= 3 ? '18' : '16'} cases achetables. En Phase 3, Chance et Merci deviennent collectives.<br>
+                    📊 Gini = inégalité des patrimoines (€ + # + actifs − dettes). 0 = égalité parfaite, 1 = un seul joueur a tout.
+                </div>
+            `, `
+                <button class="btn btn-secondary" onclick="closeModal()">Fermer</button>
+            `);
+        }
+        
         function showCompteBanque() {
             const banque = COMPTABILITE.banque || {};
             const gl = banque.grandLivre || {};
@@ -15661,11 +15957,11 @@ function initSystemeDe() {
                     <div style="background:#dbeafe; padding:10px; border-radius:8px;">
                         <p style="margin:0; font-weight:bold; color:#2563eb;">📊 ACTIF</p>
                         <table style="width:100%; font-size:0.85rem; margin-top:8px;">
-                            <tr><td>1010 - Réserves</td><td style="text-align:right;">${(gl[1010] || 0).toFixed(0)}€</td></tr>
-                            <tr><td>1200 - Encours crédits (E)</td><td style="text-align:right;">${E.toFixed(0)}€</td></tr>
-                            <tr><td>1300 - Intérêts à recevoir</td><td style="text-align:right;">${(gl[1300] || 0).toFixed(0)}€</td></tr>
+                            <tr><td>1010 - Réserves</td><td style="text-align:right;">${(gl[1010] || 0).toFixed(2)}€</td></tr>
+                            <tr><td>1200 - Encours crédits (E)</td><td style="text-align:right;">${E.toFixed(2)}€</td></tr>
+                            <tr><td>1300 - Intérêts à recevoir</td><td style="text-align:right;">${(gl[1300] || 0).toFixed(2)}€</td></tr>
                             <tr style="border-top:2px solid #2563eb; font-weight:bold;">
-                                <td>TOTAL ACTIF</td><td style="text-align:right;">${((gl[1010] || 0) + E + (gl[1300] || 0)).toFixed(0)}€</td>
+                                <td>TOTAL ACTIF</td><td style="text-align:right;">${((gl[1010] || 0) + E + (gl[1300] || 0)).toFixed(2)}€</td>
                             </tr>
                         </table>
                     </div>
@@ -15673,11 +15969,11 @@ function initSystemeDe() {
                     <div style="background:#fee2e2; padding:10px; border-radius:8px;">
                         <p style="margin:0; font-weight:bold; color:#dc2626;">📊 PASSIF + CAPITAUX</p>
                         <table style="width:100%; font-size:0.85rem; margin-top:8px;">
-                            <tr><td>2290 - Provisions (P)</td><td style="text-align:right;">${P.toFixed(0)}€</td></tr>
-                            <tr style="background:#fee2e2;"><td>3000 - Capital banque</td><td style="text-align:right;">${C.toFixed(0)}€</td></tr>
-                            <tr style="background:#fee2e2;"><td>3100 - Réserves / Résultat</td><td style="text-align:right;">${cpAffiche.toFixed(0)}€</td></tr>
+                            <tr><td>2290 - Provisions (P)</td><td style="text-align:right;">${P.toFixed(2)}€</td></tr>
+                            <tr style="background:#fee2e2;"><td>3000 - Capital banque</td><td style="text-align:right;">${C.toFixed(2)}€</td></tr>
+                            <tr style="background:#fee2e2;"><td>3100 - Réserves / Résultat</td><td style="text-align:right;">${cpAffiche.toFixed(2)}€</td></tr>
                             <tr style="border-top:2px solid #dc2626; font-weight:bold;">
-                                <td>TOTAL</td><td style="text-align:right;">${(P + C + cpAffiche).toFixed(0)}€</td>
+                                <td>TOTAL</td><td style="text-align:right;">${(P + C + cpAffiche).toFixed(2)}€</td>
                             </tr>
                         </table>
                     </div>
@@ -15708,11 +16004,11 @@ function initSystemeDe() {
                 <div style="background:#dcfce7; padding:10px; border-radius:8px; margin-bottom:10px;">
                     <p style="margin:0; font-weight:bold;">💰 RÉSULTAT</p>
                     <table style="width:100%; font-size:0.85rem; margin-top:8px;">
-                        <tr><td>4000 - Produits intérêts</td><td style="text-align:right;">${(produitsInterets).toFixed(0)}€</td></tr>
-                        <tr><td>5000 - Dotation provisions</td><td style="text-align:right;">-${(dotationProvision).toFixed(0)}€</td></tr>
+                        <tr><td>4000 - Produits intérêts</td><td style="text-align:right;">${(produitsInterets).toFixed(2)}€</td></tr>
+                        <tr><td>5000 - Dotation provisions</td><td style="text-align:right;">-${(dotationProvision).toFixed(2)}€</td></tr>
                         <tr style="border-top:1px solid #059669;">
                             <td><strong>Résultat net</strong></td>
-                            <td style="text-align:right;"><strong>${resultatNet.toFixed(0)}€</strong></td>
+                            <td style="text-align:right;"><strong>${resultatNet.toFixed(2)}€</strong></td>
                         </tr>
                     </table>
                 </div>
@@ -15720,10 +16016,10 @@ function initSystemeDe() {
                 <div style="background:#f3f4f6; padding:10px; border-radius:8px;">
                     <p style="margin:0 0 5px 0; font-weight:bold;">📒 Statistiques</p>
                     <table style="width:100%; font-size:0.85rem;">
-                        <tr><td>Total prêts accordés</td><td style="text-align:right;">${(banque.totalPretsAccordes || 0).toFixed(0)}€</td></tr>
-                        <tr><td>Total remboursé</td><td style="text-align:right;">${(banque.totalRembourse || 0).toFixed(0)}€</td></tr>
-                        <tr><td>Intérêts cumulés reçus</td><td style="text-align:right;">${(banque.cumInterets || 0).toFixed(0)}€</td></tr>
-                        <tr><td>Défauts</td><td style="text-align:right;">${(banque.defauts || 0).toFixed(0)}€</td></tr>
+                        <tr><td>Total prêts accordés</td><td style="text-align:right;">${(banque.totalPretsAccordes || 0).toFixed(2)}€</td></tr>
+                        <tr><td>Total remboursé</td><td style="text-align:right;">${(banque.totalRembourse || 0).toFixed(2)}€</td></tr>
+                        <tr><td>Intérêts cumulés reçus</td><td style="text-align:right;">${(banque.cumInterets || 0).toFixed(2)}€</td></tr>
+                        <tr><td>Défauts</td><td style="text-align:right;">${(banque.defauts || 0).toFixed(2)}€</td></tr>
                     </table>
                 </div>
             `, `
@@ -16018,15 +16314,15 @@ function initSystemeDe() {
                         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 5px;">
                             <div style="background: #f0f9ff; padding: 4px; border-radius: 4px; text-align: center;">
                                 <p style="margin: 0; font-size: 0.7rem; color: #6b7280;">E (Encours)</p>
-                                <p style="margin: 0; font-weight: bold; color: #1e40af;">${E.toFixed(0)}€</p>
+                                <p style="margin: 0; font-weight: bold; color: #1e40af;">${E.toFixed(2)}€</p>
                             </div>
                             <div style="background: #f0fdf4; padding: 4px; border-radius: 4px; text-align: center;">
                                 <p style="margin: 0; font-size: 0.7rem; color: #6b7280;">C (10% E)</p>
-                                <p style="margin: 0; font-weight: bold; color: #059669;">${C_requis.toFixed(0)}€</p>
+                                <p style="margin: 0; font-weight: bold; color: #059669;">${C_requis.toFixed(2)}€</p>
                             </div>
                             <div style="background: #fef3c7; padding: 4px; border-radius: 4px; text-align: center;">
                                 <p style="margin: 0; font-size: 0.7rem; color: #6b7280;">P (5% E)</p>
-                                <p style="margin: 0; font-weight: bold; color: #d97706;">${P_requis.toFixed(0)}€</p>
+                                <p style="margin: 0; font-weight: bold; color: #d97706;">${P_requis.toFixed(2)}€</p>
                             </div>
                         </div>
                     </div>
@@ -16036,26 +16332,26 @@ function initSystemeDe() {
                         <div style="background: #bfdbfe; padding: 8px; border-radius: 6px;">
                             <p style="margin: 0; font-weight: bold; color: #1e40af; font-size: 0.9rem;">ACTIF</p>
                             <table style="width: 100%; font-size: 0.75rem; margin-top: 5px;">
-                                <tr><td>1010 Réserves</td><td style="text-align:right;">${(gl[1010] || 0).toFixed(0)}€</td></tr>
-                                <tr><td><strong>1200 Encours (E)</strong></td><td style="text-align:right;"><strong>${E.toFixed(0)}€</strong></td></tr>
-                                <tr><td>1300 Int. à recevoir</td><td style="text-align:right;">${(gl[1300] || 0).toFixed(0)}€</td></tr>
+                                <tr><td>1010 Réserves</td><td style="text-align:right;">${(gl[1010] || 0).toFixed(2)}€</td></tr>
+                                <tr><td><strong>1200 Encours (E)</strong></td><td style="text-align:right;"><strong>${E.toFixed(2)}€</strong></td></tr>
+                                <tr><td>1300 Int. à recevoir</td><td style="text-align:right;">${(gl[1300] || 0).toFixed(2)}€</td></tr>
                             </table>
                             <hr style="margin: 5px 0; border-color: #93c5fd;">
                             <p style="margin: 0; font-weight: bold; font-size: 0.85rem; text-align: right;">
-                                Total: ${bilanBanque.actif.totalActif.toFixed(0)}€
+                                Total: ${bilanBanque.actif.totalActif.toFixed(2)}€
                             </p>
                         </div>
                         <!-- PASSIF + CAPITAUX -->
                         <div style="background: #fecaca; padding: 8px; border-radius: 6px;">
                             <p style="margin: 0; font-weight: bold; color: #991b1b; font-size: 0.9rem;">PASSIF + CP</p>
                             <table style="width: 100%; font-size: 0.75rem; margin-top: 5px;">
-                                <tr><td>2290 Provision</td><td style="text-align:right;">${(gl[2290] || 0).toFixed(0)}€</td></tr>
-                                <tr style="background: #fee2e2;"><td>3000 Capital banque</td><td style="text-align:right;">${(gl[3000] || 0).toFixed(0)}€</td></tr>
-                                <tr style="background: #fee2e2;"><td>3100 Réserves / Résultat</td><td style="text-align:right;">${(gl[3100] || 0).toFixed(0)}€</td></tr>
+                                <tr><td>2290 Provision</td><td style="text-align:right;">${(gl[2290] || 0).toFixed(2)}€</td></tr>
+                                <tr style="background: #fee2e2;"><td>3000 Capital banque</td><td style="text-align:right;">${(gl[3000] || 0).toFixed(2)}€</td></tr>
+                                <tr style="background: #fee2e2;"><td>3100 Réserves / Résultat</td><td style="text-align:right;">${(gl[3100] || 0).toFixed(2)}€</td></tr>
                             </table>
                             <hr style="margin: 5px 0; border-color: #fca5a5;">
                             <p style="margin: 0; font-weight: bold; font-size: 0.85rem; text-align: right;">
-                                Total: ${bilanBanque.equilibre.totalPassifCapitaux.toFixed(0)}€
+                                Total: ${bilanBanque.equilibre.totalPassifCapitaux.toFixed(2)}€
                             </p>
                         </div>
                     </div>
@@ -16064,9 +16360,9 @@ function initSystemeDe() {
                     <div style="background: white; padding: 6px 8px; border-radius: 6px; margin-top: 8px;">
                         <p style="margin: 0; font-size: 0.8rem;">
                             <strong>Résultat:</strong> 
-                            4000 Produits intérêts: <span style="color: #059669;">+${(gl[4000] || 0).toFixed(0)}€</span>
-                            | 5000 Dotation provision: <span style="color: #dc2626;">-${(gl[5000] || 0).toFixed(0)}€</span>
-                            = <strong>${bilanBanque.resultat.resultatNet.toFixed(0)}€</strong>
+                            4000 Produits intérêts: <span style="color: #059669;">+${(gl[4000] || 0).toFixed(2)}€</span>
+                            | 5000 Dotation provision: <span style="color: #dc2626;">-${(gl[5000] || 0).toFixed(2)}€</span>
+                            = <strong>${bilanBanque.resultat.resultatNet.toFixed(2)}€</strong>
                         </p>
                     </div>
                     
@@ -16080,7 +16376,7 @@ function initSystemeDe() {
                         <p style="margin: 0; font-size: 0.8rem;">
                             ${verifPret.peutPreter ? 
                                 '✅ Banque peut prêter (Capital suffisant)' : 
-                                `⚠️ Capital insuffisant (déficit: ${verifPret.deficit.toFixed(0)}€)`}
+                                `⚠️ Capital insuffisant (déficit: ${verifPret.deficit.toFixed(2)}€)`}
                         </p>
                     </div>
                 </div>
