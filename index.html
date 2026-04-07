@@ -921,8 +921,8 @@
             if (total >= 3) return { ok: false, raison: 'Maximum 3 équipements atteint' };
             if (nbA >= 3) return { ok: false, raison: 'Maximum 3 A atteint' };
             
-            // Vérifier membre AAA
-            const isMembre = playersData[joueurId]?.membreAAA === true;
+            // Vérifier membre AAA (playersData OU COMPTABILITE)
+            const isMembre = playersData[joueurId]?.membreAAA === true || COMPTABILITE.potAAA?.membres?.includes(joueurId);
             if (!isMembre) return { ok: false, raison: 'Il faut être membre du Pot AAA' };
             
             // Vérifier pot AAA
@@ -943,7 +943,8 @@
             const nbB = (equipList || []).filter(e => e === 'B').length;
             if (nbB === 0) return { ok: false, raison: 'Aucun B à convertir' };
             
-            const isMembre = playersData[joueurId]?.membreAAA === true;
+            // Vérifier membre AAA (playersData OU COMPTABILITE)
+            const isMembre = playersData[joueurId]?.membreAAA === true || COMPTABILITE.potAAA?.membres?.includes(joueurId);
             if (!isMembre) return { ok: false, raison: 'Il faut être membre du Pot AAA' };
             
             const bonus = getBonusHash(caseId, 'B_TO_A');
