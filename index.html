@@ -1,10 +1,10 @@
- <!-- V3(7) TEST - Build 187 - index-128-11 -->
+ <!-- V3(9) TEST - Build 189 - index-128-11 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title># ESPOYR Multijoueur V3(7) TEST</title>
+    <title># ESPOYR Multijoueur V3(9) TEST</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -362,7 +362,7 @@
         <!-- ÉCRAN ACCUEIL -->
         <div id="homeScreen" class="card">
             <h1><img src="logo__g1_jaune_rond.png" alt="Logo ESPOYR" style="height: 1.5em; vertical-align: middle; margin-right: 8px;">ESPOYR</h1>
-            <p class="subtitle">Jeu collaboratif d'économie - V3(7) TEST</p>
+            <p class="subtitle">Jeu collaboratif d'économie - V3(9) TEST</p>
             <div class="error-message" id="errorMessage"></div>
             
             <div style="margin-bottom: 15px; text-align: center; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
@@ -459,6 +459,7 @@
                 <div>🔄 Tour <strong id="turnNumber">1</strong></div>
                 <div class="turn-indicator" id="turnIndicator">🎯 ...</div>
                 <div>📊 Phase <strong id="phaseNumber">1</strong></div>
+                <div id="potAAAIndicator" style="font-size: 0.8rem; color: #854d0e; background: #fef9c3; padding: 2px 8px; border-radius: 4px;"># Pot AAA <strong>1000</strong>#</div>
                 <div id="sensIndicator" style="font-size: 0.8rem;">➡️</div>
                 <button id="forceNextBtn" class="btn force-next-btn level-normal" style="padding: 4px 10px; font-size: 0.75rem; display: none;" onclick="confirmForceNextTurn()" title="Forcer le tour suivant">⏭️ Forcer</button>
                 <button class="btn" style="padding: 4px 8px; font-size: 0.7rem; background: #f3f4f6;" onclick="saveGame()">💾</button>
@@ -7812,6 +7813,13 @@ Conserve ce fichier pour rejoindre la partie en cas de déconnexion.`;
             
             // ═══ Mise à jour indicateur inflation ═══
             updateInflationDisplay();
+            
+            // ═══ Mise à jour Pot AAA dans la barre ═══
+            const potAAAEl = document.getElementById('potAAAIndicator');
+            if (potAAAEl) {
+                const soldePot = COMPTABILITE?.potAAA?.solde || 0;
+                potAAAEl.innerHTML = `# Pot AAA <strong>${fmt(soldePot)}</strong>#`;
+            }
             
             // Indicateur du sens de déplacement
             const sensEl = document.getElementById('sensIndicator');
@@ -15676,13 +15684,29 @@ function initSystemeDe() {
                     ` : ''}
                 </div>
                 
-                <div style="background:#e0e7ff; padding:10px; border-radius:8px;">
+                <div style="background:#e0e7ff; padding:10px; border-radius:8px; margin-bottom:10px;">
                     <p style="margin:0; font-weight:bold;">💡 Fonctionnement</p>
                     <ul style="font-size:0.8rem; margin:8px 0 0 0; padding-left:20px;">
                         <li>Reçoit les travaux HT (16%) des achats d'activités</li>
                         <li>Paie les salaires des joueurs "créatifs" (variable selon dé)</li>
                         <li>Si découvert → l'État comble en fin de tour</li>
                     </ul>
+                </div>
+                
+                <div style="background:#f8fafc; padding:10px; border-radius:8px;">
+                    <p style="margin:0 0 8px 0; font-weight:bold;">🧾 10 dernières écritures</p>
+                    <table style="width:100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="font-size:0.75rem; color:#6b7280;">
+                                <th style="text-align:left;">#</th>
+                                <th style="text-align:left;">Libellé</th>
+                                <th style="text-align:right;">Montant</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${journalHtml}
+                        </tbody>
+                    </table>
                 </div>
             `, `
                 <button class="btn" style="background:#dbeafe; color:#2563eb;" onclick="exportCompteExportCSV()">📥 Export CSV</button>
