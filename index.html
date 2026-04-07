@@ -1,10 +1,10 @@
- <!-- V3(5) TEST - Build 185 - index-128-11 -->
+ <!-- V3(7) TEST - Build 187 - index-128-11 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title># ESPOYR Multijoueur V3(5) TEST</title>
+    <title># ESPOYR Multijoueur V3(7) TEST</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -362,7 +362,7 @@
         <!-- ÉCRAN ACCUEIL -->
         <div id="homeScreen" class="card">
             <h1><img src="logo__g1_jaune_rond.png" alt="Logo ESPOYR" style="height: 1.5em; vertical-align: middle; margin-right: 8px;">ESPOYR</h1>
-            <p class="subtitle">Jeu collaboratif d'économie - V3(5) TEST</p>
+            <p class="subtitle">Jeu collaboratif d'économie - V3(7) TEST</p>
             <div class="error-message" id="errorMessage"></div>
             
             <div style="margin-bottom: 15px; text-align: center; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
@@ -3996,6 +3996,7 @@ function isAbsent(player) {
             if (c.tvaCollectee === undefined) c.tvaCollectee = 0;
             // Biens personnels et arriérés (migration)
             if (c.impaye === undefined) c.impaye = 0;
+            if (c.impayeEtat === undefined) c.impayeEtat = 0; // Arriérés taxes → État
             if (!c.biensPersonnels) c.biensPersonnels = [];
             if (!c.dettesPersonnelles) c.dettesPersonnelles = [];
         }
@@ -4177,7 +4178,7 @@ function isAbsent(player) {
             if (contexte === 'horsCircuit' || compteDebit === 550 || compteCredit === 550) {
                 COMPTABILITE.horsCircuit.journal.push(ecriture);
                 if (COMPTABILITE.horsCircuit.journalHorsCircuit) COMPTABILITE.horsCircuit.journalHorsCircuit.push({
-                    id: ecriture.id, libelle: ecriture.libelle, montant: (ecriture.debit?.montantEuro || ecriture.credit?.montantEuro || 0),
+                    id: ecriture.id, libelle: ecriture.libelle, montant: (ecriture.debit?.euro || ecriture.credit?.euro || 0),
                     tour: ecriture.tour, timestamp: ecriture.timestamp
                 });
             }
@@ -5923,10 +5924,10 @@ activiteId: actId
                 if (e?.ledgerEntryId) ledgerEntryIds.push(e.ledgerEntryId);
             }
             
-            // Impayé → arriérés si pas assez
+            // Impayé → arriérés État si pas assez
             const impaye = arrondir2(taxe - paye);
             if (impaye > 0) {
-                caisse.impaye = arrondir2((caisse.impaye || 0) + impaye);
+                caisse.impayeEtat = arrondir2((caisse.impayeEtat || 0) + impaye);
             }
             
             // Reset compteur revenus
@@ -6059,7 +6060,7 @@ activiteId: actId
             }
             
             if (impaye > 0) {
-                caisse.impaye = (caisse.impaye || 0) + impaye;
+                caisse.impayeEtat = (caisse.impayeEtat || 0) + impaye;
                 
                 // Écriture joueur: taxe impayée → arriérés
                 enregistrerEcriture({
@@ -9094,8 +9095,8 @@ function initSystemeDe() {
             }
             
             // ========== 8. ARRIÉRÉS ==========
-            let arrieresResult = { avant: 0, paye: 0, apres: 0 };
-            if ((caisse.impaye || 0) > 0) {
+            let arrieresResult = { avant: 0, paye: 0, apres: 0, payeEtat: 0, payeImport: 0 };
+            if ((caisse.impaye || 0) > 0 || (caisse.impayeEtat || 0) > 0) {
                 arrieresResult = await payerArrieres(myPlayerId);
             }
             
@@ -9298,6 +9299,9 @@ function initSystemeDe() {
             
             // --- 8. Arriérés ---
             if (arrieresResult.avant > 0) {
+                let detailArrieres = '';
+                if (arrieresResult.payeEtat > 0) detailArrieres += `🏛️ ${fmt(arrieresResult.payeEtat)}€ → État `;
+                if (arrieresResult.payeImport > 0) detailArrieres += `🌍 ${fmt(arrieresResult.payeImport)}€ → Import `;
                 modalHtml += `
                     <div style="background: #fee2e2; padding: 8px; border-radius: 8px; margin-bottom: 8px; border: 1px solid #fca5a5;">
                         <div style="display: flex; justify-content: space-between;">
@@ -9307,6 +9311,7 @@ function initSystemeDe() {
                                 ${arrieresResult.apres > 0 ? ' (reste: '+fmt(arrieresResult.apres)+'€)' : ' ✅ soldé'}
                             </span>
                         </div>
+                        ${detailArrieres ? '<p style="margin:4px 0 0;font-size:0.8rem;color:#92400e;">' + detailArrieres + '</p>' : ''}
                     </div>`;
             }
             
@@ -11045,45 +11050,82 @@ function initSystemeDe() {
         }
         
         // ========== ARRIÉRÉS (paiement au passage Ligne 1) ==========
+        // Sépare les arriérés État (taxes) et Import (mensualités/autres)
         async function payerArrieres(joueurId) {
             initCaisseJoueur(joueurId);
             const caisse = COMPTABILITE.caisseJoueurs[joueurId];
+            const impayeEtatAvant = caisse.impayeEtat || 0;
             const impayeAvant = caisse.impaye || 0;
-            if (impayeAvant <= 0) return { avant: 0, paye: 0, apres: 0 };
+            const totalAvant = impayeEtatAvant + impayeAvant;
+            if (totalAvant <= 0) return { avant: 0, paye: 0, apres: 0, payeEtat: 0, payeImport: 0 };
             
             // Garder minimum 50€
-            const disponible = Math.max(0, (caisse.euro || 0) - 50);
-            const aPayer = Math.min(disponible, impayeAvant);
+            let disponible = Math.max(0, (caisse.euro || 0) - 50);
+            let payeEtat = 0;
+            let payeImport = 0;
             
-            if (aPayer > 0) {
-                caisse.euro -= aPayer;
-                caisse.impaye -= aPayer;
+            // 1. Priorité : payer les arriérés État (taxes)
+            if (disponible > 0 && impayeEtatAvant > 0) {
+                payeEtat = Math.min(disponible, impayeEtatAvant);
+                caisse.euro -= payeEtat;
+                caisse.impayeEtat -= payeEtat;
+                disponible -= payeEtat;
+                
+                // Écriture joueur: paie ses arriérés taxes
+                enregistrerEcriture({
+                    joueurId, libelle: `Paiement arriérés taxes (${fmt(payeEtat)}€)`,
+                    compteDebit: 401, compteCredit: 500, montantEuro: payeEtat,
+                    contexte: 'arrieres'
+                });
+                
+                // Contrepartie: l'État reçoit ses taxes impayées
+                COMPTABILITE.etat.tresor = arrondir2((COMPTABILITE.etat.tresor || 0) + payeEtat);
+                COMPTABILITE.etat.taxesRecues = arrondir2((COMPTABILITE.etat.taxesRecues || 0) + payeEtat);
+                COMPTABILITE.etat.grandLivre[500] = arrondir2((COMPTABILITE.etat.grandLivre[500] || 0) + payeEtat);
+                
+                enregistrerEcriture({
+                    joueurId: 'ETAT', libelle: `Arriérés taxes reçus de ${playersData[joueurId]?.name || joueurId}`,
+                    compteDebit: 541, compteCredit: 703, montantEuro: payeEtat,
+                    contexte: 'etat'
+                });
+                
+                sendSystemMessage(`🏛️ ${playersData[joueurId]?.name || joueurId} paie ${fmt(payeEtat)}€ d'arriérés taxes → État`);
+            }
+            
+            // 2. Puis payer les arriérés Import (mensualités, autres)
+            if (disponible > 0 && (caisse.impaye || 0) > 0) {
+                payeImport = Math.min(disponible, caisse.impaye);
+                caisse.euro -= payeImport;
+                caisse.impaye -= payeImport;
                 
                 // Écriture joueur: paie ses arriérés
                 enregistrerEcriture({
-                    joueurId, libelle: `Paiement arriérés (${fmt(aPayer)}€)`,
-                    compteDebit: 401, compteCredit: 500, montantEuro: aPayer,
+                    joueurId, libelle: `Paiement arriérés (${fmt(payeImport)}€)`,
+                    compteDebit: 401, compteCredit: 500, montantEuro: payeImport,
                     contexte: 'arrieres'
                 });
                 
-                // Contrepartie: l'argent des arriérés va hors circuit (créanciers divers non tracés)
+                // Contrepartie: l'argent des arriérés va en Importation
                 COMPTABILITE.horsCircuit = COMPTABILITE.horsCircuit || { solde: 0, recettes: 0 };
-                COMPTABILITE.horsCircuit.solde += aPayer;
-                COMPTABILITE.horsCircuit.recettes += aPayer;
+                COMPTABILITE.horsCircuit.solde += payeImport;
+                COMPTABILITE.horsCircuit.recettes += payeImport;
                 
                 enregistrerEcriture({
                     joueurId: 'HORS_CIRCUIT', libelle: `Arriérés reçus de ${playersData[joueurId]?.name || joueurId}`,
-                    compteDebit: 550, compteCredit: 758, montantEuro: aPayer,
+                    compteDebit: 550, compteCredit: 758, montantEuro: payeImport,
                     contexte: 'arrieres'
                 });
                 
-                await db.ref(`parties/${currentGameCode}/players/${joueurId}/euro`).set(caisse.euro);
-                await syncComptabiliteToFirebase();
-                
-                sendSystemMessage(`💸 ${playersData[joueurId]?.name || joueurId} paie ${fmt(aPayer)}€ d'arriérés`);
+                sendSystemMessage(`🌍 ${playersData[joueurId]?.name || joueurId} paie ${fmt(payeImport)}€ d'arriérés → Importation`);
             }
             
-            return { avant: impayeAvant, paye: aPayer, apres: caisse.impaye || 0 };
+            const totalPaye = payeEtat + payeImport;
+            if (totalPaye > 0) {
+                await db.ref(`parties/${currentGameCode}/players/${joueurId}/euro`).set(caisse.euro);
+                await syncComptabiliteToFirebase();
+            }
+            
+            return { avant: totalAvant, paye: totalPaye, apres: (caisse.impayeEtat || 0) + (caisse.impaye || 0), payeEtat, payeImport };
         }
         
         // ========== SMART CONTRACTS (Prêts entre joueurs — Phase 3 uniquement) ==========
@@ -13608,11 +13650,9 @@ function initSystemeDe() {
                 }
                 
                 // ========== ARRIÉRÉS (BOT) ==========
-                if ((caisse.impaye || 0) > 0) {
+                if ((caisse.impaye || 0) > 0 || (caisse.impayeEtat || 0) > 0) {
                     const botArrResult = await payerArrieres(bot.id);
-                    if (botArrResult.paye > 0) {
-                        sendSystemMessage(`💸 ${bot.name} paie ${fmt(botArrResult.paye)}€ d'arriérés`);
-                    }
+                    // Les messages détaillés sont envoyés dans payerArrieres
                 }
                 
                 await syncComptabiliteToFirebase();
@@ -15561,7 +15601,7 @@ function initSystemeDe() {
                     <tr style="font-size:0.75rem;">
                         <td>#${e.id || '?'}</td>
                         <td>${e.libelle || ''}</td>
-                        <td style="text-align:right;">${fmt(e.debit?.montantEuro || e.credit?.montantEuro || 0)}€</td>
+                        <td style="text-align:right;">${fmt(e.debit?.euro || e.credit?.euro || 0)}€</td>
                     </tr>
                 `).join('') :
                 '<tr><td colspan="3" style="font-size:0.75rem; color:#9ca3af;">Aucune écriture</td></tr>';
@@ -15679,7 +15719,7 @@ function initSystemeDe() {
                     <tr style="font-size:0.75rem;">
                         <td>#${e.id || '?'}<\/td>
                         <td>${e.libelle || ''}<\/td>
-                        <td style="text-align:right;">${fmt(e.debit?.montantEuro || e.credit?.montantEuro || 0)}€<\/td>
+                        <td style="text-align:right;">${fmt(e.debit?.euro || e.credit?.euro || e.montant || 0)}€<\/td>
                     <\/tr>
                 `).join('') :
                 '<tr><td colspan="3" style="font-size:0.75rem; color:#9ca3af;">Aucune écriture<\/td><\/tr>';
@@ -15736,7 +15776,7 @@ function initSystemeDe() {
             csv += `Recettes;${(hc.recettes || 0)}\n`;
             csv += '\n10 DERNIÈRES ÉCRITURES\n';
             (hc.journal || []).slice(-10).forEach(e => {
-                const m = (e.debit?.montantEuro || e.credit?.montantEuro || 0);
+                const m = (e.debit?.euro || e.credit?.euro || 0);
                 csv += `#${e.id || ''};${(e.libelle || '').replace(/;/g, ',')};${m}\n`;
             });
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
