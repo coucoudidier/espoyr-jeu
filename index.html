@@ -1,10 +1,10 @@
- <!-- V3(9) TEST - Build 189 - index-128-11 -->
+ <!-- V3(0) TEST - Build 190 - index-128-11 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title># ESPOYR Multijoueur V3(9) TEST</title>
+    <title># ESPOYR Multijoueur V3(0) TEST</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -362,7 +362,7 @@
         <!-- ÉCRAN ACCUEIL -->
         <div id="homeScreen" class="card">
             <h1><img src="logo__g1_jaune_rond.png" alt="Logo ESPOYR" style="height: 1.5em; vertical-align: middle; margin-right: 8px;">ESPOYR</h1>
-            <p class="subtitle">Jeu collaboratif d'économie - V3(9) TEST</p>
+            <p class="subtitle">Jeu collaboratif d'économie - V3(0) TEST</p>
             <div class="error-message" id="errorMessage"></div>
             
             <div style="margin-bottom: 15px; text-align: center; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
@@ -8906,50 +8906,11 @@ function initSystemeDe() {
             // L'inflation est sur les FACTURES, pas sur les salaires
             // (supprimé: facteurErosion, phase 3 ×0.80)
             
-            // ========== COMPLÉMENT AAA EN # ==========
-            // Si membre AAA et en Phase 2+, bonus # pour compenser l'inflation des factures
+            // ========== COMPLÉMENT AAA EN # — SUPPRIMÉ Build 190 ==========
+            // Remplacé par le mécanisme de Réajustement des salaires en # (Phase 3, vote collectif)
+            // L'ancien complément était automatique et individuel (~26#/passage), inefficace
             const isMembre = COMPTABILITE.potAAA.membres?.includes(myPlayerId);
-            if (isMembre && phase >= 2) {
-                // Complément = estimation de la perte de pouvoir d'achat due à l'inflation
-                const inflStats = getInflationStats();
-                complementAAA = Math.max(0, Math.floor(salaire * Math.min(0.30, inflStats.inflationPct / 200)));
-                
-                // Vérifier que le Pot AAA a assez
-                const potDisponible = COMPTABILITE.potAAA.solde || 0;
-                complementAAA = Math.min(complementAAA, potDisponible);
-                
-                if (complementAAA > 0) {
-                    // Verser le complément en #
-                    initCaisseJoueur(myPlayerId);
-                    COMPTABILITE.caisseJoueurs[myPlayerId].espoyr += complementAAA;
-                    COMPTABILITE.potAAA.solde -= complementAAA;
-                    COMPTABILITE.potAAA.circulationHash += complementAAA;
-                    
-                    // Écriture comptable
-                    enregistrerEcriture({
-                        joueurId: myPlayerId,
-                        libelle: `Complément AAA Phase ${phase}`,
-                        compteDebit: 501,   // Caisse # (+)
-                        compteCredit: 468,   // Subventions (produit +)
-                        montantEspoyr: complementAAA,
-                        contexte: 'potAAA',
-                        details: { phase, salaireAvantErosion, salaireApresErosion: salaire }
-                    });
-                    
-                    enregistrerEcriture({
-                        joueurId: 'POT_AAA',
-                        libelle: `Complément solidarité ${player.name}`,
-                        compteDebit: 671,   // Charges exceptionnelles
-                        compteCredit: 580,  // Caisse Pot AAA (-)
-                        montantEspoyr: complementAAA,
-                        contexte: 'potAAA'
-                    });
-                    
-                    // MAJ Firebase #
-                    await db.ref(`parties/${currentGameCode}/players/${myPlayerId}/espoyr`)
-                        .set(COMPTABILITE.caisseJoueurs[myPlayerId].espoyr);
-                }
-            }
+            // complementAAA reste à 0 — plus de distribution automatique
             
             // ═══ TAXE 20% SUR REVENUS D'ACTIVITÉS ═══
             // Prélevée AVANT le salaire (sur les revenus du cycle précédent)
@@ -9241,9 +9202,7 @@ function initSystemeDe() {
                         <p style="margin: 2px 0 0 0; font-size: 0.8rem; color: #6b7280;">Solidarité : compensation de l'inflation</p>
                     </div>`;
             }
-            if (isMembre && phase >= 2 && complementAAA === 0) {
-                modalHtml += `<p style="color: #dc2626; font-size: 0.85rem;">⚠️ Pot AAA vide - pas de complément</p>`;
-            }
+            // (Ancien message "Pot AAA vide" supprimé Build 190 — remplacé par réajustement)
             
             // --- 3. Mensualités biens personnels ---
             if (mensualitesResult.totalPaye > 0 || mensualitesResult.totalImpaye > 0) {
@@ -13499,32 +13458,10 @@ function initSystemeDe() {
                 // ═══ SALAIRE FIXE — Plus d'érosion salariale ═══
                 // L'inflation est sur les FACTURES, pas sur les salaires
                 
-                // Complément AAA pour les bots membres
+                // ========== COMPLÉMENT AAA — SUPPRIMÉ Build 190 ==========
+                // Remplacé par le mécanisme de Réajustement des salaires en # (Phase 3, vote collectif)
                 let complementAAA = 0;
-                if (isMembre && phase >= 2) {
-                    const inflStats = getInflationStats();
-                    complementAAA = Math.max(0, Math.floor(salaire * Math.min(0.30, inflStats.inflationPct / 200)));
-                    const potDisponible = COMPTABILITE.potAAA.solde || 0;
-                    complementAAA = Math.min(complementAAA, potDisponible);
-                    
-                    if (complementAAA > 0) {
-                        initCaisseJoueur(bot.id);
-                        COMPTABILITE.caisseJoueurs[bot.id].espoyr += complementAAA;
-                        COMPTABILITE.potAAA.solde -= complementAAA;
-                        COMPTABILITE.potAAA.circulationHash += complementAAA;
-                        
-                        enregistrerEcriture({
-                            joueurId: bot.id,
-                            libelle: `Complément AAA Phase ${phase}`,
-                            compteDebit: 501, compteCredit: 468,
-                            montantEspoyr: complementAAA,
-                            contexte: 'potAAA'
-                        });
-                        
-                        await db.ref(`parties/${currentGameCode}/players/${bot.id}/espoyr`)
-                            .set(COMPTABILITE.caisseJoueurs[bot.id].espoyr);
-                    }
-                }
+                // complementAAA reste à 0 — plus de distribution automatique
                 
                 // ═══ TAXE 20% SUR REVENUS D'ACTIVITÉS (bot) ═══
                 const taxeRevBot = await comptaTaxeRevenus(bot.id);
